@@ -13,8 +13,8 @@ export default async function CabinetHome() {
   const supabase = await createClient();
 
   // head: true — нужны только счётчики, строки тянуть незачем.
-  const [objects, published, needMandate, requirements, openReq, matches, openDeals, overdue] =
-    await Promise.all([
+  const [objects, published, needMandate, requirements, openReq, matches, openDeals,
+         overdue, contacts] = await Promise.all([
     supabase.from('objects').select('id', { count: 'exact', head: true }),
     supabase.from('objects').select('id', { count: 'exact', head: true })
       .eq('publication_state', 'published'),
@@ -28,6 +28,7 @@ export default async function CabinetHome() {
       .not('status', 'in', '("closed","failed")'),
     supabase.from('activity_feed_v').select('id', { count: 'exact', head: true })
       .eq('mine', true).eq('overdue', true),
+    supabase.from('contact_list_v').select('id', { count: 'exact', head: true }),
   ]);
 
   return (
@@ -48,6 +49,12 @@ export default async function CabinetHome() {
           <span className="tile-n">{objects.count ?? 0}</span>
           <span className="tile-t">объектов</span>
           <span className="key">{published.count ?? 0} опубликовано</span>
+        </Link>
+
+        <Link className="tile" href="/cabinet/contacts">
+          <span className="tile-n">{contacts.count ?? 0}</span>
+          <span className="tile-t">контактов</span>
+          <span className="key">один человек — одна запись</span>
         </Link>
 
         <Link className="tile" href="/cabinet/requirements">

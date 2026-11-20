@@ -259,3 +259,39 @@ select test.eq(test.visible_count($$
   select 1 from activity_feed_v where mine and overdue$$), 0::bigint,
   'главная: счётчик просроченных задач работает');
 reset role;
+
+-- ---- app/cabinet/contacts/** ---------------------------------------------
+set request.jwt.claims = :'claims_aibek';
+set role authenticated;
+
+select test.ok(test.visible_count($$
+  select id, kind, name, telegram, source, roles, note, created_at,
+         owner_agent_id, owner_name, mine, phones,
+         objects_count, requirements_count, open_requirements
+    from contact_list_v order by name$$) >= 1,
+  'список контактов: список колонок contact_list_v существует');
+
+-- Фильтры страницы: ilike по имени и contains по ролям.
+select test.ok(test.visible_count($$
+  select 1 from contact_list_v where name ilike '%Орозов%'$$) >= 1,
+  'список контактов: поиск по имени работает');
+select test.ok(test.visible_count($$
+  select 1 from contact_list_v where roles @> array['owner']::contact_role[]$$) >= 1,
+  'список контактов: фильтр по роли работает');
+
+select test.ok(test.visible_count(format($$
+  select contact_id, ownership_role, share, object_id, address, deal_type,
+         price, currency, publication_state, active_mandate_id, contract_confirmed
+    from contact_objects_v where contact_id = %L$$, :'contact_owner')) >= 1,
+  'карточка контакта: список колонок contact_objects_v существует');
+
+select test.eq(test.visible_count(format($$
+  select id, phone, label, is_primary from contact_phones
+   where contact_id = %L order by is_primary desc$$, :'contact_owner')),
+  1::bigint, 'карточка контакта: запрос телефонов работает');
+
+-- Потребности контакта берутся из requirement_list_v по contact_id.
+select test.ok(test.visible_count(format($$
+  select 1 from requirement_list_v where contact_id = %L$$, :'contact_client')) >= 0,
+  'карточка контакта: потребности по contact_id запрашиваются');
+reset role;

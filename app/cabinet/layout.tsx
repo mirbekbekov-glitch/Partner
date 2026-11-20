@@ -83,6 +83,7 @@ export default async function CabinetLayout({ children }: { children: React.Reac
       <nav className="topbar">
         <span className="who">
           <Link href="/cabinet">Кабинет</Link>
+          <Link href="/cabinet/contacts">Контакты</Link>
           <Link href="/cabinet/objects">Объекты</Link>
           <Link href="/cabinet/requirements">Потребности</Link>
           <Link href="/cabinet/deals">Сделки</Link>
