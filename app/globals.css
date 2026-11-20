@@ -325,3 +325,10 @@ textarea {
 }
 .pub-gallery .pub-nophoto { width: 100%; aspect-ratio: 4 / 3; }
 .pub-photo .pub-nophoto { width: 100%; height: 100%; border-radius: 0; }
+
+/* Поле-приманка для ботов: из потока убрано, но в разметке есть. display:none
+   некоторые боты распознают, поэтому уводим за край экрана. */
+.honeypot {
+  position: absolute; left: -9999px; width: 1px; height: 1px;
+  overflow: hidden;
+}

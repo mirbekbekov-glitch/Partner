@@ -6,6 +6,7 @@ import { allPhotos, KIND_RU } from '@/lib/catalog-params';
 import { money, day } from '@/lib/list-params';
 import { CatalogHeader } from '../../CatalogHeader';
 import { Photo } from '../../Photo';
+import { LeadForm } from '../../LeadForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,6 +111,12 @@ export default async function PublicObject({
       </div>
 
       {o.description ? <p className="pub-desc">{o.description}</p> : null}
+
+      <h2>Оставить заявку</h2>
+      <p className="key">
+        Заявка уходит агенту, который ведёт этот объект. Телефон видит только он.
+      </p>
+      <LeadForm objectId={o.id} address={o.address} />
     </>
   );
 }
