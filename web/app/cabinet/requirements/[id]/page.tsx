@@ -8,7 +8,7 @@ import {
 import { gate } from "../../Gate";
 import { ActionForm } from "../../ActionForm";
 import {
-  cancelShowing, completeShowing, proposeObject, scheduleShowing,
+  cancelShowing, completeShowing, proposeObject, scheduleShowing, startDeal,
 } from "../../actions";
 
 export const metadata: Metadata = {
@@ -122,6 +122,16 @@ export default async function RequirementPage({
 
                   {r.is_mine && (
                     <div className="row-acts">
+                      {m.deal_id ? (
+                        <a className="btn" href={`/cabinet/deals/${m.deal_id}`}>
+                          Сделка
+                        </a>
+                      ) : (
+                        <ActionForm action={startDeal} label="Завести сделку">
+                          <input type="hidden" name="match_id" value={m.match_id} />
+                          <input type="hidden" name="requirement_id" value={r.id} />
+                        </ActionForm>
+                      )}
                       {showing ? (
                         <>
                           <details className="fold">

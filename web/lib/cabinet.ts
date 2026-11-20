@@ -243,6 +243,7 @@ export type Summary = {
   candidates_mine: number;
   showings_upcoming: number;
   requirements_mine: number;
+  deals_open: number;
   agents_pending: number;
   scheduler_broken: number;
 };
@@ -271,6 +272,10 @@ export async function summary(): Promise<Summary | null> {
          (select count(*) from requirements rq
            where rq.agent_id = app.current_agent_id()
              and rq.status in ('new', 'qualified', 'in_showings'))::int as requirements_mine,
+         (select count(*) from deals dl
+           where (dl.listing_agent_id = app.current_agent_id()
+                  or dl.closing_agent_id = app.current_agent_id())
+             and dl.status not in ('closed', 'failed'))::int as deals_open,
          (select count(*) from agents a where a.status = 'pending')::int as agents_pending,
          (select count(*) from maintenance_health_v h
            where h.enabled and h.status <> 'в норме')::int             as scheduler_broken`,
@@ -627,5 +632,90 @@ export async function requirementDetail(id: string): Promise<RequirementDetail |
       proposed: proposed.rows,
       showings: showings.rows as RequirementDetail["showings"],
     };
+  });
+}
+
+export type Deal = {
+  deal_id: string;
+  status: string;
+  final_price: string | null;
+  commission_total: string | null;
+  listing_share: string | null;
+  closing_share: string | null;
+  my_share: string | null;
+  failure_reason: string | null;
+  closed_at: Date | string | null;
+  created_at: Date | string;
+  match_id: string;
+  object_id: string;
+  address: string;
+  kind: string;
+  deal_type: string;
+  asking_price: string;
+  currency: string;
+  requirement_id: string;
+  client_name: string | null;
+  listing_agent_name: string | null;
+  closing_agent_name: string | null;
+  mandate_kind: string;
+  closing_share_ratio: string | null;
+  i_am_listing: boolean;
+  i_am_closing: boolean;
+  // Индикативные суммы до закрытия: считаются от цены объекта.
+  indicative_total: string | null;
+  indicative_my_share: string | null;
+};
+
+const DEAL_COLUMNS = `
+  d.deal_id, d.status::text, d.final_price::text, d.commission_total::text,
+  d.listing_share::text, d.closing_share::text, d.my_share::text,
+  d.failure_reason, d.closed_at, d.created_at, d.match_id, d.object_id,
+  d.address, d.kind::text, d.deal_type::text, d.asking_price::text, d.currency,
+  d.requirement_id, d.client_name, d.listing_agent_name, d.closing_agent_name,
+  d.mandate_kind::text, d.closing_share_ratio::text,
+  d.i_am_listing, d.i_am_closing,
+  dc.commission_total::text as indicative_total,
+  case when d.i_am_listing then dc.listing_share::text
+       when d.i_am_closing then dc.closing_share::text end as indicative_my_share
+`;
+
+/**
+ * Сделки агента.
+ *
+ * Строки отдаёт построчная политика, а не условие в запросе: чужие сделки
+ * агентству видны, и отличать свои — работа столбцов i_am_listing и
+ * i_am_closing.
+ */
+export async function deals(): Promise<Deal[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<Deal>(
+      `select ${DEAL_COLUMNS}
+         from agent_deals_v d
+         left join deal_commission_v dc on dc.deal_id = d.deal_id
+        order by
+          (d.i_am_listing or d.i_am_closing) desc,
+          case d.status when 'deposit' then 0 when 'closed' then 1 else 2 end,
+          d.created_at desc`,
+    );
+    return rows;
+  });
+}
+
+export async function dealDetail(id: string): Promise<Deal | null> {
+  const session = await readSession();
+  if (!session) return null;
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<Deal>(
+      `select ${DEAL_COLUMNS}
+         from agent_deals_v d
+         left join deal_commission_v dc on dc.deal_id = d.deal_id
+        where d.deal_id = $1`,
+      [id],
+    );
+    return rows[0] ?? null;
   });
 }

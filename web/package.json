@@ -13,7 +13,8 @@
     "smoke:photos": "node --experimental-strip-types --no-warnings scripts/smoke-photos.mjs",
     "walk:photos": "node scripts/walk-photos.mjs",
     "walk:new": "node scripts/walk-new-object.mjs",
-    "walk:matching": "node scripts/walk-matching.mjs"
+    "walk:matching": "node scripts/walk-matching.mjs",
+    "walk:deal": "node scripts/walk-deal.mjs"
   },
   "dependencies": {
     "next": "16.4.6",

@@ -80,6 +80,8 @@ export default async function CabinetHome() {
               many="клиентов в работе" href="/cabinet/requirements" />
         <Tile value={s.showings_upcoming} one="показ впереди" few="показа впереди"
               many="показов впереди" href="/cabinet/requirements" />
+        <Tile value={s.deals_open} one="сделка в работе" few="сделки в работе"
+              many="сделок в работе" href="/cabinet/deals" />
         {access.agent.is_admin && (
           <Tile
             value={s.agents_pending}
@@ -102,12 +104,11 @@ export default async function CabinetHome() {
       </section>
 
       <section className="card">
-        <h2>Чего в кабинете пока нет</h2>
+        <h2>Весь путь в кабинете</h2>
         <p>
-          Сделки: её можно создать из подбора (<code>create_deal_from_match()</code>)
-          и закрыть (<code>close_deal()</code>), но экрана для этого ещё нет.
-          Остальной путь — обращение, клиент, объект, подбор, показ — кабинет
-          проходит целиком.
+          Обращение → клиент → объект → подбор → показ → сделка. Каждый шаг
+          оставляет след, и ни один нельзя пропустить: сделки без подбора не
+          бывает, подбора без договора тоже.
         </p>
       </section>
     </div>

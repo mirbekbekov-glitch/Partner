@@ -606,3 +606,61 @@ export async function cancelShowing(_prev: unknown, form: FormData): Promise<Res
     return "Показ отменён.";
   }, `/cabinet/requirements/${requirementId}`);
 }
+
+// ---------------------------------------------------------------------------
+// Сделки
+// ---------------------------------------------------------------------------
+
+export async function startDeal(_prev: unknown, form: FormData): Promise<Result> {
+  const matchId = String(form.get("match_id"));
+  const requirementId = String(form.get("requirement_id"));
+
+  const session = await readSession();
+  if (!session) return { ok: false, error: "Вход истёк. Войдите снова." };
+
+  let dealId: string;
+  try {
+    dealId = await asAgent(session, "read write", async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        "select id from create_deal_from_match($1)",
+        [matchId],
+      );
+      return rows[0].id;
+    });
+  } catch (error) {
+    return { ok: false, error: humanize(error) };
+  }
+
+  revalidatePath(`/cabinet/requirements/${requirementId}`);
+  redirect(`/cabinet/deals/${dealId}?note=${encodeURIComponent("Сделка заведена. Пока она не закрыта, суммы индикативны.")}`);
+}
+
+export async function closeDeal(_prev: unknown, form: FormData): Promise<Result> {
+  const dealId = String(form.get("deal_id"));
+  const price = String(form.get("final_price") ?? "").replace(/\s/g, "").replace(",", ".");
+
+  return actThenNotice(async (db) => {
+    const { rows } = await db.query<{ commission_total: string; my: string | null }>(
+      `select commission_total::text,
+              case when listing_agent_id = app.current_agent_id() then listing_share::text
+                   when closing_agent_id = app.current_agent_id() then closing_share::text
+              end as my
+         from close_deal($1, $2::numeric)`,
+      [dealId, price],
+    );
+    const total = Number(rows[0].commission_total).toLocaleString("ru-RU");
+    const mine = rows[0].my ? Number(rows[0].my).toLocaleString("ru-RU") : null;
+    return `Сделка закрыта. Комиссия ${total}${mine ? `, ваша доля ${mine}` : ""}. Суммы зафиксированы.`;
+  }, `/cabinet/deals/${dealId}`);
+}
+
+export async function failDeal(_prev: unknown, form: FormData): Promise<Result> {
+  const dealId = String(form.get("deal_id"));
+  const reason = String(form.get("reason") ?? "").trim();
+  if (!reason) return { ok: false, error: "Причина срыва обязательна." };
+
+  return actThenNotice(async (db) => {
+    await db.query("select fail_deal($1, $2)", [dealId, reason]);
+    return "Сделка сорвана. Клиент и подбор вернулись в работу.";
+  }, `/cabinet/deals/${dealId}`);
+}
