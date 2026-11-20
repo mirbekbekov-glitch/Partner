@@ -169,3 +169,11 @@ export function formatShare(share: string | null): string | null {
   const percent = n * 100;
   return `${Number.isInteger(percent) ? percent : percent.toFixed(1).replace(".", ",")}%`;
 }
+
+/** Состояние публикации словами. В базе это `draft`, человеку — «черновик». */
+export const PUBLICATION_LABEL: Record<string, string> = {
+  draft: "черновик",
+  published: "в каталоге",
+  withdrawn: "снят с каталога",
+  archived: "в архиве",
+};

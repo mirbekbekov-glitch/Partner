@@ -857,3 +857,37 @@ input[type="file"] {
   width: 100%;
   background: #f9fafb;
 }
+
+/* Форма заведения объекта. Поля сгруппированы по тому, о чём спрашивают:
+   объект, собственник, договор — в жизни это один разговор, но три темы. */
+.head-row { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.head-row h1 { margin-right: auto; }
+
+.btn.primary { background: #175cd3; border-color: #175cd3; color: #fff; }
+.btn.primary:hover { background: #1349a8; }
+
+fieldset {
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  padding: 1rem 1.1rem 1.1rem;
+  margin: 0 0 1rem;
+  background: #fff;
+}
+legend { padding: 0 0.4rem; font-weight: 600; color: #344054; }
+fieldset label { margin-bottom: 0.75rem; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.row-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+
+select, textarea {
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  padding: 0.42rem 0.6rem;
+  font: inherit;
+  width: 100%;
+  background: #fff;
+}
+textarea { resize: vertical; }
+
+@media (max-width: 560px) {
+  .pair { grid-template-columns: 1fr; }
+}

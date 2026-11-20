@@ -30,15 +30,20 @@ function humanize(error: unknown): string {
 }
 
 /**
- * Действие, после которого строка меняет вид.
+ * Действие, после которого строка меняет вид или переезжает.
  *
- * Одобрили агента — и кнопка «Одобрить» исчезает вместе с формой, в которой
- * лежало сообщение об успехе. Получается, что действие сработало, а слов не
- * сказано. Поэтому успех таких действий уходит в адрес страницы и
- * показывается сверху: уведомление переживает перерисовку, потому что
- * рисуется сервером заново.
+ * Одобрили агента — кнопка «Одобрить» исчезает вместе с формой, в которой
+ * лежало сообщение об успехе. Взяли объявление в работу — строка переехала
+ * из «Свободных» в «В работе у вас», и форма исчезла вместе с разделом.
+ * Действие срабатывает, а слов не сказано.
  *
- * Отказ при этом остаётся у кнопки: он относится к ней, а не к странице.
+ * Поэтому успех таких действий уходит в адрес страницы и показывается
+ * сверху: уведомление рисуется сервером заново и переживает перерисовку.
+ * Отказ остаётся у кнопки — он относится к ней, а не к странице.
+ *
+ * Правило простое: меняется ли после действия НАБОР кнопок у этой строки.
+ * Если да — уведомление сверху. Если нет (подтвердить актуальность, сменить
+ * имя) — ответ у кнопки, там он нагляднее.
  */
 async function actThenNotice(
   fn: (db: PoolClient) => Promise<string>,
@@ -184,6 +189,73 @@ export async function issueOwnerLink(_prev: unknown, form: FormData): Promise<Re
 }
 
 // ---------------------------------------------------------------------------
+// Создание объекта
+// ---------------------------------------------------------------------------
+
+/**
+ * Объект, собственник и договор заводятся одним вызовом.
+ *
+ * Здесь не собирается «объект, потом владелец, потом мандат»: база такой
+ * сборки и не позволит — прямая вставка объекта роли приложения не выдана
+ * (инвариант 19). Три вещи, которые в жизни происходят одним разговором с
+ * собственником, и в базе происходят одним действием.
+ */
+export async function createObject(_prev: unknown, form: FormData): Promise<Result> {
+  const text = (name: string) => {
+    const value = String(form.get(name) ?? "").trim();
+    return value === "" ? null : value;
+  };
+  const num = (name: string) => {
+    const value = text(name);
+    if (value === null) return null;
+    const n = Number(value.replace(/\s/g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const session = await readSession();
+  if (!session) return { ok: false, error: "Вход истёк. Войдите снова." };
+
+  let objectId: string;
+  try {
+    objectId = await asAgent(session, "read write", async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `select id from create_object(
+           $1::object_kind, $2::deal_type, $3, $4::numeric,
+           p_contact_id         => $5::uuid,
+           p_owner_name         => $6,
+           p_owner_phone        => $7,
+           p_mandate_kind       => $8::mandate_kind,
+           p_valid_to           => $9::date,
+           p_contract_confirmed => $10::boolean,
+           p_zone               => $11,
+           p_rooms              => $12::smallint,
+           p_area               => $13::numeric,
+           p_floor              => $14::smallint,
+           p_floors_total       => $15::smallint,
+           p_currency           => $16,
+           p_description        => $17,
+           p_candidate_id       => $18::uuid)`,
+        [
+          text("kind"), text("deal_type"), text("address"), num("price"),
+          text("contact_id"), text("owner_name"), text("owner_phone"),
+          text("mandate_kind") ?? "non_exclusive",
+          text("valid_to"), form.get("contract_confirmed") === "on",
+          text("zone"), num("rooms"), num("area"), num("floor"), num("floors_total"),
+          text("currency") ?? "USD", text("description"), text("candidate_id"),
+        ],
+      );
+      return rows[0].id;
+    });
+  } catch (error) {
+    return { ok: false, error: humanize(error) };
+  }
+
+  revalidatePath("/cabinet/objects");
+  // Сразу в карточку: дальше агент добавляет фотографии, а они живут там.
+  redirect(`/cabinet/objects/${objectId}?note=${encodeURIComponent("Объект заведён вместе с договором. Добавьте фотографии.")}`);
+}
+
+// ---------------------------------------------------------------------------
 // Фотографии
 // ---------------------------------------------------------------------------
 
@@ -314,7 +386,7 @@ export async function movePhoto(_prev: unknown, form: FormData): Promise<Result>
 
 export async function qualifyInquiry(_prev: unknown, form: FormData): Promise<Result> {
   const id = String(form.get("inquiry_id"));
-  return act(async (db) => {
+  return actThenNotice(async (db) => {
     await db.query("select qualify_inquiry($1)", [id]);
     return "Обращение взято в работу.";
   }, "/cabinet/inquiries");
@@ -324,7 +396,7 @@ export async function rejectInquiry(_prev: unknown, form: FormData): Promise<Res
   const id = String(form.get("inquiry_id"));
   const reason = String(form.get("reason") ?? "").trim();
   const spam = form.get("spam") === "on";
-  return act(async (db) => {
+  return actThenNotice(async (db) => {
     await db.query("select reject_inquiry($1, $2, $3)", [id, reason || null, spam]);
     return spam ? "Отмечено спамом." : "Отказ зафиксирован.";
   }, "/cabinet/inquiries");
@@ -337,7 +409,7 @@ export async function rejectInquiry(_prev: unknown, form: FormData): Promise<Res
 export async function claimCandidate(_prev: unknown, form: FormData): Promise<Result> {
   const id = String(form.get("candidate_id"));
   const days = Number(form.get("days") ?? 3);
-  return act(async (db) => {
+  return actThenNotice(async (db) => {
     await db.query("select claim_candidate($1, $2)", [id, days]);
     return "Закреплено за вами. Телефон теперь виден — если он вообще есть.";
   }, "/cabinet/candidates");
@@ -345,7 +417,7 @@ export async function claimCandidate(_prev: unknown, form: FormData): Promise<Re
 
 export async function releaseCandidate(_prev: unknown, form: FormData): Promise<Result> {
   const id = String(form.get("candidate_id"));
-  return act(async (db) => {
+  return actThenNotice(async (db) => {
     await db.query("select release_candidate($1)", [id]);
     return "Возвращено в пул.";
   }, "/cabinet/candidates");
@@ -354,7 +426,7 @@ export async function releaseCandidate(_prev: unknown, form: FormData): Promise<
 export async function rejectCandidate(_prev: unknown, form: FormData): Promise<Result> {
   const id = String(form.get("candidate_id"));
   const reason = String(form.get("reason") ?? "").trim();
-  return act(async (db) => {
+  return actThenNotice(async (db) => {
     await db.query("select reject_candidate($1, $2)", [id, reason || null]);
     return "Отказ зафиксирован: в очереди это объявление больше не появится.";
   }, "/cabinet/candidates");

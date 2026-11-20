@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { myObjects } from "../../../lib/cabinet";
-import { formatPrice, formatArea, KIND_LABEL, freshness, formatDate } from "../../../lib/format";
+import { formatPrice, formatArea, KIND_LABEL, freshness, formatDate, PUBLICATION_LABEL } from "../../../lib/format";
 import { gate } from "../Gate";
 import { ActionForm } from "../ActionForm";
 import { confirmActual, publish, withdraw } from "../actions";
@@ -20,7 +20,10 @@ export default async function ObjectsPage() {
 
   return (
     <div className="wrap">
-      <h1>Объекты</h1>
+      <div className="head-row">
+        <h1>Объекты</h1>
+        <a className="btn primary" href="/cabinet/objects/new">Новый объект</a>
+      </div>
       <p className="lead">
         Сначала ваши, внутри — те, что требуют действия: просроченный
         договор, незаключённый договор, публикация без фотографий. Объект
@@ -124,13 +127,7 @@ function State({ object: o }: { object: Awaited<ReturnType<typeof myObjects>>[nu
     <>
       <p>
         <span className={`chip ${o.publication_state}`}>
-          {o.publication_state === "published"
-            ? "в каталоге"
-            : o.publication_state === "draft"
-              ? "черновик"
-              : o.publication_state === "withdrawn"
-                ? "снят"
-                : o.publication_state}
+          {PUBLICATION_LABEL[o.publication_state] ?? o.publication_state}
         </span>
         {o.mandate_status === "active" ? (
           o.contract_confirmed ? (

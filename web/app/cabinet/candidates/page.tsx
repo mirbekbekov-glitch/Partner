@@ -18,9 +18,15 @@ const SOURCE: Record<string, string> = {
   manual: "внесено вручную",
 };
 
-export default async function CandidatesPage() {
+export default async function CandidatesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ note?: string }>;
+}) {
   const access = await gate();
   if (!access.ok) return access.screen;
+
+  const { note } = await searchParams;
 
   const items = await candidates();
   const mine = items.filter((c) => c.claimed_by_me);
@@ -35,6 +41,8 @@ export default async function CandidatesPage() {
         агентом на срок — пока он закреплён, другой его не возьмёт. Телефон из
         объявления виден только взявшему.
       </p>
+
+      {note && <p className="ok-banner">{note}</p>}
 
       <h2>В работе у вас <span className="muted">({mine.length})</span></h2>
       {mine.length === 0 && (
@@ -53,6 +61,9 @@ export default async function CandidatesPage() {
                   закрытый <code>/api/</code>. Звонить через сайт площадки.
                 </p>
               )}
+              <a className="btn primary" href={`/cabinet/objects/new?candidate=${c.id}`}>
+                Завести объект
+              </a>
               <ActionForm action={releaseCandidate} label="Вернуть в пул">
                 <input type="hidden" name="candidate_id" value={c.id} />
               </ActionForm>

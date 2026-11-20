@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { objectDetail } from "../../../../lib/cabinet";
-import { formatPrice, KIND_LABEL, freshness, formatDate, formatDateTime, formatArea, formatPhone, formatShare } from "../../../../lib/format";
+import { formatPrice, KIND_LABEL, freshness, formatDate, formatDateTime, formatArea, formatPhone, formatShare, PUBLICATION_LABEL } from "../../../../lib/format";
 import { gate } from "../../Gate";
 import { Photos } from "../../Photos";
 import { ActionForm } from "../../ActionForm";
@@ -45,7 +45,7 @@ export default async function ObjectPage({
 
       <p>
         <span className={`chip ${o.publication_state}`}>
-          {o.publication_state === "published" ? "в каталоге" : o.publication_state}
+          {PUBLICATION_LABEL[o.publication_state] ?? o.publication_state}
         </span>
         {o.mandate_status === "active" ? (
           <span className="chip ok">

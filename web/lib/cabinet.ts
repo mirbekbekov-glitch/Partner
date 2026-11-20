@@ -385,3 +385,73 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
     };
   });
 }
+
+export type ContactOption = { id: string; name: string; phone: string | null };
+
+/** Собственники, которых агент уже знает. Для выпадающего списка при заведении. */
+export async function myContacts(): Promise<ContactOption[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<ContactOption>(
+      `select c.id, c.name,
+              (select cp.phone from contact_phones cp
+                where cp.contact_id = c.id
+                order by cp.is_primary desc limit 1) as phone
+         from contacts c
+        where 'owner' = any (c.roles)
+        order by c.name
+        limit 200`,
+    );
+    return rows;
+  });
+}
+
+export type CandidateDraft = {
+  id: string;
+  source: string;
+  kind: string | null;
+  deal_type: string | null;
+  address: string | null;
+  zone: string | null;
+  rooms: number | null;
+  area: string | null;
+  floor: number | null;
+  floors_total: number | null;
+  price: string | null;
+  currency: string;
+  description: string | null;
+  phone: string | null;
+};
+
+/**
+ * Объявление, из которого заводится объект.
+ *
+ * Телефон отдаёт политика, а не этот запрос: он виден только взявшему
+ * агенту (инвариант 12). Если объявление не за этим агентом, поле придёт
+ * пустым — и это правильный ответ, а не недосмотр.
+ */
+export async function candidateForObject(id: string): Promise<CandidateDraft | null> {
+  const session = await readSession();
+  if (!session) return null;
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<CandidateDraft>(
+      `select c.id, c.source::text, c.kind::text, c.deal_type::text,
+              coalesce(c.address, c.title) as address, c.zone,
+              c.rooms,
+              trim(trailing '.' from trim(trailing '0' from c.area::text)) as area,
+              c.floor, c.floors_total,
+              -- Без хвоста «.00»: это поле ввода, а не отчёт.
+              trim(trailing '.' from trim(trailing '0' from c.price::text)) as price,
+              c.currency, c.description,
+              (select ph.phone from listing_candidate_phones ph
+                where ph.candidate_id = c.id) as phone
+         from listing_candidates c
+        where c.id = $1`,
+      [id],
+    );
+    return rows[0] ?? null;
+  });
+}

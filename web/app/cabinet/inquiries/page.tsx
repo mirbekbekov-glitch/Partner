@@ -45,9 +45,15 @@ function waited(hours: number): string {
   return `${Math.floor(hours / 24)} дн.`;
 }
 
-export default async function InquiriesPage() {
+export default async function InquiriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ note?: string }>;
+}) {
   const access = await gate();
   if (!access.ok) return access.screen;
+
+  const { note } = await searchParams;
 
   const items = await inquiries();
   const open = items.filter((i) => i.status === "new" || i.status === "qualified");
@@ -61,6 +67,8 @@ export default async function InquiriesPage() {
         закрывается ровно одним исходом — потребностью клиента или объектом, —
         и закрытое не переписывается. Отказ без причины база не примет.
       </p>
+
+      {note && <p className="ok-banner">{note}</p>}
 
       {open.length === 0 && (
         <p className="empty">
