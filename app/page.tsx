@@ -6,6 +6,7 @@ import {
 } from '@/lib/catalog-params';
 import { money, day } from '@/lib/list-params';
 import { CatalogHeader } from './CatalogHeader';
+import { AGENCY_NAME, AGENCY_PHONES } from '@/lib/agency';
 import { Photo } from './Photo';
 
 export const metadata = {
@@ -96,7 +97,7 @@ export default async function Catalog({
   return (
     <>
       <CatalogHeader />
-      <h1>Объекты в Бишкеке</h1>
+      <h1>{AGENCY_NAME}</h1>
       <p className="sub">
         {error ? 'Каталог временно недоступен.' : `Сейчас в продаже и аренде: ${total}.`}
       </p>

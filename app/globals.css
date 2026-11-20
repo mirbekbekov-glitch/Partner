@@ -332,3 +332,18 @@ textarea {
   position: absolute; left: -9999px; width: 1px; height: 1px;
   overflow: hidden;
 }
+
+/* Телефоны в шапке. Шапка переносится по строкам: на телефоне три номера в
+   одну строку не встают, а прятать их за «показать» — терять звонки. */
+.pub-top { flex-wrap: wrap; row-gap: 8px; }
+.pub-phones { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-left: auto; }
+.pub-phone { white-space: nowrap; text-decoration: none; font-weight: 500; }
+.pub-phone:hover { text-decoration: underline; }
+.pub-agents { margin-left: 16px; }
+
+@media (max-width: 560px) {
+  /* На узком экране номера уходят на свою строку целиком, а служебная
+     ссылка — в конец, чтобы не тесниться между ними. */
+  .pub-phones { margin-left: 0; width: 100%; order: 3; }
+  .pub-agents { margin-left: auto; }
+}
