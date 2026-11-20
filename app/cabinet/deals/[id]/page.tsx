@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { Activities, type ActivityRow } from '../../Activities';
 import { money, day } from '@/lib/list-params';
 import { DealActions } from '../DealActions';
 import { DEAL_STATUS_RU } from '../page';
@@ -11,11 +12,12 @@ export default async function DealCard({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: deal } = await supabase
-    .from('deal_list_v')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
+  const [{ data: deal }, { data: activities }] = await Promise.all([
+    supabase.from('deal_list_v').select('*').eq('id', id).maybeSingle(),
+    supabase.from('activity_feed_v').select('*')
+      .eq('entity_type', 'deal').eq('entity_id', id)
+      .order('created_at', { ascending: false }),
+  ]);
 
   if (!deal) notFound();
 
@@ -111,6 +113,8 @@ export default async function DealCard({ params }: { params: Promise<{ id: strin
           <Link href={`/cabinet/requirements/${d.requirement_id}`}>потребность →</Link>
         </div>
       </div>
+
+      <Activities entityType="deal" entityId={d.id} rows={(activities ?? []) as ActivityRow[]} />
 
       {d.can_act ? (
         <DealActions

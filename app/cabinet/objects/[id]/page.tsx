@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { Activities, type ActivityRow } from '../../Activities';
 import type { ObjectMatch } from '@/lib/types';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
@@ -27,6 +28,7 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
     { data: mandate },
     { data: canEdit },
     { data: colleagues },
+    { data: activities },
   ] = await Promise.all([
       supabase
         .from('objects')
@@ -54,6 +56,9 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
       // мандата и про админа в коде страницы судить нечем.
       supabase.rpc('can_edit_object', { p_object_id: id }),
       supabase.from('transfer_targets_v').select('id, full_name, role').order('full_name'),
+      supabase.from('activity_feed_v').select('*')
+        .eq('entity_type', 'object').eq('entity_id', id)
+        .order('created_at', { ascending: false }),
     ]);
 
   if (!object) notFound();
@@ -198,6 +203,12 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
           </div>
         ))
       )}
+
+      <Activities
+        entityType="object"
+        entityId={object.id}
+        rows={(activities ?? []) as ActivityRow[]}
+      />
 
       <h2>Создать подбор</h2>
       <CreateMatchForm

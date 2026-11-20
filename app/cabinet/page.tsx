@@ -13,7 +13,7 @@ export default async function CabinetHome() {
   const supabase = await createClient();
 
   // head: true — нужны только счётчики, строки тянуть незачем.
-  const [objects, published, needMandate, requirements, openReq, matches, openDeals] =
+  const [objects, published, needMandate, requirements, openReq, matches, openDeals, overdue] =
     await Promise.all([
     supabase.from('objects').select('id', { count: 'exact', head: true }),
     supabase.from('objects').select('id', { count: 'exact', head: true })
@@ -26,6 +26,8 @@ export default async function CabinetHome() {
     supabase.from('matches').select('id', { count: 'exact', head: true }),
     supabase.from('deals').select('id', { count: 'exact', head: true })
       .not('status', 'in', '("closed","failed")'),
+    supabase.from('activity_feed_v').select('id', { count: 'exact', head: true })
+      .eq('mine', true).eq('overdue', true),
   ]);
 
   return (
@@ -66,6 +68,18 @@ export default async function CabinetHome() {
           <span className="key">комиссия до закрытия индикативна</span>
         </Link>
       </div>
+
+      {overdue.count ? (
+        <div className="card">
+          <div className="row">
+            <span className="warn">просрочено</span>
+            <span>
+              Задач с прошедшим сроком: <strong>{overdue.count}</strong>.
+            </span>
+            <Link href="/cabinet/activities">посмотреть →</Link>
+          </div>
+        </div>
+      ) : null}
 
       {needMandate.count ? (
         <div className="card">

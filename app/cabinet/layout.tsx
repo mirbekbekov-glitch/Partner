@@ -86,6 +86,7 @@ export default async function CabinetLayout({ children }: { children: React.Reac
           <Link href="/cabinet/objects">Объекты</Link>
           <Link href="/cabinet/requirements">Потребности</Link>
           <Link href="/cabinet/deals">Сделки</Link>
+          <Link href="/cabinet/activities">Задачи</Link>
         </span>
         {agent.role === 'admin' ? <Link href="/cabinet/admin/agents">Агенты</Link> : null}
         <Link href="/cabinet/profile">{agent.full_name}</Link>

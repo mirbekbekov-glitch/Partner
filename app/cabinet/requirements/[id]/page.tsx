@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { Activities, type ActivityRow } from '../../Activities';
 import type { RequirementMatch } from '@/lib/types';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
@@ -25,6 +26,7 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
     { data: objects },
     { data: contact },
     { data: colleagues },
+    { data: activities },
   ] = await Promise.all([
       supabase
         .from('requirements')
@@ -43,6 +45,9 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
       // Контакт клиента: вернёт null, если инвариант 4 его не отдаёт.
       supabase.from('requirements').select('contact_id, contacts(name)').eq('id', id).maybeSingle(),
       supabase.from('transfer_targets_v').select('id, full_name, role').order('full_name'),
+      supabase.from('activity_feed_v').select('*')
+        .eq('entity_type', 'requirement').eq('entity_id', id)
+        .order('created_at', { ascending: false }),
     ]);
 
   if (!requirement) notFound();
@@ -176,6 +181,12 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
           </div>
         ))
       )}
+
+      <Activities
+        entityType="requirement"
+        entityId={requirement.id}
+        rows={(activities ?? []) as ActivityRow[]}
+      />
 
       <h2>Создать подбор</h2>
       <CreateMatchForm

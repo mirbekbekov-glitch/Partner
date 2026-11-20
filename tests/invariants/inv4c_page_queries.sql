@@ -235,3 +235,27 @@ select test.ok(test.visible_count($$
   select id, full_name, role from transfer_targets_v order by full_name$$) >= 1,
   'передача: список колонок transfer_targets_v существует');
 reset role;
+
+-- ---- Активности на карточках и в личном списке ---------------------------
+set request.jwt.claims = :'claims_aibek';
+set role authenticated;
+insert into activities (kind, entity_type, entity_id, body, due_at)
+values ('task', 'object', :'obj1', 'задача для проверки запросов', now() + interval '1 day');
+
+select test.ok(test.visible_count(format($$
+  select id, kind, entity_type, entity_id, body, due_at, done, done_at,
+         is_shared, created_at, agent_id, agent_name, mine, overdue, entity_title
+    from activity_feed_v
+   where entity_type = 'object' and entity_id = %L
+   order by created_at desc$$, :'obj1')) >= 1,
+  'карточка объекта: список колонок activity_feed_v существует');
+
+-- Личный список: фильтры mine и overdue и сортировка с nullsFirst=false.
+select test.ok(test.visible_count($$
+  select 1 from activity_feed_v where mine
+   order by done, due_at nulls last, created_at desc$$) >= 1,
+  'список задач: фильтр mine и сортировка работают');
+select test.eq(test.visible_count($$
+  select 1 from activity_feed_v where mine and overdue$$), 0::bigint,
+  'главная: счётчик просроченных задач работает');
+reset role;

@@ -262,3 +262,13 @@ textarea {
 
 .check { display: flex; gap: 8px; align-items: center; font-size: 0.9rem; }
 .check input { width: auto; }
+
+/* Активности */
+.act {
+  border-left: 2px solid var(--line);
+  padding: 8px 0 8px 12px;
+  margin-bottom: 8px;
+}
+
+.act-body { margin: 6px 0 0; white-space: pre-wrap; }
+.act .actions { margin-top: 6px; }
