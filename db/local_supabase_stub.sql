@@ -17,6 +17,16 @@ create or replace function auth.uid() returns uuid
   )::uuid
 $$;
 
+-- auth.jwt() в Supabase отдаёт разобранные клеймы целиком. Нужен потому, что
+-- инвариант 6 читает из них проверенный телефон, а не принимает его в аргументе.
+create or replace function auth.jwt() returns jsonb
+  language sql stable as $$
+  select coalesce(
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb,
+    '{}'::jsonb
+  )
+$$;
+
 create or replace function auth.role() returns text
   language sql stable as $$
   select coalesce(
