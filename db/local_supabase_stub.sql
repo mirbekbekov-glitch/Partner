@@ -20,6 +20,16 @@ create or replace function auth.uid() returns uuid
   )::uuid
 $$;
 
+-- auth.jwt() отдаёт весь разбор токена. Основной источник почты при входе:
+-- за ней незачем ходить в auth.users, на что нужны права.
+create or replace function auth.jwt() returns jsonb
+  language sql stable as $$
+  select coalesce(
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb,
+    '{}'::jsonb
+  )
+$$;
+
 create or replace function auth.role() returns text
   language sql stable as $$
   select coalesce(

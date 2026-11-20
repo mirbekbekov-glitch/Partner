@@ -10,7 +10,8 @@
     "test:db": "./tests/run.sh",
     "test:rpc": "./tests/check-rpc.sh",
     "test:forms": "./tests/check-forms.sh",
-    "test:svc": "./tests/check-service-key.sh"
+    "test:svc": "./tests/check-service-key.sh",
+    "db:preflight": "./db/preflight.sh"
   },
   "dependencies": {
     "@supabase/ssr": "0.8.0",
@@ -23,6 +24,7 @@
     "@types/node": "22.10.5",
     "@types/react": "19.0.7",
     "@types/react-dom": "19.0.3",
+    "supabase": "^3.2.0",
     "typescript": "5.7.3"
   }
 }
