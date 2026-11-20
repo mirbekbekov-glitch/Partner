@@ -47,6 +47,8 @@ supabase/migrations/     миграции, применяются по поря�
 db/local_supabase_stub.sql  схема auth для локального Postgres. НЕ миграция.
 db/pg.sh                    поднять/остановить локальный Postgres
 db/preflight.sh             миграции в условиях, близких к Supabase
+db/deploy.sh                развёртывание и настройка входа на Supabase
+db/bundle.sql               вся схема одним файлом для SQL Editor
 db/rebuild.sh               пересобрать локальную базу с нуля
 tests/                      16 файлов тестов + сверка вызовов rpc()
 tests/check-rpc.sh          сверка rpc() из кода со схемой базы
@@ -122,6 +124,27 @@ npm run dev
 Совместимость с CLI тоже проверена: `supabase db push --dry-run` принимает
 нумерацию `0001_…` и перечисляет все 26 миграций в правильном порядке,
 переименовывать файлы не нужно.
+
+### Развёртывание на Supabase
+
+Одной командой, если есть доступы:
+
+```bash
+SUPABASE_ACCESS_TOKEN=... SUPABASE_PROJECT_REF=... SUPABASE_DB_URL=... \
+  SITE_URL=http://localhost:3000 ./db/deploy.sh
+```
+
+Скрипт применяет миграции и сам прописывает обе настройки Auth через
+Management API — включая шаблон письма. Список проектов аккаунта:
+`./db/deploy.sh --list`.
+
+Где взять: токен — `supabase.com/dashboard/account/tokens`, строка
+подключения и пароль базы — Project Settings → Database, URL и anon key —
+Project Settings → API.
+
+**Без доступов** то же самое делается руками: вставить `db/bundle.sql`
+(26 миграций одним файлом, 210 КиБ) в SQL Editor панели, затем сделать две
+настройки ниже.
 
 ### Обязательная настройка Supabase для входа
 
