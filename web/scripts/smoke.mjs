@@ -59,6 +59,19 @@ try {
   await denied("select * from mandates limit 1", "мандаты недоступны");
   await denied("select * from deal_commission_v limit 1", "комиссия недоступна");
   await denied("select * from showings limit 1", "показы недоступны");
+  await denied("select * from listing_candidates limit 1", "пул кандидатов недоступен");
+  await denied("select * from listing_candidate_phones limit 1", "телефоны кандидатов недоступны");
+
+  // Функции проверяются отдельно от таблиц: право на вызов правами на таблицы
+  // не ограничено. Эти три — security definer, то есть исполняются с правами
+  // владельца, и RLS их не остановит. До инварианта 15 все три были открыты
+  // роли каталога по умолчанию Postgres, и ни один тест этого не замечал.
+  await denied("select app.purge_candidates()", "аноним не удаляет кандидатов");
+  await denied(
+    "select app.upsert_candidate('{\"source\":\"manual\",\"external_id\":\"smoke\"}'::jsonb)",
+    "аноним не пишет в пул кандидатов",
+  );
+  await denied("select app.release_stale_claims()", "аноним не снимает закрепления агентов");
 
   // objects роли anon выдан, но построчная политика отдаёт только published.
   const objects = await client.query("select count(*)::int as n from objects");
