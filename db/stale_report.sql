@@ -58,3 +58,21 @@ select
   coalesce(to_char(oldest_phone_seen_at, 'DD.MM.YYYY'), '—')
                                                   as "самый старый номер"
 from candidate_retention_v;
+
+\echo
+\echo '── Планировщик ─────────────────────────────────────────────────'
+\echo 'Всё, кроме «в норме» и «выключена», означает, что работа не идёт,'
+\echo 'а значит инварианты 1, 12 и 14 держатся только на словах.'
+
+select
+  job                                             as "работа",
+  status                                          as "состояние",
+  cron_expression                                 as "расписание",
+  coalesce(to_char(last_ok_at, 'DD.MM HH24:MI'), '—')
+                                                  as "последний успех",
+  coalesce(date_trunc('minute', silence)::text, '—')
+                                                  as "молчит",
+  max_silence                                     as "можно молчать",
+  coalesce(left(last_error, 40), '')              as "последняя ошибка"
+from maintenance_health_v
+order by (status <> 'в норме') desc, job;

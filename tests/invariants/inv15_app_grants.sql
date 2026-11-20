@@ -17,7 +17,16 @@ set request.jwt.claims = :'claims_admin';
 -- ---- 15а. PUBLIC не вызывает ничего --------------------------------------
 select test.eq(
   (select count(*)::int from app.functions_open_to_public()),
-  0, 'ни одной функции схемы app, открытой PUBLIC');
+  0, 'ни одной нашей функции, открытой PUBLIC');
+
+-- Схем две: app и public. Функции кабинета живут в public, и до инварианта 15
+-- все они были доступны роли anon. Дыры при этом не было — каждая начинается
+-- с проверки агента, — но защита держалась на том, что ни один автор об этой
+-- строке не забудет. Проверка агента осталась вторым слоем, первым стало
+-- право вызова.
+select test.ok(
+  (select count(*) from app.functions_open_to_public() where schema_name = 'public') = 0,
+  'в схеме public тоже не осталось функций, открытых PUBLIC');
 
 -- Сообщение называет виновных: без этого провал будет загадкой.
 select test.ok(
@@ -32,13 +41,21 @@ select test.ok(
 set role postgres;
 create function app.forgotten_function() returns integer
   language sql immutable as $$ select 1 $$;
+create function public.forgotten_cabinet_function() returns integer
+  language sql immutable as $$ select 1 $$;
 
 select test.eq(
   (select count(*)::int from app.functions_open_to_public()
     where function_name = 'forgotten_function'),
-  1, 'функция без единого гранта считается открытой PUBLIC');
+  1, 'функция схемы app без единого гранта считается открытой PUBLIC');
+
+select test.eq(
+  (select count(*)::int from app.functions_open_to_public()
+    where function_name = 'forgotten_cabinet_function'),
+  1, 'функция схемы public без единого гранта тоже считается открытой');
 
 drop function app.forgotten_function();
+drop function public.forgotten_cabinet_function();
 
 select test.eq(
   (select count(*)::int from app.functions_open_to_public()),
@@ -54,7 +71,19 @@ select test.eq(
     where n.nspname = 'app'
       and has_function_privilege('anon', p.oid, 'execute')),
   array['current_agent_id', 'owner_report'],
-  'анониму открыты ровно две функции');
+  'анониму открыты ровно две функции схемы app');
+
+-- Из схемы public анониму не открыто ничего: отчёт собственника по ссылке —
+-- это app.owner_report() выше, и кабинетных функций в этом списке быть не
+-- должно ни одной.
+select test.eq(
+  (select count(*)::int
+     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.prokind = 'f'
+      and not exists (select 1 from pg_depend d
+                       where d.objid = p.oid and d.deptype = 'e')
+      and has_function_privilege('anon', p.oid, 'execute')),
+  0, 'из схемы public анониму не открыто ни одной нашей функции');
 
 -- ---- 15в. Сборщику открыты ровно две функции ------------------------------
 -- Контракт из collector/README.md: приём объявления и отметка исчезнувших.
