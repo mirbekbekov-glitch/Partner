@@ -124,3 +124,39 @@ button:disabled { opacity: 0.55; cursor: default; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .error { color: #ff8a7a; }
 }
+
+/* Верхняя полоса кабинета */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 12px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+.topbar .who { display: flex; align-items: center; gap: 8px; margin-right: auto; }
+.topbar form { margin: 0; }
+
+input[type='email'],
+input[type='text'] {
+  font: inherit;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* Второстепенные действия: не должны выглядеть как главная кнопка страницы */
+button.ghost {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--line);
+}
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.actions form { margin: 0; }
+
+.inline-error { margin-left: 8px; font-size: 0.85rem; }

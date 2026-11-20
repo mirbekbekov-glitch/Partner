@@ -56,3 +56,15 @@ update objects set publication_state = 'published'
 insert into requirements (id, contact_id, deal_type, budget_min, budget_max, zones, rooms, agent_id, requirements_text, status) values
   ('00000000-0000-0000-0000-00000000e001', '00000000-0000-0000-0000-00000000c002', 'sale', 70000,  120000, '{Центр,Юг}',   '{2,3}', '00000000-0000-0000-0000-0000000000a2', 'Квартира для себя',      'qualified'),
   ('00000000-0000-0000-0000-00000000e002', '00000000-0000-0000-0000-00000000c002', 'sale', 130000, 200000, '{Запад,Центр}','{4,5}', '00000000-0000-0000-0000-0000000000a2', 'Дом под расширение семьи','qualified');
+
+-- Пользователи Supabase Auth для агентов выше. Нужны, потому что
+-- app.ensure_agent() берёт почту из auth.users.
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000000a0', 'admin@partner.kg'),
+  ('00000000-0000-0000-0000-0000000000b1', 'aibek@partner.kg'),
+  ('00000000-0000-0000-0000-0000000000b2', 'bakyt@partner.kg'),
+  ('00000000-0000-0000-0000-0000000000b3', 'chyngyz@partner.kg'),
+  ('00000000-0000-0000-0000-0000000000b4', 'pending@partner.kg');
+
+update agents a set email = u.email
+  from auth.users u where u.id = a.auth_user_id;

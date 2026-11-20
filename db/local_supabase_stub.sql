@@ -28,6 +28,13 @@ create or replace function auth.role() returns text
   )
 $$;
 
+-- Минимальный слепок auth.users. Нужен, потому что app.ensure_agent()
+-- берёт оттуда почту вошедшего. В Supabase таблица своя и богаче.
+create table if not exists auth.users (
+  id    uuid primary key,
+  email text unique
+);
+
 do $$
 begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then

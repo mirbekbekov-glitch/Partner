@@ -88,3 +88,33 @@ select test.eq(
     where r.id = :'req1'),
   'Жумаев Клиент', 'агент, приведший клиента: имя приходит');
 reset role;
+
+-- ---- app/cabinet/admin/agents/page.tsx -----------------------------------
+-- Тот же список колонок, что в типе Row на странице одобрения.
+set request.jwt.claims = :'claims_admin';
+set role authenticated;
+select test.ok(test.visible_count($$
+  select id, full_name, email, phone, telegram_id, role, status, created_at,
+         objects_count, contacts_count, requirements_count
+    from admin_agents_v$$) >= 5,
+  'экран одобрения: список колонок admin_agents_v существует');
+reset role;
+
+-- ---- app/cabinet/layout.tsx ----------------------------------------------
+set request.jwt.claims = :'claims_aibek';
+set role authenticated;
+select test.eq(test.visible_count(format($$
+  select id, full_name, email, role, status from agents where auth_user_id = %L$$,
+  '00000000-0000-0000-0000-0000000000b1')),
+  1::bigint, 'гейт кабинета: запрос своей строки агента работает');
+reset role;
+
+-- Неодобренный агент получает здесь ноль строк — layout покажет ему экран
+-- ожидания. Это ровно тот путь, на который страница и рассчитана.
+set request.jwt.claims = :'claims_pending';
+set role authenticated;
+select test.eq(test.visible_count(format($$
+  select id, full_name, email, role, status from agents where auth_user_id = %L$$,
+  '00000000-0000-0000-0000-0000000000b4')),
+  0::bigint, 'гейт кабинета: неодобренный агент своей строки не видит → экран ожидания');
+reset role;
