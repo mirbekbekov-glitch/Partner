@@ -281,7 +281,10 @@ textarea {
   padding-bottom: 12px; margin-bottom: 20px;
   border-bottom: 1px solid var(--line);
 }
-.pub-brand { font-weight: 600; text-decoration: none; margin-right: auto; }
+.pub-brand { display: flex; align-items: center; margin-right: auto; }
+/* Высота задаётся, ширина считается сама: иначе знак исказится. */
+.pub-logo { height: 26px; width: auto; }
+@media (max-width: 560px) { .pub-logo { height: 22px; } }
 
 .pub-grid {
   display: grid; gap: 16px;
