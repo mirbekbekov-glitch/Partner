@@ -10,7 +10,9 @@ export const metadata: Metadata = {
 
 export const DEAL_STATUS: Record<string, string> = {
   deposit: "задаток",
-  contract: "договор",
+  documents: "документы",
+  signing: "подписание",
+  settlement: "расчёт",
   closed: "закрыта",
   failed: "сорвана",
 };
@@ -34,6 +36,13 @@ export default async function DealsPage({
   const { note } = await searchParams;
   const all = await deals();
   const mine = all.filter((d) => d.i_am_listing || d.i_am_closing);
+  const stuck = mine.filter(
+    (d) =>
+      d.status !== "closed" &&
+      d.status !== "failed" &&
+      d.stage_budget_days !== null &&
+      d.days_in_stage > d.stage_budget_days,
+  );
   const others = all.filter((d) => !(d.i_am_listing || d.i_am_closing));
 
   const earned = mine
@@ -50,6 +59,15 @@ export default async function DealsPage({
       </p>
 
       {note && <p className="ok-banner">{note}</p>}
+
+      {stuck.length > 0 && (
+        <p className="warn">
+          {stuck.length === 1 ? "Одна сделка стоит" : `${stuck.length} сделки стоят`} на
+          этапе дольше срока:{" "}
+          {stuck.map((d) => d.address).join(", ")}. Молчание на этапе не значит,
+          что всё идёт своим чередом.
+        </p>
+      )}
 
       {earned > 0 && (
         <p className="ok-banner">
@@ -116,6 +134,15 @@ function DealRows({
             <span className={`chip ${d.status === "closed" ? "ok" : d.status === "failed" ? "danger" : "warn"}`}>
               {DEAL_STATUS[d.status] ?? d.status}
             </span>
+            {d.status !== "closed" && d.status !== "failed" && (
+              <p className={
+                d.stage_budget_days !== null && d.days_in_stage > d.stage_budget_days
+                  ? "act-err" : "muted"
+              }>
+                на этапе {d.days_in_stage} дн.
+                {d.stage_budget_days !== null ? ` из ${d.stage_budget_days}` : ""}
+              </p>
+            )}
             {d.status === "closed" ? (
               <p className="muted">
                 комиссия {money(d.commission_total, d.currency)}

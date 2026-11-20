@@ -82,6 +82,14 @@ export default async function CabinetHome() {
               many="показов впереди" href="/cabinet/requirements" />
         <Tile value={s.deals_open} one="сделка в работе" few="сделки в работе"
               many="сделок в работе" href="/cabinet/deals" />
+        <Tile
+          value={s.deals_stuck}
+          one="сделка стоит на этапе" few="сделки стоят на этапе"
+          many="сделок стоят на этапе"
+          href="/cabinet/deals"
+          alarm
+          hint="дольше, чем этому этапу отведено"
+        />
         {access.agent.is_admin && (
           <Tile
             value={s.agents_pending}

@@ -253,6 +253,7 @@ export type Summary = {
   showings_upcoming: number;
   requirements_mine: number;
   deals_open: number;
+  deals_stuck: number;
   agents_pending: number;
   scheduler_broken: number;
 };
@@ -288,6 +289,7 @@ export async function summary(): Promise<Summary | null> {
            where (dl.listing_agent_id = app.current_agent_id()
                   or dl.closing_agent_id = app.current_agent_id())
              and dl.status not in ('closed', 'failed'))::int as deals_open,
+         (select count(*) from stuck_deals_v sd where sd.mine)::int     as deals_stuck,
          (select count(*) from agents a where a.status = 'pending')::int as agents_pending,
          (select count(*) from maintenance_health_v h
            where h.enabled and h.status <> 'в норме')::int             as scheduler_broken`,
@@ -719,6 +721,9 @@ export type Deal = {
   closing_share_ratio: string | null;
   i_am_listing: boolean;
   i_am_closing: boolean;
+  stage_since: Date | string;
+  days_in_stage: number;
+  stage_budget_days: number | null;
   // Индикативные суммы до закрытия: считаются от цены объекта.
   indicative_total: string | null;
   indicative_my_share: string | null;
@@ -732,6 +737,7 @@ const DEAL_COLUMNS = `
   d.requirement_id, d.client_name, d.listing_agent_name, d.closing_agent_name,
   d.mandate_kind::text, d.closing_share_ratio::text,
   d.i_am_listing, d.i_am_closing,
+  d.stage_since, d.days_in_stage, d.stage_budget_days,
   dc.commission_total::text as indicative_total,
   case when d.i_am_listing then dc.listing_share::text
        when d.i_am_closing then dc.closing_share::text end as indicative_my_share

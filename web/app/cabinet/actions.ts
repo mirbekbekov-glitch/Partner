@@ -806,3 +806,13 @@ export async function transferRequirement(_prev: unknown, form: FormData): Promi
     return `Клиент передан: ${rows[0].full_name}. Подборы в работе перешли вместе с ним.`;
   }, `/cabinet/requirements/${requirementId}`);
 }
+
+export async function setDealStage(_prev: unknown, form: FormData): Promise<Result> {
+  const dealId = String(form.get("deal_id"));
+  const stage = String(form.get("stage"));
+
+  return actThenNotice(async (db) => {
+    await db.query("select set_deal_stage($1, $2::deal_status)", [dealId, stage]);
+    return "Этап изменён.";
+  }, `/cabinet/deals/${dealId}`);
+}

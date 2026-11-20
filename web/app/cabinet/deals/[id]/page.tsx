@@ -4,7 +4,8 @@ import { dealDetail } from "../../../../lib/cabinet";
 import { formatDate, formatDateTime, formatPrice, KIND_LABEL } from "../../../../lib/format";
 import { gate } from "../../Gate";
 import { ActionForm } from "../../ActionForm";
-import { closeDeal, failDeal } from "../../actions";
+import { closeDeal, failDeal, setDealStage } from "../../actions";
+import { DealStages } from "../../DealStages";
 import { DEAL_STATUS } from "../page";
 
 export const metadata: Metadata = {
@@ -80,6 +81,18 @@ export default async function DealPage({
           )}
         </dl>
       </section>
+
+      {open && (
+        <DealStages
+          action={setDealStage}
+          dealId={d.deal_id}
+          current={d.status}
+          stageSince={d.stage_since}
+          daysInStage={d.days_in_stage}
+          budgetDays={d.stage_budget_days}
+          canMove={mine}
+        />
+      )}
 
       <section className="card">
         <h2>Деньги</h2>
