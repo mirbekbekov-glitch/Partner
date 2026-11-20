@@ -6,12 +6,15 @@ import {
 } from '@/lib/catalog-params';
 import { money, day } from '@/lib/list-params';
 import { CatalogHeader } from './CatalogHeader';
-import { AGENCY_NAME, AGENCY_PHONES } from '@/lib/agency';
+import { CATALOG_TITLE } from '@/lib/agency';
 import { Photo } from './Photo';
 
 export const metadata = {
-  title: 'Объекты в Бишкеке — аренда и продажа',
-  description: 'Квартиры, дома и коммерческая недвижимость в Бишкеке.',
+  // Бренд дописан вручную: шаблон '%s — Liberterra' из корневого макета
+  // применяется к ВЛОЖЕННЫМ сегментам, а главная лежит в том же, что и сам
+  // макет, — её заголовка он не касается.
+  title: 'Недвижимость в Бишкеке: аренда и продажа — Liberterra',
+  description: 'Liberterra: квартиры, дома и коммерческая недвижимость в Бишкеке.',
 };
 
 // Каталог читается анонимно и меняется при каждой правке цены, поэтому
@@ -97,7 +100,7 @@ export default async function Catalog({
   return (
     <>
       <CatalogHeader />
-      <h1>{AGENCY_NAME}</h1>
+      <h1>{CATALOG_TITLE}</h1>
       <p className="sub">
         {error ? 'Каталог временно недоступен.' : `Сейчас в продаже и аренде: ${total}.`}
       </p>
