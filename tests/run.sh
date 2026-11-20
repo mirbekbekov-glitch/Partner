@@ -54,6 +54,15 @@ done
 # Сверка вызовов rpc() со схемой: PostgREST видит только public, и функция,
 # оставленная в app, падает лишь в рантайме. Шаблон уже собран, на нём и
 # проверяем.
+say "── разметка: нет вложенных <form>"
+if "$ROOT/tests/check-forms.sh" >/tmp/forms.log 2>&1; then
+  sed 's/^/ /' /tmp/forms.log; say "   ПРОЙДЕНА"; pass=$((pass+1))
+else
+  sed 's/^/   /' /tmp/forms.log; say "   ПРОВАЛЕНА"
+  fail=$((fail+1)); failed_names+=("check-forms")
+fi
+say ""
+
 say "── сверка вызовов rpc() со схемой"
 if DB="$TPL" "$ROOT/tests/check-rpc.sh" >/tmp/rpc.log 2>&1; then
   say "   ПРОЙДЕНА"; pass=$((pass+1))

@@ -312,3 +312,12 @@ select test.ok(test.visible_count($$
   select id, other_id from contact_duplicates_v$$) >= 1,
   'список контактов: запрос пар дубликатов работает');
 reset role;
+
+-- ---- Собственность с карточки контакта -----------------------------------
+set request.jwt.claims = :'claims_aibek';
+set role authenticated;
+select test.ok(test.visible_count($$
+  select id, address, deal_type, price, currency, publication_state
+    from linkable_objects_v order by address$$) >= 1,
+  'карточка контакта: список колонок linkable_objects_v существует');
+reset role;

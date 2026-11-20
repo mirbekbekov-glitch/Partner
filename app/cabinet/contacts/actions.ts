@@ -172,3 +172,49 @@ export async function mergeContacts(formData: FormData): Promise<MergeResult> {
         : ''),
   };
 }
+
+export type OwnershipResult = { error: string | null };
+
+/**
+ * Связь контакта с объектом.
+ *
+ * Роль входит в составной ключ (object_id, contact_id, role), поэтому смена
+ * роли — это перенос, а не UPDATE одной строки: наивная правка оставила бы
+ * у человека две роли по одному объекту. Это скрыто в set_object_ownership().
+ */
+export async function setOwnership(formData: FormData): Promise<OwnershipResult> {
+  const supabase = await createClient();
+  const contactId = String(formData.get('contact_id') ?? '');
+
+  const shareRaw = String(formData.get('share') ?? '').trim().replace(',', '.');
+  const share = shareRaw === '' ? null : Number(shareRaw);
+
+  if (share !== null && !Number.isFinite(share)) {
+    return { error: 'Доля должна быть числом, например 0.5 для половины.' };
+  }
+
+  const { error } = await supabase.rpc('set_object_ownership', {
+    p_object_id: String(formData.get('object_id') ?? ''),
+    p_contact_id: contactId,
+    p_role: String(formData.get('role') ?? 'owner'),
+    p_share: share,
+  });
+
+  revalidatePath(`/cabinet/contacts/${contactId}`);
+  revalidatePath('/cabinet/objects', 'layout');
+  return { error: error ? error.message : null };
+}
+
+export async function removeOwnership(formData: FormData): Promise<OwnershipResult> {
+  const supabase = await createClient();
+  const contactId = String(formData.get('contact_id') ?? '');
+
+  const { error } = await supabase.rpc('remove_object_ownership', {
+    p_object_id: String(formData.get('object_id') ?? ''),
+    p_contact_id: contactId,
+  });
+
+  revalidatePath(`/cabinet/contacts/${contactId}`);
+  revalidatePath('/cabinet/objects', 'layout');
+  return { error: error ? error.message : null };
+}

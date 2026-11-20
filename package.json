@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "db:rebuild": "./db/rebuild.sh",
     "test:db": "./tests/run.sh",
-    "test:rpc": "./tests/check-rpc.sh"
+    "test:rpc": "./tests/check-rpc.sh",
+    "test:forms": "./tests/check-forms.sh"
   },
   "dependencies": {
     "@supabase/ssr": "0.8.0",

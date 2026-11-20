@@ -8,6 +8,7 @@ import { transferContact } from '../../transfer-actions';
 import { ContactForm, ROLE_RU, type ContactDraft } from '../ContactForm';
 import { Phones, type Phone } from '../Phones';
 import { MergeForm, type DuplicateCandidate } from '../MergeForm';
+import { Ownerships, type OwnershipRow, type LinkableObject } from '../Ownerships';
 import { updateContact } from '../actions';
 
 export const metadata = { title: 'Контакт' };
@@ -15,11 +16,6 @@ export const metadata = { title: 'Контакт' };
 const REQ_STATUS_RU: Record<string, string> = {
   new: 'новая', qualified: 'квалифицирована', in_showings: 'в показах',
   in_deal: 'в сделке', closed: 'закрыта', lost: 'отвал',
-};
-
-const OWNERSHIP_RU: Record<string, string> = {
-  owner: 'собственник', co_owner: 'совладелец',
-  proxy: 'доверенное лицо', contact_person: 'контактное лицо',
 };
 
 export default async function ContactCard({ params }: { params: Promise<{ id: string }> }) {
@@ -34,6 +30,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
     { data: activities },
     { data: colleagues },
     { data: duplicates },
+    { data: linkable },
   ] = await Promise.all([
     supabase.from('contact_list_v').select('*').eq('id', id).maybeSingle(),
     supabase.from('contact_phones').select('id, phone, label, is_primary')
@@ -50,6 +47,10 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
     supabase.from('contact_duplicates_v')
       .select('other_id, other_name, other_phones, other_requirements')
       .eq('id', id),
+    // Объекты, за которые агент отвечает: предлагать чужие бессмысленно,
+    // связь всё равно не пройдёт.
+    supabase.from('linkable_objects_v')
+      .select('id, address, deal_type, price, currency').order('address'),
   ]);
 
   if (!contact) notFound();
@@ -84,32 +85,12 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
         canEdit={canEdit}
       />
 
-      <h2>Объекты ({(objects ?? []).length})</h2>
-      {(objects ?? []).length === 0 ? (
-        <p className="empty">Объектов за этим контактом нет.</p>
-      ) : (
-        (objects ?? []).map((o) => (
-          <div className="card" key={`${o.object_id}-${o.ownership_role}`}>
-            <div className="row">
-              <Link href={`/cabinet/objects/${o.object_id}`}>
-                <strong>{o.address}</strong>
-              </Link>
-              <span className="tag">{OWNERSHIP_RU[o.ownership_role] ?? o.ownership_role}</span>
-              <span>{money(o.price, o.currency)}</span>
-              <span className="key">{o.publication_state}</span>
-            </div>
-            {!o.active_mandate_id ? (
-              <div className="row" style={{ marginTop: 6 }}>
-                <span className="warn">нет активного мандата — объект нельзя опубликовать</span>
-              </div>
-            ) : o.contract_confirmed === false ? (
-              <div className="row" style={{ marginTop: 6 }}>
-                <span className="warn">договор требует подтверждения</span>
-              </div>
-            ) : null}
-          </div>
-        ))
-      )}
+      <Ownerships
+        contactId={c.id}
+        rows={(objects ?? []) as OwnershipRow[]}
+        linkable={(linkable ?? []) as LinkableObject[]}
+        canEdit={canEdit}
+      />
 
       <h2>Потребности ({(requirements ?? []).length})</h2>
       {(requirements ?? []).length === 0 ? (

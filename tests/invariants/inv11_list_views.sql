@@ -69,8 +69,11 @@ select test.eq((select matches_count from object_list_v where id = :'obj2'), 0::
 reset role;
 insert into contacts (id, name, owner_agent_id)
 values ('00000000-0000-0000-0000-00000000c003', 'Второй Совладелец', :'agent_aibek');
-insert into object_ownerships (object_id, contact_id, role, share)
-values (:'obj1', '00000000-0000-0000-0000-00000000c003', 'co_owner', 0.5);
+-- Доля не указана: этот тест про то, что два собственника не размножают
+-- строку объекта, а не про доли. С 0023 сумма долей по объекту не может
+-- выйти за единицу, а у obj1 все сто процентов уже у собственника.
+insert into object_ownerships (object_id, contact_id, role)
+values (:'obj1', '00000000-0000-0000-0000-00000000c003', 'co_owner');
 
 set request.jwt.claims = :'claims_aibek';
 set role authenticated;
