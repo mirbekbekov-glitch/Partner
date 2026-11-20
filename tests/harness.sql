@@ -57,8 +57,8 @@ end $$;
 
 -- Тесты работают от имени ролей authenticated и anon, значит помощники должны
 -- быть доступны обеим.
-grant usage on schema test to authenticated, anon;
-grant execute on all functions in schema test to authenticated, anon;
+grant usage on schema test to authenticated, anon, collector;
+grant execute on all functions in schema test to authenticated, anon, collector;
 
 -- Права на схему app харнесс НЕ раздаёт. Раньше раздавал — и из-за этого
 -- тесты были зелёными, пока страница отчёта падала с «permission denied for

@@ -1,0 +1,13 @@
+{
+  "name": "partner-collector",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Сборщик объявлений с площадок в пул кандидатов",
+  "scripts": {
+    "run:fixture": "node run.mjs fixtures/example.json"
+  },
+  "dependencies": {
+    "pg": "8.13.1"
+  }
+}

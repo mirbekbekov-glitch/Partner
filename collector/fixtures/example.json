@@ -1,0 +1,56 @@
+{
+  "source": "lalafo",
+  "note": "Выдуманные записи для проверки трубы. Не данные с площадки.",
+  "listings": [
+    {
+      "external_id": "FX-0001",
+      "url": "https://example.invalid/FX-0001",
+      "title": "2-комн., Центр, рядом с парком",
+      "description": "Светлая квартира, косметический ремонт.",
+      "address": "Киевская 95",
+      "zone": "Центр",
+      "kind": "flat",
+      "deal_type": "sale",
+      "rooms": 2,
+      "area": 56.5,
+      "floor": 4,
+      "floors_total": 9,
+      "price": 73000,
+      "currency": "USD",
+      "photos_count": 6,
+      "author": "owner",
+      "phone": "0700 55-44-33"
+    },
+    {
+      "external_id": "FX-0002",
+      "url": "https://example.invalid/FX-0002",
+      "title": "1-комн., Юг, сдаётся надолго",
+      "address": "Ахунбаева 134",
+      "zone": "Юг",
+      "kind": "flat",
+      "deal_type": "rent",
+      "rooms": 1,
+      "area": 34,
+      "floor": 8,
+      "floors_total": 10,
+      "price": 280,
+      "currency": "USD",
+      "photos_count": 3,
+      "author": "owner",
+      "phone": "+996555 11 22 33"
+    },
+    {
+      "external_id": "FX-0003",
+      "url": "https://example.invalid/FX-0003",
+      "title": "Агентство: подбор квартир по всему городу",
+      "address": "не указан",
+      "kind": "flat",
+      "deal_type": "sale",
+      "price": 65000,
+      "currency": "USD",
+      "photos_count": 1,
+      "author": "agent",
+      "phone": "0312 900900"
+    }
+  ]
+}
