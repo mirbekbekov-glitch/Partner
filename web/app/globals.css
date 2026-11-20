@@ -612,3 +612,209 @@ a {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ===========================================================================
+   Кабинет агента
+   ===========================================================================
+   Кабинет — рабочий инструмент, а не витрина: плотнее, строже, без картинок
+   там, где хватает слов. Состояние объекта важнее его фотографии, поэтому
+   глазу первым должно попадаться то, что требует действия.
+*/
+
+.cabinet { --cab-alarm: #b42318; --cab-ok: #067647; --cab-warn: #b54708; }
+
+.cab-nav {
+  background: #111827;
+  color: #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.cab-nav .wrap {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.65rem 1rem;
+  flex-wrap: wrap;
+}
+.cab-brand { color: #fff; font-weight: 600; text-decoration: none; }
+.cab-nav ul { display: flex; gap: 1.1rem; list-style: none; margin: 0; padding: 0; }
+.cab-nav a { color: #cbd5e1; text-decoration: none; }
+.cab-nav a:hover { color: #fff; }
+.cab-who { margin-left: auto; display: flex; align-items: center; gap: 0.9rem; }
+.cab-who a { color: #e5e7eb; }
+.cab-who form { margin: 0; }
+button.link {
+  background: none; border: 0; color: #94a3b8; cursor: pointer;
+  font: inherit; padding: 0; text-decoration: underline;
+}
+
+.wrap.narrow { max-width: 38rem; }
+.lead { color: #475467; max-width: 46rem; }
+.muted { color: #667085; }
+.small { font-size: 0.85rem; }
+.opt { color: #98a2b3; font-weight: 400; }
+.hint { color: #667085; font-size: 0.85rem; margin: 0.35rem 0 0; }
+.back { margin: 1rem 0 0; }
+
+.card {
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.25rem 0;
+  background: #fff;
+}
+.card h2 { margin-top: 0; }
+
+.empty {
+  border: 1px dashed #d0d5dd;
+  border-radius: 10px;
+  padding: 1.25rem;
+  color: #667085;
+}
+.warn {
+  border-left: 3px solid var(--cab-warn);
+  background: #fffaeb;
+  padding: 0.75rem 1rem;
+  border-radius: 0 8px 8px 0;
+}
+.ok-banner {
+  border-left: 3px solid var(--cab-ok);
+  background: #ecfdf3;
+  padding: 0.75rem 1rem;
+  border-radius: 0 8px 8px 0;
+}
+
+/* Плитки сводки: число первым, потому что за ним и приходят. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+.tile {
+  display: block;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+}
+.tile strong { display: block; font-size: 1.9rem; line-height: 1.1; }
+.tile span { display: block; color: #475467; font-size: 0.9rem; }
+.tile em { display: block; color: #98a2b3; font-size: 0.78rem; font-style: normal; margin-top: 0.3rem; }
+.tile.alarm { border-color: #fda29b; background: #fffbfa; }
+.tile.alarm strong { color: var(--cab-alarm); }
+
+/* Строки списка. Объект, его состояние и действия — три колонки, потому что
+   на телефоне они встанут друг под друга без перестройки разметки. */
+.rows { display: flex; flex-direction: column; gap: 0.75rem; margin: 1rem 0 2rem; }
+.row {
+  display: grid;
+  grid-template-columns: minmax(14rem, 2fr) minmax(10rem, 1fr) minmax(12rem, 1fr);
+  gap: 1rem;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+  background: #fff;
+}
+.row.alarm { border-left: 3px solid var(--cab-alarm); }
+.rows.compact .row { grid-template-columns: 1fr auto; padding: 0.6rem 1rem; }
+.row h3 { margin: 0 0 0.25rem; font-size: 1.02rem; }
+.row-meta { color: #475467; margin: 0.15rem 0; font-size: 0.9rem; }
+.row-price { font-weight: 600; margin: 0.3rem 0 0; }
+.row-price.big { font-size: 1.5rem; }
+.row-state p { margin: 0 0 0.35rem; }
+.row-acts { display: flex; flex-direction: column; gap: 0.5rem; }
+.note { background: #f9fafb; padding: 0.5rem 0.7rem; border-radius: 6px; margin: 0.4rem 0; }
+.phone { font-weight: 600; font-variant-numeric: tabular-nums; margin: 0 0 0.4rem; }
+
+.reasons { margin: 0.3rem 0 0; padding-left: 1.1rem; color: var(--cab-alarm); font-size: 0.85rem; }
+.reasons.wide { columns: 2; max-width: 46rem; }
+
+/* Кабинетная плашка. Называется иначе, чем каталожный .tag: там это
+   строчная подпись капсом, здесь — плашка состояния. Один класс на два
+   смысла уже дал капс в «В НОРМЕ», и дал бы ещё. */
+.chip {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #344054;
+  margin-right: 0.3rem;
+  white-space: nowrap;
+}
+.chip.ok, .chip.approved, .chip.published { background: #ecfdf3; color: var(--cab-ok); }
+.chip.warn, .chip.pending, .chip.new { background: #fffaeb; color: var(--cab-warn); }
+.chip.danger, .chip.blocked, .chip.spam { background: #fef3f2; color: var(--cab-alarm); }
+.chip.admin { background: #eef4ff; color: #3538cd; }
+
+/* Формы действий. Кнопка и ответ базы рядом — ответ относится к ней. */
+.act { display: flex; flex-direction: column; gap: 0.35rem; margin: 0; }
+.act label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; color: #475467; }
+.act label.check { flex-direction: row; align-items: center; gap: 0.4rem; }
+.act input[type="text"], .act input:not([type]), .act input[type="tel"],
+.act input[type="number"] {
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  padding: 0.42rem 0.6rem;
+  font: inherit;
+  width: 100%;
+}
+.btn {
+  display: inline-block;
+  border: 1px solid #d0d5dd;
+  background: #fff;
+  border-radius: 7px;
+  padding: 0.45rem 0.8rem;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  color: #101828;
+}
+.btn:hover { background: #f9fafb; }
+.btn.danger { border-color: #fda29b; color: var(--cab-alarm); }
+.btn:disabled { opacity: 0.6; cursor: default; }
+.act-err { color: var(--cab-alarm); font-size: 0.85rem; margin: 0; }
+.act-ok { color: var(--cab-ok); font-size: 0.85rem; margin: 0; word-break: break-all; }
+.acts-bar { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 1.25rem 0; }
+
+.thumbs { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.75rem 0; }
+.thumbs img { width: 10rem; height: 7.5rem; object-fit: cover; border-radius: 8px; }
+
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.5rem 1.25rem; margin: 0; }
+.facts dt { color: #667085; }
+.facts dd { margin: 0; }
+.plain { list-style: none; padding: 0; }
+.plain li { padding: 0.35rem 0; border-bottom: 1px solid #f2f4f7; }
+.link-box { display: flex; flex-direction: column; gap: 0.2rem; margin: 0.4rem 0; }
+.link-box code { word-break: break-all; }
+
+@media (max-width: 720px) {
+  .row { grid-template-columns: 1fr; }
+  .reasons.wide { columns: 1; }
+}
+
+/* Складка: действие, которому нужна причина, не должно занимать место, пока
+   его не выбрали. Пять раскрытых полей «Причина» подряд — это не форма, это
+   шум, в котором теряются кнопки. */
+.fold > summary {
+  cursor: pointer;
+  list-style: none;
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  padding: 0.45rem 0.8rem;
+  text-align: center;
+  color: #475467;
+}
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary:hover { background: #f9fafb; }
+.fold[open] > summary { border-color: #98a2b3; margin-bottom: 0.4rem; }
+
+/* Ссылка наружу: стрелка говорит, что уводит с сайта, а цвет — что это
+   вообще ссылка. Заголовок, который кликается, но выглядит как текст,
+   кликают случайно и не кликают нарочно. */
+.ext { color: #175cd3; text-decoration: none; }
+.ext:hover { text-decoration: underline; }

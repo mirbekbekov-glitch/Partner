@@ -9,14 +9,6 @@
 
 create schema if not exists auth;
 
-create or replace function auth.uid() returns uuid
-  language sql stable as $$
-  select nullif(
-    current_setting('request.jwt.claims', true)::jsonb ->> 'sub',
-    ''
-  )::uuid
-$$;
-
 -- auth.jwt() в Supabase отдаёт разобранные клеймы целиком. Нужен потому, что
 -- инвариант 6 читает из них проверенный телефон, а не принимает его в аргументе.
 create or replace function auth.jwt() returns jsonb
@@ -27,12 +19,21 @@ create or replace function auth.jwt() returns jsonb
   )
 $$;
 
+-- Читается через auth.jwt(), а не напрямую из настройки. Разница не
+-- косметическая: однажды выставленная внутри транзакции настройка после
+-- неё остаётся не пустой, а ПУСТОЙ СТРОКОЙ, и `''::jsonb` роняет запрос с
+-- «invalid input syntax for type json» в месте, не похожем на причину —
+-- например внутри журнального триггера. Настоящий Supabase оборачивает
+-- клеймы в nullif именно поэтому, а стаб, который этого не делает,
+-- проверяет не ту систему, которая поедет в бой.
+create or replace function auth.uid() returns uuid
+  language sql stable as $$
+  select nullif(auth.jwt() ->> 'sub', '')::uuid
+$$;
+
 create or replace function auth.role() returns text
   language sql stable as $$
-  select coalesce(
-    current_setting('request.jwt.claims', true)::jsonb ->> 'role',
-    'anon'
-  )
+  select coalesce(nullif(auth.jwt() ->> 'role', ''), 'anon')
 $$;
 
 do $$

@@ -86,3 +86,65 @@ export async function asReportRole<T>(
 ): Promise<T> {
   return inTransaction("read write", fn);
 }
+
+/**
+ * Служба входа. Отдельная роль `auth_service` (инвариант 18): ей открыты
+ * только выдача кода, его проверка и сам вход. Каталог этих функций не
+ * вызывает — иначе любой желающий получал бы код входа для чужого номера
+ * прямо в ответе.
+ */
+export async function asAuthService<T>(
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return withRole(process.env.AUTH_DB_ROLE ?? "auth_service", "read write", null, fn);
+}
+
+/**
+ * Кабинет агента. Роль `authenticated` и клеймы входа — тот же путь, которым
+ * ходит Supabase: `auth.uid()` читает `sub` из `request.jwt.claims`.
+ *
+ * Клеймы выставляются `set_config(..., true)`, то есть до конца транзакции.
+ * Поэтому они не утекают в следующий запрос по тому же соединению из пула —
+ * иначе один агент увидел бы данные другого, и никакая RLS не помогла бы.
+ */
+export async function asAgent<T>(
+  claims: { sub: string; phone: string },
+  mode: "read only" | "read write",
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return withRole(
+    process.env.CABINET_DB_ROLE ?? "authenticated",
+    mode,
+    JSON.stringify({ ...claims, role: "authenticated" }),
+    fn,
+  );
+}
+
+async function withRole<T>(
+  roleName: string,
+  mode: "read only" | "read write",
+  claims: string | null,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  if (!/^[a-z_][a-z0-9_]*$/.test(roleName)) {
+    throw new Error(`недопустимое имя роли: ${roleName}`);
+  }
+  const client = await pool().connect();
+  try {
+    await client.query(`begin ${mode}`);
+    if (claims !== null) {
+      // Клеймы идут параметром, а не в текст запроса: там номер телефона и
+      // идентификатор человека.
+      await client.query("select set_config('request.jwt.claims', $1, true)", [claims]);
+    }
+    await client.query(`set local role ${roleName}`);
+    const result = await fn(client);
+    await client.query("commit");
+    return result;
+  } catch (error) {
+    await client.query("rollback").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}

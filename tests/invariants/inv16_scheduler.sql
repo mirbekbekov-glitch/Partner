@@ -11,14 +11,19 @@
 \set ON_ERROR_STOP on
 
 -- ---- 16а. До первого запуска планировщик считается молчащим ---------------
+-- Число работ берётся из таблицы, а не вписывается числом. Первая версия
+-- ждала «3», и следующая же миграция, добавившая работу, уронила тест на
+-- ровном месте: он проверял не правило, а своё знание о содержимом таблицы.
 set role authenticated;
 set request.jwt.claims = :'claims_admin';
 
+select count(*)::int as jobs from maintenance_jobs where enabled \gset
+
 select test.eq(
   (select count(*)::int from maintenance_health_v where status = 'ни разу не запускалась'),
-  3, 'все три работы числятся ни разу не запущенными');
+  :jobs, 'все работы расписания числятся ни разу не запущенными');
 
-select test.eq(app.maintenance_overdue(), 3,
+select test.eq(app.maintenance_overdue(), :jobs,
   'планировщик не в норме, пока не было ни одного запуска');
 
 -- ---- 16б. Запуск оставляет запись с результатом ---------------------------
@@ -44,24 +49,47 @@ select test.eq(
 -- функцию, должен её потом вернуть, и первая версия этого теста вернула её
 -- неправильно (своей выдумкой вместо настоящей) и упала на следующей строке.
 --
--- Поэтому падение берётся штатное: работа объявлена в таблице, а кода для
--- неё нет. Для run_maintenance это тот же путь — исключение внутри работы.
+-- Поэтому падение берётся штатное: работа с обработчиком, который падает.
 set role postgres;
-insert into maintenance_jobs (job, description, cron_expression, max_silence)
-values ('_без_кода', 'объявлена в таблице, а кода нет', '0 * * * *', interval '1 hour');
+create or replace function app.job_broken() returns jsonb
+  language plpgsql as $$ begin
+    raise exception 'сломано нарочно, для проверки инварианта 16';
+  end $$;
+
+insert into maintenance_jobs (job, description, cron_expression, max_silence, handler)
+values ('_без_кода', 'обработчик падает нарочно', '0 * * * *', interval '1 hour',
+        'app.job_broken()'::regprocedure);
+
+-- Работа без обработчика в таблицу не попадёт вовсе: до 0023 имена работ
+-- перечислялись в case внутри диспетчера, и следующая миграция честно
+-- добавила работу, забыв код для неё. Теперь это одно действие, а не два.
+select test.throws(
+  $$insert into maintenance_jobs (job, description, cron_expression, max_silence)
+    values ('_без_обработчика', 'нет обработчика', '0 * * * *', interval '1 hour')$$,
+  'null value in column "handler"',
+  'работу без обработчика в расписание не добавить');
+
+-- И обработчик обязан быть в схеме app: в public он оказался бы доступен
+-- кабинету как обычная функция.
+select test.throws(
+  $$insert into maintenance_jobs (job, description, cron_expression, max_silence, handler)
+    values ('_чужой', 'обработчик в public', '0 * * * *', interval '1 hour',
+            'public.approve_agent(uuid)'::regprocedure)$$,
+  'INVARIANT_16: обработчик работы должен быть функцией схемы app',
+  'обработчик вне схемы app не принимается');
 
 select test.eq(
   ((select app.run_maintenance('_без_кода')) ->> 'ok')::boolean,
   false, 'упавшая работа возвращает ok = false, а не падает сама');
 
 select test.ok(
-  (select error like '%нет кода%' from maintenance_runs where job = '_без_кода'),
+  (select error like '%сломано нарочно%' from maintenance_runs where job = '_без_кода'),
   'причина падения записана в журнал');
 
 -- ---- 16г. Падение одной работы не уносит остальные ------------------------
 select test.eq(
   (select count(*)::int from app.run_maintenance_all() where ok),
-  3, 'три настоящие работы прошли, несмотря на сломанную четвёртую');
+  :jobs, 'настоящие работы прошли, несмотря на сломанную');
 
 select test.eq(
   (select count(*)::int from app.run_maintenance_all() where not ok),
@@ -110,8 +138,11 @@ select test.eq(
 set role postgres;
 -- Теперь убираем свежие запуски и оставляем только пятичасовой: срок
 -- молчания у этой работы три часа.
-insert into maintenance_jobs (job, description, cron_expression, max_silence)
-values ('_молчащая', 'работа для проверки задержки', '0 * * * *', interval '1 hour');
+create or replace function app.job_noop() returns jsonb
+  language sql as $$ select '{}'::jsonb $$;
+insert into maintenance_jobs (job, description, cron_expression, max_silence, handler)
+values ('_молчащая', 'работа для проверки задержки', '0 * * * *', interval '1 hour',
+        'app.job_noop()'::regprocedure);
 insert into maintenance_runs (job, started_at, finished_at, ok, result)
 values ('_молчащая', now() - interval '4 hours', now() - interval '4 hours', true, '{}'::jsonb);
 
@@ -172,7 +203,7 @@ select test.throws(
 set request.jwt.claims = :'claims_admin';
 select test.eq(
   (select count(*)::int from run_maintenance_now() where ok),
-  3, 'администратор запускает все работы руками');
+  :jobs, 'администратор запускает все работы руками');
 
 select test.eq(
   ((select ok from run_maintenance_now('purge_candidates'))),

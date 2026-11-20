@@ -1,0 +1,113 @@
+import type { Metadata } from "next";
+import { summary } from "../../lib/cabinet";
+import { plural } from "../../lib/format";
+import { gate } from "./Gate";
+
+export const metadata: Metadata = {
+  title: "Кабинет агента",
+  robots: { index: false, follow: false },
+};
+
+/**
+ * Плитка сводки.
+ *
+ * Подпись склоняется по числу: «1 требуют внимания» и «4 новых обращений» —
+ * это мелочь, которой не бывает в готовом продукте, и первая, по которой
+ * видно, что продукт не готов.
+ */
+function Tile({
+  value,
+  one,
+  few,
+  many,
+  href,
+  alarm,
+  hint,
+}: {
+  value: number;
+  one: string;
+  few: string;
+  many: string;
+  href: string;
+  alarm?: boolean;
+  hint?: string;
+}) {
+  return (
+    <a className={alarm && value > 0 ? "tile alarm" : "tile"} href={href}>
+      <strong>{value}</strong>
+      <span>{plural(value, one, few, many)}</span>
+      {hint && <em>{hint}</em>}
+    </a>
+  );
+}
+
+export default async function CabinetHome() {
+  const access = await gate();
+  if (!access.ok) return access.screen;
+
+  const s = await summary();
+  if (!s) return null;
+
+  return (
+    <div className="wrap">
+      <h1>Здравствуйте, {access.agent.full_name.split(" ")[0]}</h1>
+
+      <section className="tiles">
+        <Tile value={s.objects_mine} one="мой объект" few="моих объекта"
+              many="моих объектов" href="/cabinet/objects" />
+        <Tile value={s.objects_published} one="в каталоге" few="в каталоге"
+              many="в каталоге" href="/cabinet/objects" />
+        <Tile
+          value={s.stale_critical}
+          one="объект требует внимания срочно"
+          few="объекта требуют внимания срочно"
+          many="объектов требуют внимания срочно"
+          href="/cabinet/objects"
+          alarm
+          hint="просроченный договор или давно не подтверждали"
+        />
+        <Tile
+          value={s.inquiries_new}
+          one="новое обращение" few="новых обращения" many="новых обращений"
+          href="/cabinet/inquiries"
+          alarm
+          hint="чем дольше ждёт, тем меньше шансов"
+        />
+        <Tile value={s.candidates_mine} one="объявление в работе"
+              few="объявления в работе" many="объявлений в работе"
+              href="/cabinet/candidates" />
+        <Tile value={s.showings_upcoming} one="показ впереди" few="показа впереди"
+              many="показов впереди" href="/cabinet/objects" />
+        {access.agent.is_admin && (
+          <Tile
+            value={s.agents_pending}
+            one="агент ждёт одобрения" few="агента ждут одобрения"
+            many="агентов ждут одобрения"
+            href="/cabinet/agents"
+            alarm
+          />
+        )}
+        {access.agent.is_admin && (
+          <Tile
+            value={s.scheduler_broken}
+            one="работа расписания не в норме" few="работы расписания не в норме"
+            many="работ расписания не в норме"
+            href="/cabinet/scheduler"
+            alarm
+            hint="молчащий планировщик не даёт ошибок — он просто ничего не делает"
+          />
+        )}
+      </section>
+
+      <section className="card">
+        <h2>Чего в кабинете пока нет</h2>
+        <p>
+          Загрузки фотографий, создания объекта и подбора по требованию. Это не
+          забытое — это следующий шаг: серверная часть подбора и показов готова
+          (<code>object_matches_v</code>, <code>create_match()</code>,{" "}
+          <code>schedule_showing()</code>), а экранов к ней ещё нет.
+        </p>
+      </section>
+    </div>
+  );
+}

@@ -67,9 +67,11 @@ export function formatRooms(rooms: number | null) {
   return `${rooms} ${plural(rooms, "комната", "комнаты", "комнат")}`;
 }
 
-export function daysSince(iso: string | null): number | null {
+// Принимается и Date: каталог читает строки из витрины, кабинет — объекты
+// Date из драйвера pg, а считать дни надо одинаково.
+export function daysSince(iso: Date | string | null): number | null {
   if (!iso) return null;
-  const then = new Date(iso).getTime();
+  const then = (iso instanceof Date ? iso : new Date(iso)).getTime();
   if (Number.isNaN(then)) return null;
   return Math.floor((Date.now() - then) / 86_400_000);
 }
@@ -84,7 +86,7 @@ export type Freshness = {
   tone: "fresh" | "aging" | "stale";
 };
 
-export function freshness(actualAt: string | null): Freshness {
+export function freshness(actualAt: Date | string | null): Freshness {
   const days = daysSince(actualAt);
   if (days === null) return { label: "Срок не указан", tone: "stale" };
   if (days <= 0) return { label: "Подтверждено сегодня", tone: "fresh" };
@@ -110,4 +112,47 @@ export function withParam(
   if (value) params.set(key, value);
   const query = params.toString();
   return query ? `/?${query}` : "/";
+}
+
+/**
+ * Дата из базы. Драйвер `pg` отдаёт timestamptz объектом Date, а не строкой,
+ * поэтому резать её как строку нельзя — первая версия кабинета так и делала
+ * и падала на странице объекта. Принимаются оба вида: из базы приходит Date,
+ * из JSON — строка.
+ */
+export function formatDate(value: Date | string | null): string {
+  if (!value) return "—";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+export function formatDateTime(value: Date | string | null): string {
+  if (!value) return "—";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/**
+ * Номер телефона для человека. В базе он хранится в E.164 — это правильно для
+ * сравнения и для уникальности, но «+996550221144» глазами не читается и по
+ * телефону не диктуется.
+ */
+export function formatPhone(phone: string | null): string {
+  if (!phone) return "";
+  const m = phone.match(/^\+996(\d{3})(\d{3})(\d{3})$/);
+  if (m) return `+996 ${m[1]} ${m[2]} ${m[3]}`;
+  const other = phone.match(/^\+(\d{1,3})(\d{3})(\d{3})(\d{2,4})$/);
+  if (other) return `+${other[1]} ${other[2]} ${other[3]} ${other[4]}`;
+  return phone;
 }
