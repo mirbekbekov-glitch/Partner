@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { MATCH_STATUS_RU, type RequirementMatch } from '@/lib/types';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
+import { StartDealButton } from '../../deals/StartDealButton';
 
 const money = (v: number | null, c = 'USD') =>
   v == null ? '—' : `${new Intl.NumberFormat('ru-RU').format(v)} ${c}`;
@@ -131,6 +132,15 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
             ) : null}
             <div className="row" style={{ marginTop: 6 }}>
               <Link href={`/cabinet/objects/${m.object_id}`}>к объекту →</Link>
+              {m.deal_id ? (
+                <Link href={`/cabinet/deals/${m.deal_id}`}>к сделке →</Link>
+              ) : m.match_status !== 'rejected' ? (
+                <StartDealButton
+                  matchId={m.match_id}
+                  objectId={m.object_id}
+                  requirementId={requirement.id}
+                />
+              ) : null}
             </div>
           </div>
         ))

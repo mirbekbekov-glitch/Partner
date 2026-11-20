@@ -13,7 +13,8 @@ export default async function CabinetHome() {
   const supabase = await createClient();
 
   // head: true — нужны только счётчики, строки тянуть незачем.
-  const [objects, published, needMandate, requirements, openReq, matches] = await Promise.all([
+  const [objects, published, needMandate, requirements, openReq, matches, openDeals] =
+    await Promise.all([
     supabase.from('objects').select('id', { count: 'exact', head: true }),
     supabase.from('objects').select('id', { count: 'exact', head: true })
       .eq('publication_state', 'published'),
@@ -23,6 +24,8 @@ export default async function CabinetHome() {
     supabase.from('requirements').select('id', { count: 'exact', head: true })
       .not('status', 'in', '("closed","lost")'),
     supabase.from('matches').select('id', { count: 'exact', head: true }),
+    supabase.from('deals').select('id', { count: 'exact', head: true })
+      .not('status', 'in', '("closed","failed")'),
   ]);
 
   return (
@@ -56,6 +59,12 @@ export default async function CabinetHome() {
           <span className="tile-t">подборов</span>
           <span className="key">связей объект ↔ клиент</span>
         </div>
+
+        <Link className="tile" href="/cabinet/deals">
+          <span className="tile-n">{openDeals.count ?? 0}</span>
+          <span className="tile-t">сделок в работе</span>
+          <span className="key">комиссия до закрытия индикативна</span>
+        </Link>
       </div>
 
       {needMandate.count ? (

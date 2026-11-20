@@ -5,6 +5,7 @@ import { MATCH_STATUS_RU, type ObjectMatch } from '@/lib/types';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
 import { ObjectActions } from '../ObjectActions';
+import { StartDealButton } from '../../deals/StartDealButton';
 
 const money = (v: number | null, c = 'USD') =>
   v == null ? '—' : `${new Intl.NumberFormat('ru-RU').format(v)} ${c}`;
@@ -160,6 +161,15 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
             ) : null}
             <div className="row" style={{ marginTop: 6 }}>
               <Link href={`/cabinet/requirements/${m.requirement_id}`}>к потребности →</Link>
+              {m.deal_id ? (
+                <Link href={`/cabinet/deals/${m.deal_id}`}>к сделке →</Link>
+              ) : m.match_status !== 'rejected' ? (
+                <StartDealButton
+                  matchId={m.match_id}
+                  objectId={object.id}
+                  requirementId={m.requirement_id}
+                />
+              ) : null}
             </div>
           </div>
         ))

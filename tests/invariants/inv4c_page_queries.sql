@@ -201,3 +201,29 @@ select test.eq(test.visible_count(format($$
     from requirements where id = %L$$, :'req1')),
   1::bigint, 'правка потребности: список колонок существует');
 reset role;
+
+-- ---- app/cabinet/deals/page.tsx и [id]/page.tsx --------------------------
+set request.jwt.claims = :'claims_bakyt';
+set role authenticated;
+select * from create_match(:'obj1', :'req1') \gset dm_
+select * from create_deal_from_match(:'dm_id') \gset dd_
+
+select test.eq(test.visible_count(format($$
+  select id, status, created_at, closed_at, final_price, failure_reason,
+         match_id, object_id, requirement_id, mandate_id,
+         address, deal_type, zone, rooms, object_price, currency,
+         listing_agent_id, listing_agent_name, closing_agent_id, closing_agent_name,
+         commission_total, listing_share, closing_share, is_indicative,
+         client_name, owners, can_act
+    from deal_list_v where id = %L$$, :'dd_id')),
+  1::bigint, 'карточка сделки: список колонок deal_list_v существует');
+
+select test.ok(test.visible_count($$
+  select 1 from deal_list_v order by created_at desc$$) >= 1,
+  'список сделок: сортировка по created_at работает');
+
+-- not('status','in','("closed","failed")') на главной.
+select test.ok(test.visible_count($$
+  select 1 from deals where status not in ('closed','failed')$$) >= 1,
+  'главная: счётчик сделок в работе');
+reset role;
