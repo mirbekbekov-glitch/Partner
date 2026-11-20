@@ -6,6 +6,8 @@ import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
 import { StartDealButton } from '../../deals/StartDealButton';
 import { MatchStatus } from '../../MatchStatus';
+import { TransferForm, type Colleague } from '../../TransferForm';
+import { transferContact } from '../../transfer-actions';
 
 const money = (v: number | null, c = 'USD') =>
   v == null ? '—' : `${new Intl.NumberFormat('ru-RU').format(v)} ${c}`;
@@ -17,8 +19,13 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: requirement }, { data: matches }, { data: objects }, { data: contact }] =
-    await Promise.all([
+  const [
+    { data: requirement },
+    { data: matches },
+    { data: objects },
+    { data: contact },
+    { data: colleagues },
+  ] = await Promise.all([
       supabase
         .from('requirements')
         .select('id, contact_id, deal_type, budget_min, budget_max, zones, rooms, deadline, requirements_text, status')
@@ -35,6 +42,7 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
         .eq('publication_state', 'published'),
       // Контакт клиента: вернёт null, если инвариант 4 его не отдаёт.
       supabase.from('requirements').select('contact_id, contacts(name)').eq('id', id).maybeSingle(),
+      supabase.from('transfer_targets_v').select('id, full_name, role').order('full_name'),
     ]);
 
   if (!requirement) notFound();
@@ -89,6 +97,21 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
           править потребность →
         </Link>
       </p>
+
+      {/* Передаётся КЛИЕНТ целиком, а не одна потребность: иначе контакт
+          остался бы у одного агента, а работа с ним — у другого. */}
+      {clientName ? (
+        <div style={{ marginTop: 12 }}>
+          <TransferForm
+            action={transferContact}
+            idField="contact_id"
+            idValue={requirement.contact_id}
+            colleagues={(colleagues ?? []) as Colleague[]}
+            what="клиента"
+            warning="Клиент перейдёт коллеге целиком: контакт, все его открытые потребности и подборы по ним — вместе с долей closing-агента в комиссии. Телефон вы больше видеть не будете."
+          />
+        </div>
+      ) : null}
 
       <h2>Подборы ({rows.length})</h2>
 

@@ -227,3 +227,11 @@ select test.ok(test.visible_count($$
   select 1 from deals where status not in ('closed','failed')$$) >= 1,
   'главная: счётчик сделок в работе');
 reset role;
+
+-- ---- Передача: список получателей на карточках ---------------------------
+set request.jwt.claims = :'claims_aibek';
+set role authenticated;
+select test.ok(test.visible_count($$
+  select id, full_name, role from transfer_targets_v order by full_name$$) >= 1,
+  'передача: список колонок transfer_targets_v существует');
+reset role;

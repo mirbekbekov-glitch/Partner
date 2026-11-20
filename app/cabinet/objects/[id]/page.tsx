@@ -7,6 +7,8 @@ import { ContactCell } from '../../HiddenContact';
 import { ObjectActions } from '../ObjectActions';
 import { StartDealButton } from '../../deals/StartDealButton';
 import { MatchStatus } from '../../MatchStatus';
+import { TransferForm, type Colleague } from '../../TransferForm';
+import { transferObject } from '../../transfer-actions';
 
 const money = (v: number | null, c = 'USD') =>
   v == null ? '—' : `${new Intl.NumberFormat('ru-RU').format(v)} ${c}`;
@@ -24,6 +26,7 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
     { data: requirements },
     { data: mandate },
     { data: canEdit },
+    { data: colleagues },
   ] = await Promise.all([
       supabase
         .from('objects')
@@ -50,6 +53,7 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
       // Право на правку знает только база: про listing-агента активного
       // мандата и про админа в коде страницы судить нечем.
       supabase.rpc('can_edit_object', { p_object_id: id }),
+      supabase.from('transfer_targets_v').select('id, full_name, role').order('full_name'),
     ]);
 
   if (!object) notFound();
@@ -114,9 +118,21 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
       />
 
       {canEdit === true ? (
-        <p className="key" style={{ marginTop: 8 }}>
-          <Link href={`/cabinet/objects/${object.id}/edit`}>править объект →</Link>
-        </p>
+        <>
+          <p className="key" style={{ marginTop: 8 }}>
+            <Link href={`/cabinet/objects/${object.id}/edit`}>править объект →</Link>
+          </p>
+          <div style={{ marginTop: 12 }}>
+            <TransferForm
+              action={transferObject}
+              idField="object_id"
+              idValue={object.id}
+              colleagues={(colleagues ?? []) as Colleague[]}
+              what="объект"
+              warning="Объект и активный мандат перейдут коллеге — вместе с долей listing-агента в комиссии. Править его вы больше не сможете."
+            />
+          </div>
+        </>
       ) : null}
 
       <h2>Подборы ({rows.length})</h2>
