@@ -27,7 +27,9 @@ say ""
 # --- тесты ------------------------------------------------------------------
 pass=0; fail=0; failed_names=()
 shopt -s nullglob
-files=("$ROOT"/tests/invariants/*.sql "$ROOT"/tests/acceptance*.sql)
+# Отчёты лежат отдельно от инвариантов: отчёт ничего не запрещает, он
+# показывает. Смешивать их в одной папке значит делать вид, что это одно и то же.
+files=("$ROOT"/tests/invariants/*.sql "$ROOT"/tests/reports/*.sql "$ROOT"/tests/acceptance*.sql)
 [ "$#" -gt 0 ] && files=("$@")
 
 for f in "${files[@]}"; do

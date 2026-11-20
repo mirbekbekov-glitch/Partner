@@ -44,6 +44,14 @@ const { rows: objects } = await client.query(
     order by o.created_at`,
 );
 
+// Добавление фотографии поднимает actual_at: так работает инвариант 5, и это
+// правильно. Но для данных разработки это побочный эффект — вся заданная в
+// db/dev_seed.sql давность подтверждения обнулялась, и каталог показывал
+// «подтверждено сегодня» у всех объектов. Двигать actual_at назад нельзя,
+// поэтому на время засева выключается ровно один триггер. Это подготовка
+// данных владельцем таблиц, а не путь приложения.
+await client.query("alter table object_photos disable trigger e_photo_touches_object");
+
 const browser = await pw.chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 let made = 0;
@@ -88,5 +96,6 @@ for (const [i, obj] of objects.entries()) {
 }
 
 await browser.close();
+await client.query("alter table object_photos enable trigger e_photo_touches_object");
 await client.end();
 console.log(`заглушек создано: ${made}`);
