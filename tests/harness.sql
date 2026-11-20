@@ -55,10 +55,13 @@ begin
   return v;
 end $$;
 
--- Тесты работают от имени роли authenticated, значит помощники должны быть
--- ей доступны.
+-- Тесты работают от имени ролей authenticated и anon, значит помощники должны
+-- быть доступны обеим.
 grant usage on schema test to authenticated, anon;
 grant execute on all functions in schema test to authenticated, anon;
--- app-помощники нужны тестам целиком, включая те, что в 0006 не выдавались.
-grant usage on schema app to anon;
-grant execute on all functions in schema app to authenticated, anon;
+
+-- Права на схему app харнесс НЕ раздаёт. Раньше раздавал — и из-за этого
+-- тесты были зелёными, пока страница отчёта падала с «permission denied for
+-- schema app»: в тестах аноним мог вызвать что угодно, а в продакшене не мог
+-- ничего. Харнесс, который выдаёт больше прав, чем миграции, проверяет не ту
+-- систему, которая поедет в бой. Нужные права выдают сами миграции.

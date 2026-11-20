@@ -47,17 +47,15 @@ function pool(): Pool {
   return globalThis.__catalogPool;
 }
 
-/**
- * Выполняет запросы в транзакции, понизив права до роли каталога.
- * `set local` действует до конца транзакции, поэтому роль не утекает в
- * следующий запрос по тому же соединению из пула.
- */
-export async function asCatalogRole<T>(
+async function inTransaction<T>(
+  mode: "read only" | "read write",
   fn: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
   const client = await pool().connect();
   try {
-    await client.query("begin read only");
+    await client.query(`begin ${mode}`);
+    // `set local` действует до конца транзакции, поэтому роль не утекает в
+    // следующий запрос по тому же соединению из пула.
     await client.query(`set local role ${role}`);
     const result = await fn(client);
     await client.query("commit");
@@ -68,4 +66,23 @@ export async function asCatalogRole<T>(
   } finally {
     client.release();
   }
+}
+
+/** Чтение каталога: права понижены, запись невозможна даже случайно. */
+export async function asCatalogRole<T>(
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return inTransaction("read only", fn);
+}
+
+/**
+ * Отчёт собственнику. Права понижены так же, но транзакция пишущая: функция
+ * `app.owner_report()` считает просмотры, а агенту важно знать, дошла ли
+ * ссылка. Больше роли `anon` ничего не позволено: прав на таблицы у неё нет,
+ * поэтому пишущая транзакция ничего не открывает сама по себе.
+ */
+export async function asReportRole<T>(
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return inTransaction("read write", fn);
 }

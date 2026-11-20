@@ -71,3 +71,55 @@ values ('flat', 'sale', 'Черновик без мандата', 'Центр', 
         '00000000-0000-0000-0000-0000000000a1');
 
 select count(*) as объектов_в_каталоге from public_catalog_v;
+
+-- ---------------------------------------------------------------------------
+-- Работа по одному объекту, чтобы отчёт собственнику было чем наполнить
+-- ---------------------------------------------------------------------------
+-- Берём объект приёмки obj1 (Чүй 120): по нему уже есть мандат Айбека и
+-- собственник. Добавляем размещение, подбор и состоявшийся показ.
+
+do $$
+declare
+  v_obj   uuid := '00000000-0000-0000-0000-0000000b0001';
+  v_req   uuid := '00000000-0000-0000-0000-00000000e001';
+  v_aibek uuid := '00000000-0000-0000-0000-0000000000a1';
+  v_bakyt uuid := '00000000-0000-0000-0000-0000000000a2';
+  v_owner uuid := '00000000-0000-0000-0000-00000000c001';
+  v_match uuid;
+  v_show  uuid;
+begin
+  insert into publication_channels (object_id, channel, status, last_sync_at)
+  values (v_obj, 'lalafo',   'exported', now() - interval '6 days'),
+         (v_obj, 'house_kg', 'updated',  now() - interval '2 days'),
+         (v_obj, 'site',     'exported', now() - interval '6 days')
+  on conflict (object_id, channel) do nothing;
+
+  insert into matches (object_id, requirement_id, closing_agent_id, created_by_agent_id)
+  values (v_obj, v_req, v_bakyt, v_bakyt)
+  on conflict (object_id, requirement_id) do nothing
+  returning id into v_match;
+
+  if v_match is null then
+    select id into v_match from matches
+     where object_id = v_obj and requirement_id = v_req;
+  end if;
+
+  insert into showings (match_id, agent_id, scheduled_at, done_at, status,
+                        outcome, client_reaction, created_by_agent_id)
+  values (v_match, v_bakyt, now() - interval '5 days', now() - interval '5 days',
+          'done', 'wants_bargain', 'нравится, но просит минус 3000', v_bakyt),
+         (v_match, v_bakyt, now() - interval '2 days', now() - interval '2 days',
+          'done', 'thinking', 'взяли паузу до выходных', v_bakyt),
+         (v_match, v_bakyt, now() + interval '2 days', null,
+          'scheduled', null, null, v_bakyt);
+
+  -- Ссылка на отчёт. Вставляется напрямую, а не через issue_owner_access:
+  -- у сеяния нет входа, а функция требует текущего агента. Триггер
+  -- инварианта 10 при этом работает: выдать может только listing-агент.
+  insert into owner_access (object_id, contact_id, token, issued_by_agent_id, expires_at)
+  values (v_obj, v_owner, 'aaaaaaaabbbbccccddddeeeeffff0001', v_aibek,
+          now() + interval '90 days')
+  on conflict (token) do nothing;
+end $$;
+
+select 'отчёт собственнику: /report/aaaaaaaabbbbccccddddeeeeffff0001' as ссылка;

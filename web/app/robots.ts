@@ -10,8 +10,11 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      // Кабинет агента индексировать нечего и незачем.
-      disallow: ["/cabinet"],
+      // Кабинет агента индексировать нечего и незачем, а отчёты собственникам
+      // открываются по личной ссылке: в индексе им не место ни при каких
+      // условиях. На самой странице стоит ещё и noindex — robots.txt это
+      // просьба, а не запрет.
+      disallow: ["/cabinet", "/report"],
     },
     sitemap: `${base}/sitemap.xml`,
   };
