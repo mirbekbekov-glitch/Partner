@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { MATCH_STATUS_RU, type ObjectMatch } from '@/lib/types';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
+import { ObjectActions } from '../ObjectActions';
 
 const money = (v: number | null, c = 'USD') =>
   v == null ? '—' : `${new Intl.NumberFormat('ru-RU').format(v)} ${c}`;
@@ -15,8 +16,13 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: object }, { data: matches }, { data: requirements }, { data: mandate }] =
-    await Promise.all([
+  const [
+    { data: object },
+    { data: matches },
+    { data: requirements },
+    { data: mandate },
+    { data: canEdit },
+  ] = await Promise.all([
       supabase
         .from('objects')
         .select('id, kind, deal_type, address, zone, rooms, area, floor, price, currency, publication_state, published_at, actual_at')
@@ -39,6 +45,9 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
         .eq('object_id', id)
         .eq('status', 'active')
         .maybeSingle(),
+      // Право на правку знает только база: про listing-агента активного
+      // мандата и про админа в коде страницы судить нечем.
+      supabase.rpc('can_edit_object', { p_object_id: id }),
     ]);
 
   if (!object) notFound();
@@ -94,6 +103,19 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
           )}
         </div>
       </div>
+
+      <ObjectActions
+        objectId={object.id}
+        publicationState={object.publication_state}
+        activeMandateId={mandate?.id ?? null}
+        canEdit={canEdit === true}
+      />
+
+      {canEdit === true ? (
+        <p className="key" style={{ marginTop: 8 }}>
+          <Link href={`/cabinet/objects/${object.id}/edit`}>править объект →</Link>
+        </p>
+      ) : null}
 
       <h2>Подборы ({rows.length})</h2>
 

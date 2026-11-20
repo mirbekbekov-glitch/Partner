@@ -184,3 +184,20 @@ select test.eq(test.visible_count($$
   select 1 from object_list_v where active_mandate_id is null$$),
   0::bigint, 'главная: объектов без мандата сейчас нет');
 reset role;
+
+-- ---- app/cabinet/objects/[id]/edit/page.tsx ------------------------------
+set request.jwt.claims = :'claims_aibek';
+set role authenticated;
+select test.eq(test.visible_count(format($$
+  select id, kind, deal_type, address, zone, rooms, area, floor, floors_total,
+         price, currency, description, photos
+    from objects where id = %L$$, :'obj1')),
+  1::bigint, 'правка объекта: список колонок существует');
+
+-- ---- app/cabinet/requirements/[id]/edit/page.tsx -------------------------
+select test.eq(test.visible_count(format($$
+  select id, deal_type, budget_min, budget_max, zones, rooms, deadline,
+         requirements_text, status, closed_reason
+    from requirements where id = %L$$, :'req1')),
+  1::bigint, 'правка потребности: список колонок существует');
+reset role;

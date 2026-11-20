@@ -27,7 +27,15 @@ export default async function CabinetHome() {
 
   return (
     <>
-      <h1>Кабинет</h1>
+      <div className="head">
+        <h1>Кабинет</h1>
+        <span className="actions">
+          <Link className="btn" href="/cabinet/objects/new">Новый объект</Link>
+          <Link className="btn ghostlink" href="/cabinet/requirements/new">
+            Новая потребность
+          </Link>
+        </span>
+      </div>
       <p className="sub">Объекты, потребности и подборы между ними.</p>
 
       <div className="tiles">

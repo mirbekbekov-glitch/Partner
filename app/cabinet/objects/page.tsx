@@ -68,7 +68,10 @@ export default async function ObjectsList({
 
   return (
     <>
-      <h1>Объекты</h1>
+      <div className="head">
+        <h1>Объекты</h1>
+        <Link className="btn" href="/cabinet/objects/new">Новый объект</Link>
+      </div>
       <p className="sub">Всего {count ?? 0}. Собственник виден тем, кому он положен.</p>
 
       <form className="filters" method="get">

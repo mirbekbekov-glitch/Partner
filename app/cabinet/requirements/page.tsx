@@ -65,7 +65,10 @@ export default async function RequirementsList({
 
   return (
     <>
-      <h1>Потребности</h1>
+      <div className="head">
+        <h1>Потребности</h1>
+        <Link className="btn" href="/cabinet/requirements/new">Новая потребность</Link>
+      </div>
       <p className="sub">Всего {count ?? 0}. Клиент виден тем, кому он положен.</p>
 
       <form className="filters" method="get">

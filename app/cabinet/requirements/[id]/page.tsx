@@ -82,6 +82,12 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
         ) : null}
       </div>
 
+      <p className="key">
+        <Link href={`/cabinet/requirements/${requirement.id}/edit`}>
+          править потребность →
+        </Link>
+      </p>
+
       <h2>Подборы ({rows.length})</h2>
 
       {rows.length === 0 ? (

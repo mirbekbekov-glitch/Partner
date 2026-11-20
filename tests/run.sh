@@ -51,6 +51,18 @@ for f in "${files[@]}"; do
   say ""
 done
 
+# Сверка вызовов rpc() со схемой: PostgREST видит только public, и функция,
+# оставленная в app, падает лишь в рантайме. Шаблон уже собран, на нём и
+# проверяем.
+say "── сверка вызовов rpc() со схемой"
+if DB="$TPL" "$ROOT/tests/check-rpc.sh" >/tmp/rpc.log 2>&1; then
+  say "   ПРОЙДЕНА"; pass=$((pass+1))
+else
+  sed 's/^/   /' /tmp/rpc.log; say "   ПРОВАЛЕНА"
+  fail=$((fail+1)); failed_names+=("check-rpc")
+fi
+say ""
+
 say "═══════════════════════════════════════"
 say "пройдено: ${pass}   провалено: ${fail}"
 if [ ${fail} -gt 0 ]; then

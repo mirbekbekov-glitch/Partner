@@ -1,0 +1,202 @@
+'use client';
+
+import Link from 'next/link';
+import { useActionState } from 'react';
+import type { FormResult } from './form-actions';
+
+export type ObjectDraft = {
+  id?: string;
+  kind: string;
+  deal_type: string;
+  address: string;
+  zone: string | null;
+  rooms: number | null;
+  area: number | null;
+  floor: number | null;
+  floors_total: number | null;
+  price: number | null;
+  currency: string;
+  description: string | null;
+  photos: { url?: string }[] | null;
+};
+
+const KINDS: [string, string][] = [
+  ['flat', 'квартира'],
+  ['room', 'комната'],
+  ['house', 'дом'],
+  ['townhouse', 'таунхаус'],
+  ['land', 'участок'],
+  ['commercial', 'коммерческая'],
+  ['garage', 'гараж'],
+];
+
+export function ObjectForm({
+  action,
+  draft,
+  mode,
+}: {
+  action: (fd: FormData) => Promise<FormResult>;
+  draft?: ObjectDraft;
+  mode: 'create' | 'edit';
+}) {
+  const [state, formAction, pending] = useActionState<FormResult, FormData>(
+    async (_prev, fd) => action(fd),
+    { error: null },
+  );
+
+  const photoLines = (draft?.photos ?? [])
+    .map((p) => p?.url ?? '')
+    .filter(Boolean)
+    .join('\n');
+
+  return (
+    <form action={formAction} className="stack">
+      {draft?.id ? <input type="hidden" name="id" value={draft.id} /> : null}
+
+      <div className="grid2">
+        <div className="field">
+          <label className="key" htmlFor="deal_type">Сделка</label>
+          <select id="deal_type" name="deal_type" required defaultValue={draft?.deal_type ?? 'sale'}>
+            <option value="sale">продажа</option>
+            <option value="rent">аренда</option>
+          </select>
+        </div>
+        <div className="field">
+          <label className="key" htmlFor="kind">Тип</label>
+          <select id="kind" name="kind" required defaultValue={draft?.kind ?? 'flat'}>
+            {KINDS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="key" htmlFor="address">Адрес</label>
+        <input id="address" name="address" type="text" required
+               defaultValue={draft?.address ?? ''} placeholder="Чүй 120, кв. 5" />
+      </div>
+
+      <div className="grid2">
+        <div className="field">
+          <label className="key" htmlFor="price">Цена</label>
+          <input id="price" name="price" type="text" inputMode="decimal" required
+                 defaultValue={draft?.price ?? ''} />
+          <p className="key">Для аренды — за месяц: комиссия считается от первого месяца.</p>
+        </div>
+        <div className="field">
+          <label className="key" htmlFor="currency">Валюта</label>
+          <select id="currency" name="currency" defaultValue={draft?.currency ?? 'USD'}>
+            <option value="USD">USD</option>
+            <option value="KGS">KGS</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid2">
+        <div className="field">
+          <label className="key" htmlFor="zone">Зона</label>
+          <input id="zone" name="zone" type="text" defaultValue={draft?.zone ?? ''}
+                 placeholder="Центр" />
+        </div>
+        <div className="field">
+          <label className="key" htmlFor="rooms">Комнат</label>
+          <input id="rooms" name="rooms" type="text" inputMode="numeric"
+                 defaultValue={draft?.rooms ?? ''} />
+        </div>
+        <div className="field">
+          <label className="key" htmlFor="area">Площадь, м²</label>
+          <input id="area" name="area" type="text" inputMode="decimal"
+                 defaultValue={draft?.area ?? ''} />
+        </div>
+        <div className="field">
+          <label className="key" htmlFor="floor">Этаж</label>
+          <input id="floor" name="floor" type="text" inputMode="numeric"
+                 defaultValue={draft?.floor ?? ''} />
+        </div>
+        <div className="field">
+          <label className="key" htmlFor="floors_total">Этажей в доме</label>
+          <input id="floors_total" name="floors_total" type="text" inputMode="numeric"
+                 defaultValue={draft?.floors_total ?? ''} />
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="key" htmlFor="description">Описание</label>
+        <textarea id="description" name="description" rows={3}
+                  defaultValue={draft?.description ?? ''} />
+      </div>
+
+      <div className="field">
+        <label className="key" htmlFor="photos">Фото: по одной ссылке в строке</label>
+        <textarea id="photos" name="photos" rows={3} defaultValue={photoLines}
+                  placeholder="https://…/1.jpg" />
+        <p className="key">
+          {mode === 'edit'
+            ? 'Набор заменяется целиком. Правка фото обновит дату актуальности.'
+            : 'Загрузки файлов пока нет — только ссылки.'}
+        </p>
+      </div>
+
+      {mode === 'create' ? (
+        <>
+          <h2>Собственник</h2>
+          <p className="key">
+            Телефон виден вам, участникам активной сделки по объекту и администратору.
+          </p>
+          <div className="grid2">
+            <div className="field">
+              <label className="key" htmlFor="owner_name">Имя</label>
+              <input id="owner_name" name="owner_name" type="text" placeholder="Орозов Нурлан" />
+            </div>
+            <div className="field">
+              <label className="key" htmlFor="owner_phone">Телефон</label>
+              <input id="owner_phone" name="owner_phone" type="tel" placeholder="+996 700 00 00 00" />
+            </div>
+          </div>
+
+          <h2>Мандат</h2>
+          <p className="key">
+            Без активного мандата объект нельзя опубликовать. Можно оставить пустым
+            и заключить договор позже — объект останется черновиком.
+          </p>
+          <div className="grid2">
+            <div className="field">
+              <label className="key" htmlFor="mandate_kind">Вид договора</label>
+              <select id="mandate_kind" name="mandate_kind" defaultValue="">
+                <option value="">без договора — черновик</option>
+                <option value="exclusive">эксклюзив</option>
+                <option value="non_exclusive">неэксклюзив</option>
+              </select>
+            </div>
+            <div className="field">
+              <label className="key" htmlFor="mandate_valid_to">Срок до</label>
+              <input id="mandate_valid_to" name="mandate_valid_to" type="date" />
+            </div>
+            <div className="field">
+              <label className="key" htmlFor="mandate_start_price">Стартовая цена</label>
+              <input id="mandate_start_price" name="mandate_start_price" type="text"
+                     inputMode="decimal" placeholder="как цена объекта" />
+            </div>
+            <div className="field">
+              <label className="key" htmlFor="document_url">Ссылка на документ</label>
+              <input id="document_url" name="document_url" type="url" />
+            </div>
+          </div>
+          <label className="check">
+            <input type="checkbox" name="contract_confirmed" /> договор подтверждён документом
+          </label>
+        </>
+      ) : null}
+
+      <div className="actions">
+        <button type="submit" disabled={pending}>
+          {pending ? 'Сохраняем…' : mode === 'create' ? 'Создать объект' : 'Сохранить'}
+        </button>
+        <Link className="key" href={draft?.id ? `/cabinet/objects/${draft.id}` : '/cabinet/objects'}>
+          отмена
+        </Link>
+      </div>
+
+      {state.error ? <p className="error">{state.error}</p> : null}
+    </form>
+  );
+}
