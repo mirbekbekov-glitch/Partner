@@ -295,3 +295,20 @@ select test.ok(test.visible_count(format($$
   select 1 from requirement_list_v where contact_id = %L$$, :'contact_client')) >= 0,
   'карточка контакта: потребности по contact_id запрашиваются');
 reset role;
+
+-- ---- Объединение дубликатов на карточке контакта -------------------------
+set request.jwt.claims = :'claims_aibek';
+set role authenticated;
+insert into contacts (id, name, roles)
+values ('00000000-0000-0000-0000-00000000ef01', 'Орозов Собственник', '{buyer}');
+
+select test.ok(test.visible_count(format($$
+  select other_id, other_name, other_phones, other_requirements
+    from contact_duplicates_v where id = %L$$, :'contact_owner')) >= 1,
+  'карточка контакта: список колонок contact_duplicates_v существует');
+
+-- Список контактов помечает дубликаты парами с обеих сторон.
+select test.ok(test.visible_count($$
+  select id, other_id from contact_duplicates_v$$) >= 1,
+  'список контактов: запрос пар дубликатов работает');
+reset role;

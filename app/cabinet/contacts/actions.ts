@@ -124,3 +124,51 @@ export async function removePhone(formData: FormData): Promise<ContactResult> {
   revalidatePath(`/cabinet/contacts/${id}`);
   return { error: error ? error.message : null };
 }
+
+export type MergeResult = { error: string | null; done: string | null };
+
+/**
+ * Объединение двух записей одного человека.
+ *
+ * Что именно переезжает и в каком порядке, решает база. Порядок там не
+ * стилистика: requirements и contact_phones ссылаются на контакт с
+ * ON DELETE CASCADE, и удаление лишней записи раньше переноса уничтожило бы
+ * потребности клиента. Поэтому одна транзакция и одна функция.
+ */
+export async function mergeContacts(formData: FormData): Promise<MergeResult> {
+  const supabase = await createClient();
+  const keep = String(formData.get('keep_id') ?? '');
+
+  const { data, error } = await supabase.rpc('merge_contacts', {
+    p_keep_id: keep,
+    p_merge_id: String(formData.get('merge_id') ?? ''),
+  });
+
+  if (error) return { error: error.message, done: null };
+
+  const r = data as {
+    kept_name: string; merged_name: string;
+    phones: number; requirements: number; activities: number;
+    ownerships: number; ownerships_dropped: number;
+  };
+
+  revalidatePath('/cabinet/contacts', 'layout');
+  revalidatePath('/cabinet');
+
+  const parts = [
+    `телефонов ${r.phones}`,
+    `потребностей ${r.requirements}`,
+    `объектов ${r.ownerships}`,
+    `записей ${r.activities}`,
+  ];
+
+  return {
+    error: null,
+    done:
+      `Запись «${r.merged_name}» присоединена к «${r.kept_name}». ` +
+      `Перенесено: ${parts.join(', ')}.` +
+      (r.ownerships_dropped > 0
+        ? ` Дублирующих связей с объектами убрано: ${r.ownerships_dropped}.`
+        : ''),
+  };
+}

@@ -7,6 +7,7 @@ import { TransferForm, type Colleague } from '../../TransferForm';
 import { transferContact } from '../../transfer-actions';
 import { ContactForm, ROLE_RU, type ContactDraft } from '../ContactForm';
 import { Phones, type Phone } from '../Phones';
+import { MergeForm, type DuplicateCandidate } from '../MergeForm';
 import { updateContact } from '../actions';
 
 export const metadata = { title: 'Контакт' };
@@ -32,6 +33,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
     { data: requirements },
     { data: activities },
     { data: colleagues },
+    { data: duplicates },
   ] = await Promise.all([
     supabase.from('contact_list_v').select('*').eq('id', id).maybeSingle(),
     supabase.from('contact_phones').select('id, phone, label, is_primary')
@@ -43,6 +45,11 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
       .eq('entity_type', 'contact').eq('entity_id', id)
       .order('created_at', { ascending: false }),
     supabase.from('transfer_targets_v').select('id, full_name, role').order('full_name'),
+    // Кандидаты в дубликаты. Представление security_invoker, поэтому пара
+    // приходит только если инвариант 4 отдаёт обе записи.
+    supabase.from('contact_duplicates_v')
+      .select('other_id, other_name, other_phones, other_requirements')
+      .eq('id', id),
   ]);
 
   if (!contact) notFound();
@@ -146,6 +153,13 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
           <div className="card">
             <ContactForm action={updateContact} draft={c as ContactDraft} mode="edit" />
           </div>
+
+          <h2>Объединить дубликат</h2>
+          <MergeForm
+            keepId={c.id}
+            keepName={c.name}
+            candidates={(duplicates ?? []) as DuplicateCandidate[]}
+          />
 
           <h2>Передача</h2>
           <TransferForm

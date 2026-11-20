@@ -40,7 +40,12 @@ export default async function ContactsList({
   if (q) query = query.ilike('name', `%${q}%`);
   if (role && role in ROLE_RU) query = query.contains('roles', [role]);
 
-  const { data, count, error } = await query;
+  const [{ data, count, error }, { data: dupes }] = await Promise.all([
+    query,
+    // Пары дубликатов, видимые агенту: пометить их в списке полезнее, чем
+    // ждать, пока кто-то зайдёт на карточку и заметит сам.
+    supabase.from('contact_duplicates_v').select('id, other_id'),
+  ]);
 
   if (error) {
     return (
@@ -52,6 +57,13 @@ export default async function ContactsList({
   }
 
   const rows = (data ?? []) as Row[];
+
+  // Запись участвует в паре с любой стороны.
+  const dupeIds = new Set<string>();
+  for (const d of (dupes ?? []) as { id: string; other_id: string }[]) {
+    dupeIds.add(d.id);
+    dupeIds.add(d.other_id);
+  }
 
   return (
     <>
@@ -96,6 +108,11 @@ export default async function ContactsList({
                 <span className="key">роль не указана</span>
               )}
               {!c.mine ? <span className="key">привёл {c.owner_name}</span> : null}
+              {dupeIds.has(c.id) ? (
+                <span className="warn" title="Есть запись с таким же именем — возможно, это один человек">
+                  похоже на дубликат
+                </span>
+              ) : null}
             </div>
             <div className="row" style={{ marginTop: 6 }}>
               <span className="key">телефон</span>
