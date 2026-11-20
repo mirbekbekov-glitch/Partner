@@ -4,7 +4,15 @@
   --muted: #646b7a;
   --line: #e3e6ec;
   --panel: #f7f8fa;
-  --accent: #1f5fd0;
+  /* Фирменный красный взят из знака (#BE2C28): на белом 5.87 : 1, годится
+     для обычного текста. */
+  --accent: #BE2C28;
+  --accent-fg: #ffffff;
+  /* Ошибка тоже красная, и одним цветом её от ссылки уже не отличить.
+     Поэтому она отличается ФОРМОЙ: плашка с подложкой и полосой слева, а
+     текст темнее фирменного. */
+  --error-fg: #8A1F1C;
+  --error-bg: #FDECEA;
   --warn-fg: #8a5300;
   --warn-bg: #fff6e5;
   --hidden-fg: #6b6b76;
@@ -18,7 +26,13 @@
     --muted: #9aa2b1;
     --line: #2a2e36;
     --panel: #1b1e24;
-    --accent: #6fa0f5;
+    /* Фирменный на тёмном фоне даёт лишь 3.09 : 1 — мало. Тот же тон,
+       светлее: 4.57 : 1. */
+    --accent: #DA524E;
+    /* И текст на кнопке здесь тёмный: белый на светло-красном — 2.6 : 1. */
+    --accent-fg: #14161a;
+    --error-fg: #F3A6A2;
+    --error-bg: #3A1A18;
     --warn-fg: #f0c070;
     --warn-bg: #30260f;
     --hidden-fg: #9a9aa6;
@@ -32,7 +46,10 @@
   --muted: #9aa2b1;
   --line: #2a2e36;
   --panel: #1b1e24;
-  --accent: #6fa0f5;
+  --accent: #DA524E;
+  --accent-fg: #14161a;
+  --error-fg: #F3A6A2;
+  --error-bg: #3A1A18;
   --warn-fg: #f0c070;
   --warn-bg: #30260f;
   --hidden-fg: #9a9aa6;
@@ -116,14 +133,18 @@ select, button {
   color: var(--fg);
 }
 
-button { background: var(--accent); color: #fff; border-color: transparent; cursor: pointer; }
+button { background: var(--accent); color: var(--accent-fg); border-color: transparent; cursor: pointer; }
 button:disabled { opacity: 0.55; cursor: default; }
 
-.error { color: #c0392b; margin-top: 8px; }
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .error { color: #ff8a7a; }
+.error {
+  color: var(--error-fg);
+  background: var(--error-bg);
+  border-left: 3px solid var(--error-fg);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 12px;
+  margin-top: 8px;
 }
+
 
 /* Верхняя полоса кабинета */
 .topbar {
@@ -159,7 +180,11 @@ button.ghost {
 .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
 .actions form { margin: 0; }
 
-.inline-error { margin-left: 8px; font-size: 0.85rem; }
+/* Та же плашка, но в строку: рядом с кнопкой блок разорвал бы ряд. */
+.inline-error {
+  display: inline-block; margin: 0 0 0 8px;
+  padding: 2px 8px; font-size: 0.85rem;
+}
 
 /* Формы в столбик: профиль */
 .stack { display: flex; flex-direction: column; gap: 16px; }
@@ -231,7 +256,9 @@ a.tile:hover { border-color: var(--accent); }
   padding: 7px 12px;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  /* Не #fff: на тёмной теме фирменный светлее, и белый текст на нём даёт
+     2.6 : 1. Цвет текста на фирменном фоне задаёт тема. */
+  color: var(--accent-fg);
   text-decoration: none;
   font-size: 0.9rem;
   white-space: nowrap;
