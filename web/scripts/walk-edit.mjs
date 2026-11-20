@@ -12,7 +12,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 1100 }, deviceScaleFactor: 2 });
 page.on("dialog", (d) => d.accept());
 
-async function login(phone) {
+async function login(email) {
   await page.goto(`${BASE}/cabinet`, { waitUntil: "networkidle" });
   if (await page.locator('button:text("Выйти")').count()) {
     await page.locator('button:text("Выйти")').click();
@@ -20,14 +20,14 @@ async function login(phone) {
   }
   await page.goto(`${BASE}/cabinet/login`, { waitUntil: "networkidle" });
   const ask = page.locator("section.card").first();
-  await ask.locator('input[name="phone"]').fill(phone);
+  await ask.locator('input[name="address"]').fill(email);
   await ask.locator("button").click();
   await page.waitForSelector(".act-ok, .act-err");
   const notice = await page.locator(".act-ok, .act-err").first().innerText();
   const code = notice.match(/\b(\d{6})\b/)?.[1];
   if (!code) throw new Error(`код не выдан: ${notice}\nв разработке помогает: psql -d partner -c 'delete from login_codes'`);
   const enter = page.locator("section.card").nth(1);
-  await enter.locator('input[name="phone"]').fill(phone.replace(/\s/g, ""));
+  await enter.locator('input[name="address"]').fill(email);
   await enter.locator('input[name="code"]').fill(code);
   await enter.locator("button").click();
   await page.waitForURL("**/cabinet");
@@ -39,7 +39,7 @@ async function save(label) {
   return (await page.locator(".ok-banner, .act-err").first().innerText()).replace(/\n/g, " ");
 }
 
-await login("0700 000 001");
+await login("aibek@partner.kg");
 log("агент вошёл");
 
 // --- свой объект --------------------------------------------------------------
@@ -86,7 +86,7 @@ await page.screenshot({ path: `${SHOT}/edit-object-after.png`, fullPage: true })
 // --- клиент ---------------------------------------------------------------------
 // Другим агентом: подбор ведёт тот, кто завёл потребность (инвариант 20), и
 // в приёмочных данных клиенты у Бакыта.
-await login("0700 000 002");
+await login("bakyt@partner.kg");
 await page.goto(`${BASE}/cabinet/requirements`, { waitUntil: "networkidle" });
 if (await page.locator('a:text("Подбор")').count()) {
   await page.locator('a:text("Подбор")').first().click();
@@ -107,7 +107,7 @@ if (await page.locator('a:text("Подбор")').count()) {
 }
 
 // --- чужой объект -----------------------------------------------------------------
-await login("0700 000 003");
+await login("chyngyz@partner.kg");
 await page.goto(`${BASE}${href}/edit`, { waitUntil: "networkidle" });
 log("чужой агент на правке:", await page.locator("h1").innerText(),
     "| форм:", await page.locator("form.card").count());

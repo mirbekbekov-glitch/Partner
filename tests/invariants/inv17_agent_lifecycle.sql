@@ -28,10 +28,21 @@ select test.throws(
   'permission denied for table agents',
   'агент не меняет себе статус');
 
+-- Почта — ключ личности (0034), и менять ключ формой нельзя: смена адреса
+-- подтверждается кодом на новый адрес, а такого пути пока нет.
 select test.throws(
-  $$update agents set phone = '+996700000000' where auth_user_id = auth.uid()$$,
+  $$update agents set email = 'chuzhoy@partner.kg' where auth_user_id = auth.uid()$$,
   'permission denied for table agents',
-  'агент не меняет себе телефон: это ключ личности, его меняют подтверждением');
+  'агент не меняет себе почту: это ключ личности');
+
+-- А телефон — своё дело агента: с 0034 он записан со слов человека и ключом
+-- не является. Но записан он НЕПОДТВЕРЖДЁННЫМ, и это главное.
+update agents set phone = '0700 55 44 33' where auth_user_id = auth.uid();
+select test.eq((select phone from me_v), '+996700554433',
+  'телефон агент вписывает сам, и он нормализуется');
+select test.ok(
+  (select phone_verified_at from me_v) is null,
+  'вписанный телефон не подтверждён: подтвердить его нечем, пока нет WhatsApp');
 
 -- Имя и Telegram — своё дело агента.
 update agents set full_name = 'Бакыт Бакытов' where auth_user_id = auth.uid();

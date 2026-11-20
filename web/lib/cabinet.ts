@@ -13,7 +13,9 @@ import { readSession } from "./session";
 export type Me = {
   id: string;
   full_name: string;
-  phone: string;
+  email: string;
+  phone: string | null;
+  phone_verified_at: Date | string | null;
   role: "agent" | "admin";
   status: "pending" | "approved" | "blocked";
   is_admin: boolean;
@@ -51,7 +53,8 @@ export async function me(): Promise<Me | null> {
 
   return asAgent(session, "read only", async (db) => {
     const { rows } = await db.query<Me>(
-      `select id, full_name, phone, role, status, is_admin from me_v`,
+      `select id, full_name, email, phone, phone_verified_at, role, status, is_admin
+         from me_v`,
     );
     return rows[0] ?? null;
   });

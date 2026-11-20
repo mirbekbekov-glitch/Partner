@@ -69,7 +69,7 @@ async function asAuthService(sql, params = []) {
 try {
   const agents = (
     await pool.query(
-      "select full_name, auth_user_id, phone, role from agents where status = 'approved' order by role desc, full_name",
+      "select full_name, auth_user_id, email, role from agents where status = 'approved' order by role desc, full_name",
     )
   ).rows;
   const admin = agents.find((a) => a.role === "admin");
@@ -78,14 +78,14 @@ try {
   if (!admin || !first || !second) throw new Error("нужны админ и два агента: примените tests/seed.sql");
 
   // --- кто я -------------------------------------------------------------
-  const me = await asAgent({ sub: first.auth_user_id, phone: first.phone }, "select * from me_v");
+  const me = await asAgent({ sub: first.auth_user_id, email: first.email }, "select * from me_v");
   ok(me.length === 1 && me[0].full_name === first.full_name, `вход отдаёт того, кто вошёл (${me[0]?.full_name})`);
   ok(me[0]?.is_admin === false, "обычный агент не администратор");
 
   // --- клеймы не протекают между запросами -------------------------------
   // Самая опасная ошибка этого слоя: соединение из пула переиспользуется, и
   // если клеймы остались от прошлого запроса, следующий агент увидит чужое.
-  const other = await asAgent({ sub: second.auth_user_id, phone: second.phone }, "select * from me_v");
+  const other = await asAgent({ sub: second.auth_user_id, email: second.email }, "select * from me_v");
   ok(other[0]?.full_name === second.full_name, `следующий запрос видит своего агента (${other[0]?.full_name})`);
 
   const noClaims = await pool.query("select current_setting('request.jwt.claims', true) as c");
@@ -93,11 +93,11 @@ try {
 
   // --- чужое не видно ----------------------------------------------------
   const mineCount = await asAgent(
-    { sub: first.auth_user_id, phone: first.phone },
+    { sub: first.auth_user_id, email: first.email },
     "select count(*)::int as n from contacts",
   );
   const adminCount = await asAgent(
-    { sub: admin.auth_user_id, phone: admin.phone },
+    { sub: admin.auth_user_id, email: admin.email },
     "select count(*)::int as n from contacts",
   );
   ok(
@@ -121,17 +121,17 @@ try {
   };
 
   await denied(
-    { sub: first.auth_user_id, phone: first.phone },
+    { sub: first.auth_user_id, email: first.email },
     `select approve_agent('${admin.auth_user_id}'::uuid)`,
     "агент не одобряет агентов",
   );
   await denied(
-    { sub: first.auth_user_id, phone: first.phone },
+    { sub: first.auth_user_id, email: first.email },
     "update agents set role = 'admin' where auth_user_id = auth.uid()",
     "агент не назначает себе роль",
   );
   await denied(
-    { sub: first.auth_user_id, phone: first.phone },
+    { sub: first.auth_user_id, email: first.email },
     "select * from run_maintenance_now()",
     "агент не запускает плановые работы",
   );
@@ -139,26 +139,30 @@ try {
   // --- вход --------------------------------------------------------------
   // Проверяется настоящая труба входа: выдача кода, отказ неверному,
   // одноразовость. Именно она открывает систему наружу.
-  const issued = await asAuthService("select code, phone from app.issue_login_code($1)", [
-    "0777 000 999",
-  ]);
+  const issued = await asAuthService(
+    "select code, address from app.issue_login_code($1, 'email')",
+    ["Novichok@Pochta.KG"],
+  );
   ok(/^\d{6}$/.test(issued[0].code), "код шестизначный");
-  ok(issued[0].phone === "+996777000999", `номер приведён к E.164 (${issued[0].phone})`);
+  ok(
+    issued[0].address === "novichok@pochta.kg",
+    `адрес приведён к нижнему регистру (${issued[0].address})`,
+  );
 
-  const wrong = await asAuthService("select ok, reason from app.verify_login_code($1, $2)", [
-    "0777000999",
+  const wrong = await asAuthService("select ok, reason from app.verify_login_code($1, $2, 'email')", [
+    "novichok@pochta.kg",
     "000000",
   ]);
   ok(wrong[0].ok === false, `неверный код отклонён (${wrong[0].reason})`);
 
   const right = await asAuthService(
-    "select ok, auth_user_id from app.verify_login_code($1, $2)",
-    ["0777000999", issued[0].code],
+    "select ok, auth_user_id from app.verify_login_code($1, $2, 'email')",
+    ["novichok@pochta.kg", issued[0].code],
   );
   ok(right[0].ok === true && right[0].auth_user_id, "верный код принят и выдан идентификатор");
 
-  const again = await asAuthService("select ok, reason from app.verify_login_code($1, $2)", [
-    "0777000999",
+  const again = await asAuthService("select ok, reason from app.verify_login_code($1, $2, 'email')", [
+    "novichok@pochta.kg",
     issued[0].code,
   ]);
   ok(again[0].ok === false, `второй раз тот же код не работает (${again[0].reason})`);
@@ -169,7 +173,7 @@ try {
   // Проверяется не круговорот, а смысл: что база считает это время
   // пятнадцатью часами ПО БИШКЕКУ.
   const bishkek = await asAgent(
-    { sub: first.auth_user_id, phone: first.phone },
+    { sub: first.auth_user_id, email: first.email },
     `select to_char($1::timestamptz at time zone 'Asia/Bishkek', 'HH24:MI') as local,
             to_char($1::timestamptz at time zone 'UTC',          'HH24:MI') as utc`,
     ["2026-07-15T15:00"],

@@ -7,7 +7,7 @@ import { cookies } from "next/headers";
  * Своя, а не Supabase Auth, по одной причине: код в WhatsApp отправляем мы
  * сами (инвариант 18), значит и подтверждение номера происходит у нас. Из
  * подтверждённого номера собирается то же, что выдал бы Supabase: клеймы
- * `sub` и `phone`, которые база читает через `auth.uid()` и `auth.jwt()`.
+ * `sub` и `email`, которые база читает через `auth.uid()` и `auth.jwt()`.
  * Поэтому переход на Supabase Auth позже меняет только этот файл — база и
  * страницы не заметят.
  *
@@ -21,7 +21,7 @@ const TTL_SECONDS = 60 * 60 * 24 * 30;
 
 export type Session = {
   sub: string;
-  phone: string;
+  email: string;
   exp: number;
 };
 
@@ -58,7 +58,7 @@ function decode(raw: string): Session | null {
 
   try {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString()) as Session;
-    if (!session.sub || !session.phone || !session.exp) return null;
+    if (!session.sub || !session.email || !session.exp) return null;
     if (session.exp < Math.floor(Date.now() / 1000)) return null;
     return session;
   } catch {
@@ -71,10 +71,10 @@ export async function readSession(): Promise<Session | null> {
   return raw ? decode(raw) : null;
 }
 
-export async function writeSession(sub: string, phone: string): Promise<void> {
+export async function writeSession(sub: string, email: string): Promise<void> {
   const session: Session = {
     sub,
-    phone,
+    email,
     exp: Math.floor(Date.now() / 1000) + TTL_SECONDS,
   };
   (await cookies()).set(COOKIE, encode(session), {

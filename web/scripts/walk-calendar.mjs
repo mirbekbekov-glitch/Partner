@@ -12,7 +12,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 1100 }, deviceScaleFactor: 2 });
 page.on("dialog", (d) => d.accept());
 
-async function login(phone) {
+async function login(email) {
   await page.goto(`${BASE}/cabinet`, { waitUntil: "networkidle" });
   if (await page.locator('button:text("Выйти")').count()) {
     await page.locator('button:text("Выйти")').click();
@@ -20,20 +20,20 @@ async function login(phone) {
   }
   await page.goto(`${BASE}/cabinet/login`, { waitUntil: "networkidle" });
   const ask = page.locator("section.card").first();
-  await ask.locator('input[name="phone"]').fill(phone);
+  await ask.locator('input[name="address"]').fill(email);
   await ask.locator("button").click();
   await page.waitForSelector(".act-ok, .act-err");
   const notice = await page.locator(".act-ok, .act-err").first().innerText();
   const code = notice.match(/\b(\d{6})\b/)?.[1];
   if (!code) throw new Error(`код не выдан: ${notice}\nв разработке помогает: psql -d partner -c 'delete from login_codes'`);
   const enter = page.locator("section.card").nth(1);
-  await enter.locator('input[name="phone"]').fill(phone.replace(/\s/g, ""));
+  await enter.locator('input[name="address"]').fill(email);
   await enter.locator('input[name="code"]').fill(code);
   await enter.locator("button").click();
   await page.waitForURL("**/cabinet");
 }
 
-await login("0700 000 002");
+await login("bakyt@partner.kg");
 log("агент вошёл");
 
 await page.goto(`${BASE}/cabinet/showings`, { waitUntil: "networkidle" });

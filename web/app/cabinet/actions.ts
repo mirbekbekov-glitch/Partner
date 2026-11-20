@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { asAgent, asAuthService } from "../../lib/db";
 import { clearSession, readSession, writeSession } from "../../lib/session";
-import { sendLoginCode, showsCodeOnScreen } from "../../lib/otp";
+import { channel, sendLoginCode, showsCodeOnScreen } from "../../lib/otp";
 import { remove as removePhotoFile, save as savePhotoFile } from "../../lib/photos";
 
 /**
@@ -74,25 +74,26 @@ async function act(
 // ---------------------------------------------------------------------------
 
 export async function requestCode(_prev: unknown, form: FormData): Promise<Result> {
-  const phone = String(form.get("phone") ?? "").trim();
-  if (!phone) return { ok: false, error: "Введите номер телефона." };
+  const address = String(form.get("address") ?? "").trim();
+  const where = channel() === "email" ? "адрес почты" : "номер телефона";
+  if (!address) return { ok: false, error: `Введите ${where}.` };
 
   try {
     const issued = await asAuthService(async (db) => {
-      const { rows } = await db.query<{ code: string; phone: string }>(
-        "select code, phone from app.issue_login_code($1)",
-        [phone],
+      const { rows } = await db.query<{ code: string; address: string }>(
+        "select code, address from app.issue_login_code($1, $2::login_channel)",
+        [address, channel()],
       );
       return rows[0];
     });
 
-    await sendLoginCode(issued.phone, issued.code);
+    await sendLoginCode(issued.address, issued.code);
 
     return {
       ok: true,
       message: showsCodeOnScreen()
-        ? `Код для ${issued.phone}: ${issued.code} — WhatsApp не подключён, это режим разработки`
-        : `Код отправлен в WhatsApp на ${issued.phone}`,
+        ? `Код для ${issued.address}: ${issued.code} — почта не подключена, это режим разработки`
+        : `Код отправлен на ${issued.address}`,
     };
   } catch (error) {
     return { ok: false, error: humanize(error) };
@@ -100,9 +101,10 @@ export async function requestCode(_prev: unknown, form: FormData): Promise<Resul
 }
 
 export async function submitCode(_prev: unknown, form: FormData): Promise<Result> {
-  const phone = String(form.get("phone") ?? "").trim();
+  const address = String(form.get("address") ?? "").trim();
   const code = String(form.get("code") ?? "").trim();
   const fullName = String(form.get("full_name") ?? "").trim();
+  const phone = String(form.get("phone") ?? "").trim();
 
   try {
     const verified = await asAuthService(async (db) => {
@@ -110,11 +112,11 @@ export async function submitCode(_prev: unknown, form: FormData): Promise<Result
         ok: boolean;
         reason: string | null;
         auth_user_id: string | null;
-        phone: string;
-      }>("select ok, reason, auth_user_id, phone from app.verify_login_code($1, $2)", [
-        phone,
-        code,
-      ]);
+        address: string;
+      }>(
+        "select ok, reason, auth_user_id, address from app.verify_login_code($1, $2, $3::login_channel)",
+        [address, code, channel()],
+      );
       return rows[0];
     });
 
@@ -126,15 +128,18 @@ export async function submitCode(_prev: unknown, form: FormData): Promise<Result
 
     // Вход создаёт агента или обновляет существующего. Новому ставится
     // «ожидает одобрения» — это инвариант 17, а не решение этой страницы.
+    //
+    // Телефон принимается только при создании: он записан со слов человека и
+    // остаётся НЕПОДТВЕРЖДЁННЫМ, пока не подключён WhatsApp (инвариант 6).
     const uid = verified.auth_user_id;
     await asAuthService(async (db) => {
       await db.query("select set_config('request.jwt.claims', $1, true)", [
-        JSON.stringify({ sub: uid, phone: verified.phone, role: "authenticated" }),
+        JSON.stringify({ sub: uid, email: verified.address, role: "authenticated" }),
       ]);
-      await db.query("select app.login_by_phone($1)", [fullName || null]);
+      await db.query("select app.login_by_email($1, $2)", [fullName || null, phone || null]);
     });
 
-    await writeSession(uid, verified.phone);
+    await writeSession(uid, verified.address);
   } catch (error) {
     return { ok: false, error: humanize(error) };
   }
@@ -489,9 +494,28 @@ export async function updateMyName(_prev: unknown, form: FormData): Promise<Resu
   const name = String(form.get("full_name") ?? "").trim();
   if (!name) return { ok: false, error: "Имя не может быть пустым." };
   return act(async (db) => {
-    // Агенту разрешены ровно два столбца: имя и Telegram (инвариант 17).
+    // Агенту разрешены ровно три столбца: имя, Telegram и телефон
+    // (инварианты 17 и 6). Почта — ключ личности, её меняет администратор.
     await db.query("update agents set full_name = $1 where auth_user_id = auth.uid()", [name]);
     return "Имя изменено.";
+  }, "/cabinet/profile");
+}
+
+/**
+ * Телефон агента.
+ *
+ * С инварианта 6 (третья редакция) он записан со слов человека и ключом
+ * личности не является. Подтвердить его нечем, пока не подключён WhatsApp,
+ * поэтому база отмечает его неподтверждённым — и смена номера подтверждение
+ * сбрасывает. Ни одно правило системы на этот номер не опирается.
+ */
+export async function updateMyPhone(_prev: unknown, form: FormData): Promise<Result> {
+  const phone = String(form.get("phone") ?? "").trim();
+  return act(async (db) => {
+    await db.query("update agents set phone = $1 where auth_user_id = auth.uid()", [
+      phone || null,
+    ]);
+    return phone ? "Телефон сохранён." : "Телефон убран.";
   }, "/cabinet/profile");
 }
 

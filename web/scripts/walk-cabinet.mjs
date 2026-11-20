@@ -21,10 +21,10 @@ const BASE = "http://localhost:3000";
 const browser = await chromium.launch();
 const log = (...a) => console.log(...a);
 
-async function login(page, phone) {
+async function login(page, email) {
   await page.goto(`${BASE}/cabinet/login`, { waitUntil: "networkidle" });
   const ask = page.locator("section.card").first();
-  await ask.locator('input[name="phone"]').fill(phone);
+  await ask.locator('input[name="address"]').fill(email);
   await ask.locator("button").click();
   await page.waitForSelector(".act-ok, .act-err", { timeout: 15000 });
   const notice = await page.locator(".act-ok, .act-err").first().innerText();
@@ -41,7 +41,7 @@ async function login(page, phone) {
   }
 
   const enter = page.locator("section.card").nth(1);
-  await enter.locator('input[name="phone"]').fill(phone);
+  await enter.locator('input[name="address"]').fill(email);
   await enter.locator('input[name="code"]').fill(code);
   await enter.locator("button").click();
   await page.waitForURL("**/cabinet", { timeout: 15000 });
@@ -71,7 +71,7 @@ async function act(page, buttonText, scope) {
   await page.goto(`${BASE}/cabinet/login`, { waitUntil: "networkidle" });
   await page.screenshot({ path: `${SHOT}/cab-login.png`, fullPage: true });
 
-  const code = await login(page, "0700 000 001");
+  const code = await login(page, "aibek@partner.kg");
   log(`агент Айбек вошёл кодом ${code}`);
   await page.screenshot({ path: `${SHOT}/cab-home.png`, fullPage: true });
   log("главная:", (await page.locator(".tile").allInnerTexts())
@@ -129,7 +129,7 @@ async function act(page, buttonText, scope) {
 {
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 }, deviceScaleFactor: 2 });
   acceptDialogs(page);
-  await login(page, "0700 000 000");
+  await login(page, "admin@partner.kg");
   log("администратор вошёл");
 
   await page.goto(`${BASE}/cabinet/agents`, { waitUntil: "networkidle" });

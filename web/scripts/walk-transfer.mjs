@@ -13,7 +13,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 1100 }, deviceScaleFactor: 2 });
 page.on("dialog", (d) => d.accept());
 
-async function login(phone) {
+async function login(email) {
   await page.goto(`${BASE}/cabinet`, { waitUntil: "networkidle" });
   if (await page.locator('button:text("Выйти")').count()) {
     await page.locator('button:text("Выйти")').click();
@@ -21,21 +21,21 @@ async function login(phone) {
   }
   await page.goto(`${BASE}/cabinet/login`, { waitUntil: "networkidle" });
   const ask = page.locator("section.card").first();
-  await ask.locator('input[name="phone"]').fill(phone);
+  await ask.locator('input[name="address"]').fill(email);
   await ask.locator("button").click();
   await page.waitForSelector(".act-ok, .act-err");
   const notice = await page.locator(".act-ok, .act-err").first().innerText();
   const code = notice.match(/\b(\d{6})\b/)?.[1];
   if (!code) throw new Error(`код не выдан: ${notice}\nв разработке помогает: psql -d partner -c 'delete from login_codes'`);
   const enter = page.locator("section.card").nth(1);
-  await enter.locator('input[name="phone"]').fill(phone.replace(/\s/g, ""));
+  await enter.locator('input[name="address"]').fill(email);
   await enter.locator('input[name="code"]').fill(code);
   await enter.locator("button").click();
   await page.waitForURL("**/cabinet");
 }
 
 // --- объект -----------------------------------------------------------------
-await login("0700 000 001");
+await login("aibek@partner.kg");
 await page.goto(`${BASE}/cabinet/objects`, { waitUntil: "networkidle" });
 const mineBefore = await page.locator('.row:has(button:text("Подтвердить актуальность"))').count();
 const row = page
@@ -64,7 +64,7 @@ await page.goto(`${BASE}/cabinet/objects`, { waitUntil: "networkidle" });
 log("своих объектов стало:", await page.locator('.row:has(button:text("Подтвердить актуальность"))').count());
 
 // --- тот же объект у нового агента --------------------------------------------
-await login("0700 000 002");
+await login("bakyt@partner.kg");
 await page.goto(`${BASE}${href}`, { waitUntil: "networkidle" });
 log("у нового агента кнопка правки:", await page.locator('a:text("Править")').count(),
     "| форма загрузки фото:", await page.locator('input[type="file"]').count());
@@ -89,7 +89,7 @@ if (mineClients > 0) {
       await page.locator('button:text("Предложить клиенту")').count(),
       "| предупреждение:", (await page.locator(".warn").count()) > 0);
 
-  await login("0700 000 003");
+  await login("chyngyz@partner.kg");
   await page.goto(reqUrl, { waitUntil: "networkidle" });
   log("у нового агента кнопок подбора:",
       await page.locator('button:text("Предложить клиенту")').count());

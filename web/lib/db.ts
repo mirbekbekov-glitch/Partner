@@ -126,7 +126,7 @@ export async function asAuthService<T>(
  * иначе один агент увидел бы данные другого, и никакая RLS не помогла бы.
  */
 export async function asAgent<T>(
-  claims: { sub: string; phone: string },
+  claims: { sub: string; email: string },
   mode: "read only" | "read write",
   fn: (client: PoolClient) => Promise<T>,
 ): Promise<T> {

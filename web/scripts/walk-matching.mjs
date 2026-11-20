@@ -16,14 +16,14 @@ page.on("dialog", (d) => d.accept());
 // --- вход ------------------------------------------------------------------
 await page.goto(`${BASE}/cabinet/login`, { waitUntil: "networkidle" });
 const ask = page.locator("section.card").first();
-await ask.locator('input[name="phone"]').fill("0700 000 001");
+await ask.locator('input[name="address"]').fill("aibek@partner.kg");
 await ask.locator("button").click();
 await page.waitForSelector(".act-ok, .act-err");
 const notice = await page.locator(".act-ok, .act-err").first().innerText();
 const code = notice.match(/\b(\d{6})\b/)?.[1];
 if (!code) throw new Error(`код не выдан: ${notice}\nв разработке помогает: psql -d partner -c 'delete from login_codes'`);
 const enter = page.locator("section.card").nth(1);
-await enter.locator('input[name="phone"]').fill("0700000001");
+await enter.locator('input[name="address"]').fill("aibek@partner.kg");
 await enter.locator('input[name="code"]').fill(code);
 await enter.locator("button").click();
 await page.waitForURL("**/cabinet");
