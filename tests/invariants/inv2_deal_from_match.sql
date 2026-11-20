@@ -3,18 +3,25 @@
 \i tests/actors.sql
 \set ON_ERROR_STOP on
 
-set request.jwt.claims = :'claims_bakyt';
-set role authenticated;
-
 -- ---- 2а. Сделки без подбора не существует --------------------------------
--- match_id NOT NULL: обойти нечем.
+-- Два независимых слоя, и проверяем их по отдельности.
+--
+-- Слой первый — грант: агенту запись в deals не выдана вовсе (0018), поэтому
+-- до проверок дело не доходит. Это покрыто в inv15_write_paths.
+--
+-- Слой второй — сама схема: даже владельцем таблиц, в обход грантов, сделка
+-- без подбора не вставляется. Именно это здесь и проверяется, потому что
+-- иначе инвариант 2 держался бы только на отозванном гранте.
 select test.throws(
   format($$insert into deals (object_id, requirement_id, mandate_id,
                               listing_agent_id, closing_agent_id)
            values (%L, %L, %L, %L, %L)$$,
           :'obj1', :'req1', :'mandate1', :'agent_aibek', :'agent_bakyt'),
   'INVARIANT_2',
-  'сделка без подбора отклонена');
+  'сделка без подбора отклонена и в обход грантов');
+
+set request.jwt.claims = :'claims_bakyt';
+set role authenticated;
 
 -- ---- 2б. Сделка из подбора проходит --------------------------------------
 select * from create_match(:'obj1', :'req1') \gset match1_
@@ -28,6 +35,9 @@ select test.eq(:'deal1_listing_agent_id'::text, :'agent_aibek'::text, 'listing_a
 select test.eq(:'deal1_closing_agent_id'::text, :'agent_bakyt'::text, 'closing_agent взят из подбора');
 
 -- ---- 2в. Ссылки нельзя развести руками -----------------------------------
+-- Снова владельцем таблиц: агенту писать в deals нечем, а проверить надо
+-- именно схему.
+reset role;
 select test.throws(
   format($$update deals set object_id = %L where id = %L$$, :'obj2', :'deal1_id'),
   'INVARIANT_2',
@@ -37,6 +47,9 @@ select test.throws(
   format($$update deals set listing_agent_id = %L where id = %L$$, :'agent_chyngyz', :'deal1_id'),
   'INVARIANT_3',
   'listing_agent нельзя подменить вручную');
+
+set request.jwt.claims = :'claims_bakyt';
+set role authenticated;
 
 -- ---- 2г. Закрытие закрывает мандат и потребность -------------------------
 select * from close_deal(:'deal1_id', 82000) \gset closed_
