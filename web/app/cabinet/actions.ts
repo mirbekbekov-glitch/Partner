@@ -664,3 +664,109 @@ export async function failDeal(_prev: unknown, form: FormData): Promise<Result> 
     return "Сделка сорвана. Клиент и подбор вернулись в работу.";
   }, `/cabinet/deals/${dealId}`);
 }
+
+// ---------------------------------------------------------------------------
+// Правка
+// ---------------------------------------------------------------------------
+// Все четыре действия — вызов функции базы, и ни одно не проверяет прав:
+// это решают триггер инварианта 22 и сами функции. Экран показывает форму
+// тому, кому она пригодится, но запрещает не он.
+
+export async function updateObject(_prev: unknown, form: FormData): Promise<Result> {
+  const objectId = String(form.get("object_id"));
+  const text = (name: string) => {
+    const value = String(form.get(name) ?? "").trim();
+    return value === "" ? null : value;
+  };
+  const num = (name: string) => {
+    const value = text(name);
+    if (value === null) return null;
+    const n = Number(value.replace(/\s/g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  return actThenNotice(async (db) => {
+    await db.query(
+      `select update_object($1, $2::numeric, $3,
+         p_zone => $4, p_rooms => $5::smallint, p_area => $6::numeric,
+         p_floor => $7::smallint, p_floors_total => $8::smallint,
+         p_currency => $9, p_description => $10)`,
+      [objectId, num("price"), text("address"), text("zone"), num("rooms"),
+       num("area"), num("floor"), num("floors_total"), text("currency"),
+       text("description")],
+    );
+    return "Объект изменён.";
+  }, `/cabinet/objects/${objectId}`);
+}
+
+export async function updateMandate(_prev: unknown, form: FormData): Promise<Result> {
+  const objectId = String(form.get("object_id"));
+  const mandateId = String(form.get("mandate_id"));
+  const kind = String(form.get("mandate_kind"));
+  const validTo = String(form.get("valid_to") ?? "").trim() || null;
+  const confirmed = form.get("contract_confirmed") === "on";
+
+  return actThenNotice(async (db) => {
+    await db.query(
+      `select update_mandate($1, $2::mandate_kind, $3::date, $4::boolean)`,
+      [mandateId, kind, validTo, confirmed],
+    );
+    return "Договор изменён.";
+  }, `/cabinet/objects/${objectId}`);
+}
+
+export async function updateClosingShare(_prev: unknown, form: FormData): Promise<Result> {
+  const objectId = String(form.get("object_id"));
+  const mandateId = String(form.get("mandate_id"));
+  const percent = Number(String(form.get("percent") ?? "").replace(",", "."));
+  if (!Number.isFinite(percent) || percent <= 0 || percent >= 100) {
+    return { ok: false, error: "Ставка должна быть от 1 до 99 процентов." };
+  }
+
+  return actThenNotice(async (db) => {
+    // В базе ставка — доля единицы: так её удобно складывать и проверять.
+    // Человеку привычнее проценты, и перевод делает экран, а не база.
+    await db.query("select set_closing_share($1, $2::numeric)", [mandateId, percent / 100]);
+    return `Ставка агента покупателя: ${percent}%.`;
+  }, `/cabinet/objects/${objectId}`);
+}
+
+export async function updateRequirement(_prev: unknown, form: FormData): Promise<Result> {
+  const requirementId = String(form.get("requirement_id"));
+  const text = (name: string) => {
+    const value = String(form.get(name) ?? "").trim();
+    return value === "" ? null : value;
+  };
+  const num = (name: string) => {
+    const value = text(name);
+    if (value === null) return null;
+    const n = Number(value.replace(/\s/g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  };
+  const list = (name: string) =>
+    (text(name) ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+
+  return actThenNotice(async (db) => {
+    await db.query(
+      `select update_requirement($1, $2::numeric, $3::numeric, $4::text[],
+                                 $5::smallint[], $6::date, $7)`,
+      [requirementId, num("budget_min"), num("budget_max"), list("zones"),
+       list("rooms").map(Number).filter((n) => Number.isFinite(n)),
+       text("deadline"), text("requirements_text")],
+    );
+    return "Условия изменены. Подбор ниже пересчитан.";
+  }, `/cabinet/requirements/${requirementId}`);
+}
+
+export async function updateContact(_prev: unknown, form: FormData): Promise<Result> {
+  const contactId = String(form.get("contact_id"));
+  const back = String(form.get("back") ?? "/cabinet");
+  const name = String(form.get("name") ?? "").trim();
+  const phone = String(form.get("phone") ?? "").trim();
+  if (!name) return { ok: false, error: "Имя обязательно." };
+
+  return actThenNotice(async (db) => {
+    await db.query("select update_contact($1, $2, $3)", [contactId, name, phone || null]);
+    return "Контакт изменён.";
+  }, back);
+}

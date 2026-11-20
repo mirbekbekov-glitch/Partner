@@ -63,6 +63,12 @@ export default async function ObjectPage({
         </ul>
       )}
 
+      {data.canEditObject && (
+        <section className="acts-bar">
+          <a className="btn" href={`/cabinet/objects/${o.id}/edit`}>Править</a>
+        </section>
+      )}
+
       {o.is_mine && (
         <section className="acts-bar">
           <ActionForm action={confirmActual} label="Подтвердить актуальность">

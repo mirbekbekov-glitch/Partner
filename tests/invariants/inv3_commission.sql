@@ -32,6 +32,10 @@ select test.eq(
   2200.00::numeric, 'индикативная комиссия = 2% от текущей цены 110000');
 
 reset role;
+-- Клеймы сбрасываются вместе с ролью: «set role postgres» их не трогает, и
+-- настройка данных от имени владельца базы шла бы с чужим auth.uid(), то есть
+-- притворяясь агентом. Инвариант 22 это заметил.
+set request.jwt.claims = '{}';
 update objects set price = 120000 where id = :'obj2';
 set request.jwt.claims = :'claims_bakyt';
 set role authenticated;
@@ -59,6 +63,10 @@ select test.ok(
 
 -- Правка цены объекта после закрытия финальную комиссию не трогает.
 reset role;
+-- Клеймы сбрасываются вместе с ролью: «set role postgres» их не трогает, и
+-- настройка данных от имени владельца базы шла бы с чужим auth.uid(), то есть
+-- притворяясь агентом. Инвариант 22 это заметил.
+set request.jwt.claims = '{}';
 update objects set price = 999000 where id = :'obj2';
 select test.eq(
   (select commission_total from deals where id = :'d_id'), 2000.00::numeric,

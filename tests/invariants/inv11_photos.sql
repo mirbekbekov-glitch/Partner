@@ -226,6 +226,10 @@ select test.throws(
 -- инвариант. Но агент загружает их ДО публикации, поэтому у кабинета своё
 -- представление — с правами вызывающего, а не для всех.
 set role postgres;
+-- Клеймы сбрасываются вместе с ролью: «set role postgres» их не трогает, и
+-- настройка данных от имени владельца базы шла бы с чужим auth.uid(), то есть
+-- притворяясь агентом. Инвариант 22 это заметил.
+set request.jwt.claims = '{}';
 update objects set publication_state = 'draft' where id = :'obj1';
 
 set role authenticated;

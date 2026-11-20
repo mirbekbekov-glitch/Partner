@@ -65,6 +65,10 @@ select test.throws(
 -- а показывают.
 set role postgres;
 update mandates set status = 'active' where object_id = :'obj2';
+-- Клеймы сбрасываются вместе с ролью: «set role postgres» их не трогает, и
+-- настройка данных от имени владельца базы шла бы с чужим auth.uid(), то есть
+-- притворяясь агентом. Инвариант 22 это заметил.
+set request.jwt.claims = '{}';
 update objects  set publication_state = 'withdrawn' where id = :'obj2';
 
 set role authenticated;
@@ -86,6 +90,10 @@ select test.ok(
 -- req1: продажа, 70 000 – 120 000, районы Центр и Юг, 2–3 комнаты.
 set role postgres;
 delete from matches;
+-- Клеймы сбрасываются вместе с ролью: «set role postgres» их не трогает, и
+-- настройка данных от имени владельца базы шла бы с чужим auth.uid(), то есть
+-- притворяясь агентом. Инвариант 22 это заметил.
+set request.jwt.claims = '{}';
 update objects set publication_state = 'published' where id = :'obj2';
 update mandates set status = 'active';
 

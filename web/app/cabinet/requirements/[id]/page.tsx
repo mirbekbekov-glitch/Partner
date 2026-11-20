@@ -71,6 +71,9 @@ export default async function RequirementPage({
         {r.deadline ? ` · срок до ${formatDate(r.deadline)}` : ""}
       </p>
       {r.client_phone && <p className="phone">{formatPhone(r.client_phone)}</p>}
+      {r.is_mine && (
+        <p><a className="btn" href={`/cabinet/requirements/${r.id}/edit`}>Править условия</a></p>
+      )}
       {r.requirements_text && <p className="note">{r.requirements_text}</p>}
 
       {!r.is_mine && (

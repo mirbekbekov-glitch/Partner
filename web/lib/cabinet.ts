@@ -27,6 +27,8 @@ export type CabinetObject = {
   zone: string | null;
   rooms: number | null;
   area: string | null;
+  floor: number | null;
+  floors_total: number | null;
   price: string;
   currency: string;
   publication_state: string;
@@ -74,7 +76,13 @@ export async function myObjects(): Promise<CabinetObject[]> {
          m.status::text  as mandate_status,
          m.valid_to      as mandate_valid_to,
          m.contract_confirmed,
-         (o.created_by_agent_id = app.current_agent_id()) as is_mine,
+         -- «Свой объект» — то же понятие, что в базе: ведёт объект
+         -- listing-агент действующего договора, а объект без договора —
+         -- тот, кто его завёл (инвариант 22). Раньше здесь стоял создатель
+         -- записи, и кабинет показывал кнопки тем, кому база откажет.
+         (m.listing_agent_id = app.current_agent_id()
+          or (m.id is null and o.created_by_agent_id = app.current_agent_id()))
+                         as is_mine,
          s.reasons       as stale_reasons,
          s.severity::text as severity,
          -- Что требует действия агента. Это НЕ определение подвисшего
@@ -96,7 +104,8 @@ export async function myObjects(): Promise<CabinetObject[]> {
          on m.object_id = o.id and m.status = 'active'
        left join stale_objects_v s on s.object_id = o.id
        order by
-         (o.created_by_agent_id = app.current_agent_id()) desc,
+         (m.listing_agent_id = app.current_agent_id()
+          or (m.id is null and o.created_by_agent_id = app.current_agent_id())) desc,
          attention asc,
          o.actual_at asc nulls first`,
     );
@@ -255,10 +264,13 @@ export async function summary(): Promise<Summary | null> {
   return asAgent(session, "read only", async (db) => {
     const { rows } = await db.query<Summary>(
       `select
-         (select count(*) from objects o
-           where o.created_by_agent_id = app.current_agent_id())::int as objects_mine,
-         (select count(*) from objects o
-           where o.created_by_agent_id = app.current_agent_id()
+         (select count(*) from mandates md
+           where md.listing_agent_id = app.current_agent_id()
+             and md.status = 'active')::int                            as objects_mine,
+         (select count(*) from mandates md
+            join objects o on o.id = md.object_id
+           where md.listing_agent_id = app.current_agent_id()
+             and md.status = 'active'
              and o.publication_state = 'published')::int               as objects_published,
          (select count(*) from stale_objects_v s
            where s.severity = 'critical')::int                         as stale_critical,
@@ -298,7 +310,22 @@ export type ObjectDetail = {
   // listing-агент действующего мандата (инвариант 11), и кнопки показываются
   // ровно тому, кому база разрешит действие.
   canEditPhotos: boolean;
+  /**
+   * Право на правку данных объекта. Шире, чем на фотографии: объект без
+   * действующего договора правит тот, кто его завёл, — иначе он становится
+   * неисправимым (инвариант 22). Условие повторяет триггер, а не выдумывает
+   * своё: экран, который показывает кнопку там, где база откажет, хуже
+   * отсутствующей кнопки.
+   */
+  canEditObject: boolean;
   photoLimit: number;
+  mandate: {
+    id: string;
+    kind: string;
+    valid_to: Date | string | null;
+    contract_confirmed: boolean;
+    closing_share_ratio: string | null;
+  } | null;
   owners: { contact_id: string; name: string; phones: string[]; share: string | null; role: string }[];
   matches: { match_id: string; requirement_id: string; client_name: string | null; match_status: string }[];
   showings: { id: string; scheduled_at: string; status: string; outcome: string | null; agent_name: string | null }[];
@@ -324,7 +351,9 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
               (select count(*) from object_photos p where p.object_id = o.id)::int as photos_count,
               m.status::text as mandate_status, m.valid_to as mandate_valid_to,
               m.contract_confirmed,
-              (o.created_by_agent_id = app.current_agent_id()) as is_mine,
+              (m.listing_agent_id = app.current_agent_id()
+               or (m.id is null and o.created_by_agent_id = app.current_agent_id()))
+                             as is_mine,
               s.reasons as stale_reasons, s.severity::text as severity
          from objects o
          left join mandates m on m.object_id = o.id and m.status = 'active'
@@ -372,12 +401,31 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
       ),
     ]);
 
-    const { rows: rights } = await db.query<{ can_edit: boolean; limit: number }>(
+    const { rows: mandateRows } = await db.query(
+      `select id, kind::text, valid_to, contract_confirmed,
+              closing_share_ratio::text
+         from mandates where object_id = $1 and status = 'active'`,
+      [id],
+    );
+
+    const { rows: rights } = await db.query<{
+      can_edit: boolean;
+      can_edit_object: boolean;
+      limit: number;
+    }>(
       `select
          exists (select 1 from mandates m
                   where m.object_id = $1 and m.status = 'active'
                     and (m.listing_agent_id = app.current_agent_id()
                          or app.is_admin())) as can_edit,
+         (app.is_listing_agent($1)
+          or app.is_admin()
+          or (not exists (select 1 from mandates m2
+                           where m2.object_id = $1 and m2.status = 'active')
+              and exists (select 1 from objects o
+                           where o.id = $1
+                             and o.created_by_agent_id = app.current_agent_id())))
+           as can_edit_object,
          app.max_photos_per_object() as limit`,
       [id],
     );
@@ -386,7 +434,9 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
       object: objectRows[0] as ObjectDetail["object"],
       photos: photos.rows as ObjectDetail["photos"],
       canEditPhotos: rights[0].can_edit,
+      canEditObject: rights[0].can_edit_object,
       photoLimit: rights[0].limit,
+      mandate: (mandateRows[0] as ObjectDetail["mandate"]) ?? null,
       owners: owners.rows as ObjectDetail["owners"],
       matches: matches.rows as ObjectDetail["matches"],
       showings: showings.rows as ObjectDetail["showings"],
@@ -556,6 +606,8 @@ export type ProposedMatch = {
 
 export type RequirementDetail = {
   requirement: Requirement;
+  /** Контакт клиента: нужен экрану правки, чтобы поправить имя и телефон. */
+  contactId: string | null;
   candidates: MatchCandidate[];
   proposed: ProposedMatch[];
   showings: {
@@ -626,8 +678,14 @@ export async function requirementDetail(id: string): Promise<RequirementDetail |
       ),
     ]);
 
+    const { rows: contactRows } = await db.query<{ contact_id: string | null }>(
+      "select contact_id from requirements where id = $1",
+      [id],
+    );
+
     return {
       requirement: reqRows[0],
+      contactId: contactRows[0]?.contact_id ?? null,
       candidates: candidates.rows,
       proposed: proposed.rows,
       showings: showings.rows as RequirementDetail["showings"],
