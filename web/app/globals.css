@@ -818,3 +818,42 @@ button.link {
    кликают случайно и не кликают нарочно. */
 .ext { color: #175cd3; text-decoration: none; }
 .ext:hover { text-decoration: underline; }
+
+/* Галерея кабинета. Обложка выделена рамкой, а не подписью: её узнают
+   глазом, а подпись читают только когда уже сомневаются. */
+.gallery {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.75rem;
+  padding: 0;
+  margin: 1rem 0;
+}
+.shot {
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.shot.cover { border-color: #175cd3; box-shadow: 0 0 0 1px #175cd3; }
+.shot img {
+  display: block;
+  width: 100%;
+  height: 9rem;
+  object-fit: cover;
+  background: #f2f4f7;
+}
+.shot-foot { padding: 0.5rem 0.6rem; }
+.shot-acts { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
+.act.tight { flex-direction: row; gap: 0.3rem; }
+.act.tight .btn { padding: 0.2rem 0.5rem; font-size: 0.8rem; }
+.act.tight .act-err, .act.tight .act-ok { flex-basis: 100%; }
+
+input[type="file"] {
+  font: inherit;
+  border: 1px dashed #d0d5dd;
+  border-radius: 7px;
+  padding: 0.7rem;
+  width: 100%;
+  background: #f9fafb;
+}

@@ -277,7 +277,19 @@ export async function summary(): Promise<Summary | null> {
 
 export type ObjectDetail = {
   object: CabinetObject & { description: string | null };
-  photos: { storage_key: string; sort_order: number }[];
+  photos: {
+    storage_key: string;
+    sort_order: number;
+    width: number | null;
+    height: number | null;
+    byte_size: number | null;
+    is_cover: boolean;
+  }[];
+  // Право на правку фотографий — не свойство экрана: фотографии ведёт
+  // listing-агент действующего мандата (инвариант 11), и кнопки показываются
+  // ровно тому, кому база разрешит действие.
+  canEditPhotos: boolean;
+  photoLimit: number;
   owners: { contact_id: string; name: string; phones: string[]; share: string | null; role: string }[];
   matches: { match_id: string; requirement_id: string; client_name: string | null; match_status: string }[];
   showings: { id: string; scheduled_at: string; status: string; outcome: string | null; agent_name: string | null }[];
@@ -315,8 +327,8 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
 
     const [photos, owners, matches, showings, links] = await Promise.all([
       db.query(
-        `select storage_key, sort_order from object_photos
-          where object_id = $1 order by sort_order`,
+        `select storage_key, sort_order, width, height, byte_size, is_cover
+           from cabinet_photo_v where object_id = $1 order by sort_order`,
         [id],
       ),
       db.query(
@@ -351,9 +363,21 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
       ),
     ]);
 
+    const { rows: rights } = await db.query<{ can_edit: boolean; limit: number }>(
+      `select
+         exists (select 1 from mandates m
+                  where m.object_id = $1 and m.status = 'active'
+                    and (m.listing_agent_id = app.current_agent_id()
+                         or app.is_admin())) as can_edit,
+         app.max_photos_per_object() as limit`,
+      [id],
+    );
+
     return {
       object: objectRows[0] as ObjectDetail["object"],
       photos: photos.rows as ObjectDetail["photos"],
+      canEditPhotos: rights[0].can_edit,
+      photoLimit: rights[0].limit,
       owners: owners.rows as ObjectDetail["owners"],
       matches: matches.rows as ObjectDetail["matches"],
       showings: showings.rows as ObjectDetail["showings"],

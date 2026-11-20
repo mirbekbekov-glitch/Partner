@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { asAgent, asAuthService } from "../../lib/db";
 import { clearSession, readSession, writeSession } from "../../lib/session";
 import { sendLoginCode, showsCodeOnScreen } from "../../lib/otp";
+import { remove as removePhotoFile, save as savePhotoFile } from "../../lib/photos";
 
 /**
  * Действия кабинета.
@@ -179,6 +180,131 @@ export async function issueOwnerLink(_prev: unknown, form: FormData): Promise<Re
       [objectId, contactId, days],
     );
     return `${process.env.SITE_URL ?? ""}/report/${rows[0].token}`;
+  }, `/cabinet/objects/${objectId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Фотографии
+// ---------------------------------------------------------------------------
+
+/**
+ * Загрузка фотографий.
+ *
+ * Порядок здесь важен и выбран сознательно: СНАЧАЛА файл в хранилище, ПОТОМ
+ * запись в базе. При обратном порядке упавшая запись файла оставила бы
+ * строку, указывающую в пустоту, — и каталог показывал бы битую картинку.
+ * При этом порядке упавшая запись в базе оставляет файл, на который никто не
+ * ссылается: он не виден нигде, потому что отдача идёт по записи в базе, а
+ * не по содержимому каталога. Поэтому файл тут же убирается.
+ *
+ * Файлы обрабатываются по одному, а не пачкой в одной транзакции: агент
+ * выбирает двадцать снимков с телефона, и падение на девятнадцатом не должно
+ * отменять восемнадцать удачных.
+ */
+export async function uploadPhotos(_prev: unknown, form: FormData): Promise<Result> {
+  const objectId = String(form.get("object_id"));
+  const files = form.getAll("photos").filter((f): f is File => f instanceof File && f.size > 0);
+
+  if (files.length === 0) return { ok: false, error: "Файлы не выбраны." };
+
+  const session = await readSession();
+  if (!session) return { ok: false, error: "Вход истёк. Войдите снова." };
+
+  const added: string[] = [];
+  const failed: string[] = [];
+
+  for (const file of files) {
+    let stored;
+    try {
+      stored = await savePhotoFile(objectId, file);
+    } catch (error) {
+      failed.push(`${file.name}: ${humanize(error)}`);
+      continue;
+    }
+
+    try {
+      await asAgent(session, "read write", async (db) => {
+        await db.query(
+          "select attach_photo($1, $2, $3, $4, $5, $6)",
+          [objectId, stored.storageKey, stored.contentType,
+           stored.width, stored.height, stored.byteSize],
+        );
+      });
+      added.push(stored.storageKey);
+    } catch (error) {
+      // База отказала — файл в хранилище не нужен.
+      await removePhotoFile(stored.storageKey);
+      failed.push(`${file.name}: ${humanize(error)}`);
+    }
+  }
+
+  revalidatePath(`/cabinet/objects/${objectId}`);
+
+  if (added.length === 0) {
+    return { ok: false, error: failed.join("; ") };
+  }
+  const word = added.length === 1 ? "фотография" : added.length < 5 ? "фотографии" : "фотографий";
+  return {
+    ok: true,
+    message:
+      `Добавлено ${added.length} ${word}.` +
+      (failed.length > 0 ? ` Не вышло: ${failed.join("; ")}` : ""),
+  };
+}
+
+export async function deletePhoto(_prev: unknown, form: FormData): Promise<Result> {
+  const objectId = String(form.get("object_id"));
+  const key = String(form.get("storage_key"));
+
+  const result = await act(async (db) => {
+    const { rows } = await db.query<{ delete_photo: string }>(
+      "select delete_photo($1, $2)",
+      [objectId, key],
+    );
+    return rows[0].delete_photo;
+  }, `/cabinet/objects/${objectId}`);
+
+  // Файл убирается только после того, как база согласилась: иначе отказ в
+  // правах уносил бы чужую фотографию.
+  if (!result.ok) return result;
+  await removePhotoFile(key);
+
+  // Успех уходит в адрес страницы: карточка фотографии исчезает вместе с
+  // формой, в которой лежало сообщение, и действие срабатывало бы молча.
+  redirect(`/cabinet/objects/${objectId}?note=${encodeURIComponent("Фотография удалена.")}`);
+}
+
+export async function setCover(_prev: unknown, form: FormData): Promise<Result> {
+  const objectId = String(form.get("object_id"));
+  const key = String(form.get("storage_key"));
+  // Та же причина, что у удаления: после смены обложки кнопка «На обложку»
+  // у этой фотографии исчезает.
+  return actThenNotice(async (db) => {
+    await db.query("select set_cover($1, $2)", [objectId, key]);
+    return "Обложка изменена.";
+  }, `/cabinet/objects/${objectId}`);
+}
+
+export async function movePhoto(_prev: unknown, form: FormData): Promise<Result> {
+  const objectId = String(form.get("object_id"));
+  const key = String(form.get("storage_key"));
+  const direction = String(form.get("direction")) === "up" ? -1 : 1;
+
+  return actThenNotice(async (db) => {
+    const { rows } = await db.query<{ storage_key: string }>(
+      "select storage_key from object_photos where object_id = $1 order by sort_order",
+      [objectId],
+    );
+    const keys = rows.map((r) => r.storage_key);
+    const from = keys.indexOf(key);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= keys.length) return "Двигать некуда.";
+
+    [keys[from], keys[to]] = [keys[to], keys[from]];
+    // Перечисляются ВСЕ ключи: частичный список поменял бы обложку
+    // незаметно, и база такой вызов не примет.
+    await db.query("select reorder_photos($1, $2::text[])", [objectId, keys]);
+    return "Порядок изменён.";
   }, `/cabinet/objects/${objectId}`);
 }
 

@@ -133,3 +133,122 @@ set request.jwt.claims = :'claims_admin';
 select test.ok(
   (select count(*) from audit_log where entity_type = 'photo') >= 3,
   'загрузки фотографий записаны в журнал');
+
+-- ---- 11з. Удаление оставляет порядок сплошным ------------------------------
+-- Обложка — это первая фотография, а не отдельный флаг. Значит удаление
+-- первой обязано сделать обложкой следующую, а дыры в нумерации (0, 2, 3)
+-- означали бы объект без нулевой позиции, то есть без обложки.
+--
+-- Объект очищается от фотографий предыдущих проверок: иначе утверждения
+-- ниже считали бы не то, что проверяют.
+set role postgres;
+delete from object_photos where object_id = :'obj1';
+
+set role authenticated;
+set request.jwt.claims = :'claims_aibek';
+
+select attach_photo(:'obj1', 'objects/00000000-0000-0000-0000-0000000b0001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa01.webp', 'image/webp');
+select attach_photo(:'obj1', 'objects/00000000-0000-0000-0000-0000000b0001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa02.webp', 'image/webp');
+select attach_photo(:'obj1', 'objects/00000000-0000-0000-0000-0000000b0001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa03.webp', 'image/webp');
+
+select test.eq(
+  (select array_agg(sort_order order by sort_order)::int[] from object_photos where object_id = :'obj1'),
+  array[0, 1, 2], 'порядок сплошной после трёх добавлений');
+
+select test.eq(
+  delete_photo(:'obj1', 'objects/00000000-0000-0000-0000-0000000b0001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa01.webp'),
+  'objects/00000000-0000-0000-0000-0000000b0001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa01.webp',
+  'удаление возвращает ключ, чтобы вызывающий убрал файл');
+
+select test.eq(
+  (select array_agg(sort_order order by sort_order)::int[] from object_photos where object_id = :'obj1'),
+  array[0, 1], 'после удаления первой порядок снова сплошной от нуля');
+
+select test.eq(
+  (select storage_key from object_photos where object_id = :'obj1' and sort_order = 0),
+  'objects/00000000-0000-0000-0000-0000000b0001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa02.webp',
+  'обложкой стала следующая фотография, а не пустота');
+
+select test.throws(
+  format($$select delete_photo(%L, 'objects/00000000-0000-0000-0000-0000000b0001/ffffffffffffffffffffffffffffff99.webp')$$, :'obj1'),
+  'INVARIANT_11: фотографии',
+  'чужой ключ не удалить');
+
+-- ---- 11и. Обложка меняется одним действием ---------------------------------
+select test.eq(
+  set_cover(:'obj1', 'objects/00000000-0000-0000-0000-0000000b0001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa03.webp'),
+  2, 'смена обложки переставляет все фотографии объекта');
+select test.eq(
+  (select storage_key from object_photos where object_id = :'obj1' and sort_order = 0),
+  'objects/00000000-0000-0000-0000-0000000b0001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa03.webp',
+  'выбранная стала обложкой');
+select test.eq(
+  (select array_agg(sort_order order by sort_order)::int[] from object_photos where object_id = :'obj1'),
+  array[0, 1], 'и порядок остался сплошным');
+
+-- ---- 11к. Предел числа фотографий ------------------------------------------
+-- Не вкусовщина: у объекта с сотней фотографий другая страница каталога и
+-- другие расходы на хранение.
+do $$
+declare i integer;
+begin
+  for i in 10 .. (app.max_photos_per_object() + 8) loop
+    exit when (select count(*) from object_photos where object_id = '00000000-0000-0000-0000-0000000b0001')
+              >= app.max_photos_per_object();
+    perform attach_photo('00000000-0000-0000-0000-0000000b0001',
+      format('objects/00000000-0000-0000-0000-0000000b0001/bbbbbbbbbbbbbbbbbbbbbbbbbbbbb%s.webp', lpad(i::text, 3, '0')),
+      'image/webp');
+  end loop;
+end $$;
+
+select test.eq(
+  (select count(*)::int from object_photos where object_id = :'obj1'),
+  app.max_photos_per_object(), 'набрали предел');
+
+select test.throws(
+  format($$select attach_photo(%L, 'objects/00000000-0000-0000-0000-0000000b0001/cccccccccccccccccccccccccccccc01.webp', 'image/webp')$$, :'obj1'),
+  'это предел',
+  'сверх предела фотографию не добавить');
+
+-- ---- 11л. Фотографии чужого объекта не трогать -----------------------------
+set request.jwt.claims = :'claims_chyngyz';
+select test.throws(
+  format($$select delete_photo(%L, 'objects/00000000-0000-0000-0000-0000000b0001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa03.webp')$$, :'obj1'),
+  'INVARIANT_11: фотографии удаляет listing-агент действующего мандата',
+  'чужую фотографию не удалить');
+select test.throws(
+  format($$select set_cover(%L, 'objects/00000000-0000-0000-0000-0000000b0001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa02.webp')$$, :'obj1'),
+  'INVARIANT_11: порядок фотографий меняет listing-агент действующего мандата',
+  'чужую обложку не поменять');
+
+-- ---- 11м. Кабинет видит фотографии черновика, каталог — нет ----------------
+-- Публичная витрина отдаёт фотографии только опубликованных объектов, и это
+-- инвариант. Но агент загружает их ДО публикации, поэтому у кабинета своё
+-- представление — с правами вызывающего, а не для всех.
+set role postgres;
+update objects set publication_state = 'draft' where id = :'obj1';
+
+set role authenticated;
+set request.jwt.claims = :'claims_aibek';
+select test.ok(
+  (select count(*) from cabinet_photo_v where object_id = :'obj1') > 0,
+  'агент видит фотографии неопубликованного объекта');
+
+-- Представление собрано с правами ВЫЗЫВАЮЩЕГО. Без этого оно читалось бы
+-- правами владельца, то есть в обход построчных политик, и неодобренный
+-- агент — у него роль authenticated и право на представление — увидел бы
+-- фотографии всего агентства. Мутация, снимавшая security_invoker, выживала:
+-- для одобренного агента разницы нет, и проверять надо именно неодобренного.
+set request.jwt.claims = :'claims_pending';
+select test.eq(
+  (select count(*)::int from cabinet_photo_v),
+  0, 'неодобренный агент не видит ни одной фотографии');
+
+set role postgres; set role anon;
+select test.eq(
+  (select count(*)::int from public_photo_v where object_id = :'obj1'),
+  0, 'в публичной витрине фотографий черновика нет');
+select test.throws(
+  $$select * from cabinet_photo_v$$,
+  'permission denied for view cabinet_photo_v',
+  'и кабинетное представление анониму недоступно');

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { objectDetail } from "../../../../lib/cabinet";
-import { formatPrice, KIND_LABEL, freshness, formatDate, formatDateTime, formatArea, formatPhone } from "../../../../lib/format";
+import { formatPrice, KIND_LABEL, freshness, formatDate, formatDateTime, formatArea, formatPhone, formatShare } from "../../../../lib/format";
 import { gate } from "../../Gate";
+import { Photos } from "../../Photos";
 import { ActionForm } from "../../ActionForm";
 import { confirmActual, issueOwnerLink, publish, withdraw } from "../../actions";
 
@@ -13,13 +14,16 @@ export const metadata: Metadata = {
 
 export default async function ObjectPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ note?: string }>;
 }) {
   const access = await gate();
   if (!access.ok) return access.screen;
 
   const { id } = await params;
+  const { note } = await searchParams;
   const data = await objectDetail(id);
   if (!data) notFound();
 
@@ -29,6 +33,7 @@ export default async function ObjectPage({
     <div className="wrap">
       <p className="back"><a href="/cabinet/objects">← к объектам</a></p>
       <h1>{o.address}</h1>
+      {note && <p className="ok-banner">{note}</p>}
 
       <p className="row-price big">{formatPrice(o.price, o.currency, o.deal_type as never)}</p>
       <p className="row-meta">
@@ -76,21 +81,17 @@ export default async function ObjectPage({
         </section>
       )}
 
-      {data.photos.length > 0 && (
-        <section>
-          <h2>Фотографии <span className="muted">({data.photos.length})</span></h2>
-          <div className="thumbs">
-            {data.photos.map((p) => (
-              <img key={p.storage_key} src={`/photo/${p.storage_key}`} alt="" loading="lazy" />
-            ))}
-          </div>
-          <p className="muted">
-            Обложка — первая. Фотографии видны публично ровно пока объект
-            опубликован: байты отдаёт приложение, а право на файл проверяется
-            в базе на каждый запрос.
-          </p>
-        </section>
-      )}
+      <Photos
+        objectId={o.id}
+        photos={data.photos}
+        canEdit={data.canEditPhotos}
+        limit={data.photoLimit}
+        whyNot={
+          o.mandate_status === "active"
+            ? "Фотографии ведёт listing-агент действующего договора. По этому объекту договор у другого агента."
+            : "Фотографии можно добавить только при действующем договоре с собственником: отвечать за снимки перед ним должен тот, с кем договор. Заключите договор — форма загрузки появится."
+        }
+      />
 
       <section>
         <h2>Собственник</h2>
@@ -99,7 +100,7 @@ export default async function ObjectPage({
         ) : (
           data.owners.map((ow) => (
             <article key={ow.contact_id} className="card">
-              <h3>{ow.name}{ow.share ? ` · доля ${ow.share}` : ""}</h3>
+              <h3>{ow.name}{formatShare(ow.share) ? ` · доля ${formatShare(ow.share)}` : ""}</h3>
               {ow.phones.length > 0 ? (
                 <p className="phone">{ow.phones.map(formatPhone).join(", ")}</p>
               ) : (

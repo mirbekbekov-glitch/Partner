@@ -156,3 +156,16 @@ export function formatPhone(phone: string | null): string {
   if (other) return `+${other[1]} ${other[2]} ${other[3]} ${other[4]}`;
   return phone;
 }
+
+/**
+ * Доля в собственности. В базе это часть единицы (0.5000), потому что так её
+ * удобно складывать и проверять. Человеку доля известна в процентах, и
+ * «доля 1.0000» у единственного собственника — просто шум.
+ */
+export function formatShare(share: string | null): string | null {
+  if (share === null) return null;
+  const n = Number(share);
+  if (!Number.isFinite(n) || n >= 1) return null;
+  const percent = n * 100;
+  return `${Number.isInteger(percent) ? percent : percent.toFixed(1).replace(".", ",")}%`;
+}

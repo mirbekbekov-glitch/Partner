@@ -9,13 +9,16 @@
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke.mjs",
     "smoke:cabinet": "node scripts/smoke-cabinet.mjs",
-    "walk": "node scripts/walk-cabinet.mjs"
+    "walk": "node scripts/walk-cabinet.mjs",
+    "smoke:photos": "node --experimental-strip-types --no-warnings scripts/smoke-photos.mjs",
+    "walk:photos": "node scripts/walk-photos.mjs"
   },
   "dependencies": {
     "next": "16.4.6",
     "pg": "8.13.1",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@types/node": "22.10.5",
