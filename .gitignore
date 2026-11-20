@@ -5,3 +5,6 @@ node_modules/
 *.log
 .photos/
 web/dev-photos/
+
+# снимки экрана из проходов — не код, в репозиторий не идут
+web/shots/
