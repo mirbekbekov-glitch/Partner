@@ -494,3 +494,115 @@ export async function updateMyName(_prev: unknown, form: FormData): Promise<Resu
     return "Имя изменено.";
   }, "/cabinet/profile");
 }
+
+// ---------------------------------------------------------------------------
+// Подбор
+// ---------------------------------------------------------------------------
+
+/**
+ * Потребность клиента. Как и объект, заводится вместе с человеком: клиент и
+ * то, что он ищет, — один разговор.
+ */
+export async function createRequirement(_prev: unknown, form: FormData): Promise<Result> {
+  const text = (name: string) => {
+    const value = String(form.get(name) ?? "").trim();
+    return value === "" ? null : value;
+  };
+  const num = (name: string) => {
+    const value = text(name);
+    if (value === null) return null;
+    const n = Number(value.replace(/\s/g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  };
+  // Районы и комнаты приходят списком через запятую: это короче любого
+  // набора галочек и переживает появление нового района.
+  const list = (name: string) =>
+    (text(name) ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+
+  const session = await readSession();
+  if (!session) return { ok: false, error: "Вход истёк. Войдите снова." };
+
+  let id: string;
+  try {
+    id = await asAgent(session, "read write", async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `select id from create_requirement(
+           $1::deal_type,
+           p_contact_id   => $2::uuid,
+           p_client_name  => $3,
+           p_client_phone => $4,
+           p_budget_min   => $5::numeric,
+           p_budget_max   => $6::numeric,
+           p_zones        => $7::text[],
+           p_rooms        => $8::smallint[],
+           p_deadline     => $9::date,
+           p_text         => $10,
+           p_inquiry_id   => $11::uuid)`,
+        [
+          text("deal_type"), text("contact_id"), text("client_name"), text("client_phone"),
+          num("budget_min"), num("budget_max"),
+          list("zones"),
+          list("rooms").map((r) => Number(r)).filter((n) => Number.isFinite(n)),
+          text("deadline"), text("requirements_text"), text("inquiry_id"),
+        ],
+      );
+      return rows[0].id;
+    });
+  } catch (error) {
+    return { ok: false, error: humanize(error) };
+  }
+
+  revalidatePath("/cabinet/requirements");
+  redirect(`/cabinet/requirements/${id}?note=${encodeURIComponent("Потребность заведена. Ниже — что ей подходит.")}`);
+}
+
+export async function proposeObject(_prev: unknown, form: FormData): Promise<Result> {
+  const requirementId = String(form.get("requirement_id"));
+  const objectId = String(form.get("object_id"));
+  return actThenNotice(async (db) => {
+    const { rows } = await db.query<{ address: string }>(
+      `select o.address from create_match($1, $2) m join objects o on o.id = m.object_id`,
+      [objectId, requirementId],
+    );
+    return `«${rows[0].address}» предложен клиенту.`;
+  }, `/cabinet/requirements/${requirementId}`);
+}
+
+export async function scheduleShowing(_prev: unknown, form: FormData): Promise<Result> {
+  const requirementId = String(form.get("requirement_id"));
+  const matchId = String(form.get("match_id"));
+  const at = String(form.get("at") ?? "").trim();
+  const note = String(form.get("note") ?? "").trim();
+  if (!at) return { ok: false, error: "Укажите дату и время показа." };
+
+  return actThenNotice(async (db) => {
+    await db.query("select schedule_showing($1, $2::timestamptz, $3)", [matchId, at, note || null]);
+    return "Показ назначен.";
+  }, `/cabinet/requirements/${requirementId}`);
+}
+
+export async function completeShowing(_prev: unknown, form: FormData): Promise<Result> {
+  const requirementId = String(form.get("requirement_id"));
+  const showingId = String(form.get("showing_id"));
+  const outcome = String(form.get("outcome"));
+  const reaction = String(form.get("reaction") ?? "").trim();
+  const note = String(form.get("note") ?? "").trim();
+
+  return actThenNotice(async (db) => {
+    await db.query(
+      "select complete_showing($1, $2::showing_outcome, $3, $4)",
+      [showingId, outcome, reaction || null, note || null],
+    );
+    return "Показ закрыт. Состояние подбора и потребности обновлено автоматически.";
+  }, `/cabinet/requirements/${requirementId}`);
+}
+
+export async function cancelShowing(_prev: unknown, form: FormData): Promise<Result> {
+  const requirementId = String(form.get("requirement_id"));
+  const showingId = String(form.get("showing_id"));
+  const reason = String(form.get("reason") ?? "").trim();
+  return actThenNotice(async (db) => {
+    await db.query("select cancel_showing($1, $2)", [showingId, reason || null]);
+    return "Показ отменён.";
+  }, `/cabinet/requirements/${requirementId}`);
+}

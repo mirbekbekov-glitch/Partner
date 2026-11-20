@@ -140,11 +140,11 @@ export function ObjectForm({
             <div className="pair">
               <label>
                 Имя
-                <input {...field("owner_name")} placeholder="Орозов Азамат" />
+                <input {...field("owner_name")} placeholder="Орозов Азамат" required />
               </label>
               <label>
                 Телефон
-                <input {...field("owner_phone")} type="tel" placeholder="0700 123 456" />
+                <input {...field("owner_phone")} type="tel" placeholder="0700 123 456" required />
               </label>
             </div>
             <p className="hint">

@@ -242,6 +242,7 @@ export type Summary = {
   inquiries_new: number;
   candidates_mine: number;
   showings_upcoming: number;
+  requirements_mine: number;
   agents_pending: number;
   scheduler_broken: number;
 };
@@ -267,6 +268,9 @@ export async function summary(): Promise<Summary | null> {
              and c.status = 'in_work')::int                            as candidates_mine,
          (select count(*) from showings_v sh
            where sh.status = 'scheduled' and sh.scheduled_at > now())::int as showings_upcoming,
+         (select count(*) from requirements rq
+           where rq.agent_id = app.current_agent_id()
+             and rq.status in ('new', 'qualified', 'in_showings'))::int as requirements_mine,
          (select count(*) from agents a where a.status = 'pending')::int as agents_pending,
          (select count(*) from maintenance_health_v h
            where h.enabled and h.status <> 'в норме')::int             as scheduler_broken`,
@@ -453,5 +457,175 @@ export async function candidateForObject(id: string): Promise<CandidateDraft | n
       [id],
     );
     return rows[0] ?? null;
+  });
+}
+
+export type Requirement = {
+  id: string;
+  client_name: string | null;
+  client_phone: string | null;
+  deal_type: string;
+  budget_min: string | null;
+  budget_max: string | null;
+  zones: string[];
+  rooms: number[];
+  deadline: Date | string | null;
+  requirements_text: string | null;
+  status: string;
+  created_at: Date | string;
+  is_mine: boolean;
+  agent_name: string | null;
+  matches_total: number;
+  showings_total: number;
+};
+
+/**
+ * Потребности клиентов. Свои первыми: подбор по чужой потребности база всё
+ * равно не даст (инвариант 20), и мешать их в одну кучу незачем.
+ */
+export async function requirements(): Promise<Requirement[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<Requirement>(
+      `select r.id, c.name as client_name,
+              (select cp.phone from contact_phones cp
+                where cp.contact_id = c.id order by cp.is_primary desc limit 1) as client_phone,
+              r.deal_type::text, r.budget_min::text, r.budget_max::text,
+              r.zones, r.rooms::int[], r.deadline, r.requirements_text,
+              r.status::text, r.created_at,
+              (r.agent_id = app.current_agent_id()) as is_mine,
+              a.full_name as agent_name,
+              (select count(*) from matches m where m.requirement_id = r.id)::int as matches_total,
+              (select count(*) from showings sh
+                 join matches m on m.id = sh.match_id
+                where m.requirement_id = r.id)::int as showings_total
+         from requirements r
+         left join contacts c on c.id = r.contact_id
+         left join agents a on a.id = r.agent_id
+        order by
+          (r.agent_id = app.current_agent_id()) desc,
+          case r.status when 'new' then 0 when 'qualified' then 1
+                        when 'in_showings' then 2 when 'in_deal' then 3 else 4 end,
+          r.created_at desc`,
+    );
+    return rows;
+  });
+}
+
+export type MatchCandidate = {
+  object_id: string;
+  address: string;
+  kind: string;
+  zone: string | null;
+  rooms: number | null;
+  area: string | null;
+  floor: number | null;
+  floors_total: number | null;
+  price: string;
+  currency: string;
+  actual_at: Date | string;
+  publication_state: string;
+  photos_count: number;
+  listing_agent: string | null;
+  is_mine: boolean;
+  fit: string;
+  already_proposed: boolean;
+};
+
+export type ProposedMatch = {
+  match_id: string;
+  object_id: string;
+  address: string;
+  price: string;
+  currency: string;
+  match_status: string;
+  showing_at: Date | string | null;
+  rejection_reason: string | null;
+  commission_total: string | null;
+  closing_share: string | null;
+  deal_id: string | null;
+  deal_status: string | null;
+};
+
+export type RequirementDetail = {
+  requirement: Requirement;
+  candidates: MatchCandidate[];
+  proposed: ProposedMatch[];
+  showings: {
+    id: string;
+    match_id: string;
+    address: string;
+    scheduled_at: Date | string;
+    status: string;
+    outcome: string | null;
+    client_reaction: string | null;
+  }[];
+};
+
+export async function requirementDetail(id: string): Promise<RequirementDetail | null> {
+  const session = await readSession();
+  if (!session) return null;
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows: reqRows } = await db.query<Requirement>(
+      `select r.id, c.name as client_name,
+              (select cp.phone from contact_phones cp
+                where cp.contact_id = c.id order by cp.is_primary desc limit 1) as client_phone,
+              r.deal_type::text, r.budget_min::text, r.budget_max::text,
+              r.zones, r.rooms::int[], r.deadline, r.requirements_text,
+              r.status::text, r.created_at,
+              (r.agent_id = app.current_agent_id()) as is_mine,
+              a.full_name as agent_name,
+              (select count(*) from matches m where m.requirement_id = r.id)::int as matches_total,
+              (select count(*) from showings sh
+                 join matches m on m.id = sh.match_id
+                where m.requirement_id = r.id)::int as showings_total
+         from requirements r
+         left join contacts c on c.id = r.contact_id
+         left join agents a on a.id = r.agent_id
+        where r.id = $1`,
+      [id],
+    );
+    if (reqRows.length === 0) return null;
+
+    const [candidates, proposed, showings] = await Promise.all([
+      db.query<MatchCandidate>(
+        `select object_id, address, kind::text, zone, rooms, area::text, floor,
+                floors_total, price::text, currency, actual_at,
+                publication_state::text, photos_count, listing_agent, is_mine,
+                fit, already_proposed
+           from app.matching_objects($1)`,
+        [id],
+      ),
+      db.query<ProposedMatch>(
+        `select v.match_id, v.object_id, v.address, v.price::text, v.currency,
+                v.match_status::text, v.showing_at, v.rejection_reason,
+                v.commission_total::text, v.closing_share::text,
+                v.deal_id, v.deal_status::text
+           from requirement_matches_v v
+          where v.requirement_id = $1
+          order by v.created_at desc`,
+        [id],
+      ),
+      db.query(
+        `select sh.id, sh.match_id, o.address, sh.scheduled_at, sh.status::text,
+                sh.outcome::text, sh.client_reaction::text
+           from showings sh
+           join matches m on m.id = sh.match_id
+           join objects o on o.id = m.object_id
+          where m.requirement_id = $1
+          order by sh.scheduled_at desc`,
+        [id],
+      ),
+    ]);
+
+    return {
+      requirement: reqRows[0],
+      candidates: candidates.rows,
+      proposed: proposed.rows,
+      showings: showings.rows as RequirementDetail["showings"],
+    };
   });
 }

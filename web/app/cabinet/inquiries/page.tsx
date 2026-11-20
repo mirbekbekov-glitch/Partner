@@ -108,6 +108,16 @@ export default async function InquiriesPage({
                   <input type="hidden" name="inquiry_id" value={i.id} />
                 </ActionForm>
               )}
+              {i.intent !== "supply" && (
+                <a className="btn primary" href={`/cabinet/requirements/new?inquiry=${i.id}`}>
+                  Завести клиента
+                </a>
+              )}
+              {i.intent !== "demand" && (
+                <a className="btn" href="/cabinet/objects/new">
+                  Завести объект
+                </a>
+              )}
               <details className="fold">
                 <summary>Отказ</summary>
                 <ActionForm action={rejectInquiry} label="Отказать">

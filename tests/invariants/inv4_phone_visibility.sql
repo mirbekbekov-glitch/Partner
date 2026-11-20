@@ -45,7 +45,15 @@ select test.eq(
 
 -- ---- 4в. Подбор и назначенный показ доступа НЕ дают ----------------------
 -- Это тонкое место: агент ведёт показ, но сделки нет — телефона он не получает.
-select * from create_match(:'obj3', :'req2') \gset cm_
+--
+-- Потребность Чынгыз заводит себе сам: по инварианту 20 подбор ведёт агент
+-- потребности, и раньше этот тест пользовался чужой — ровно той дырой,
+-- которую инвариант 20 закрыл.
+select id as own_req from create_requirement(
+  'sale', p_client_name => 'Клиент Чынгыза', p_client_phone => '0700 31 31 31',
+  p_budget_min => 50000, p_budget_max => 250000) \gset
+
+select * from create_match(:'obj3', :'own_req') \gset cm_
 update matches set status = 'showing_scheduled', showing_at = now() + interval '1 day'
  where id = :'cm_id';
 select test.eq(
@@ -94,9 +102,16 @@ reset role;
 
 -- ---- 4е. Админ видит всё -------------------------------------------------
 set request.jwt.claims = :'claims_admin';
+-- Сколько телефонов в базе, тест не знает и знать не должен: «все» — это
+-- правило, а «2» — снимок содержимого, который ломается от любого нового
+-- клиента в соседней проверке.
+set role postgres;
+select count(*)::bigint as all_phones from contact_phones \gset
+
 set role authenticated;
+set request.jwt.claims = :'claims_admin';
 select test.eq(
-  test.visible_count($$select 1 from contact_phones$$), 2::bigint,
+  test.visible_count($$select 1 from contact_phones$$), :'all_phones'::bigint,
   'админ видит все телефоны');
 reset role;
 

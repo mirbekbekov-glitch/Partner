@@ -177,3 +177,11 @@ export const PUBLICATION_LABEL: Record<string, string> = {
   withdrawn: "снят с каталога",
   archived: "в архиве",
 };
+
+/** Состояние показа словами. */
+export const SHOWING_LABEL: Record<string, string> = {
+  scheduled: "назначен",
+  done: "прошёл",
+  cancelled: "отменён",
+  no_show: "не состоялся",
+};

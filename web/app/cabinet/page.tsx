@@ -76,8 +76,10 @@ export default async function CabinetHome() {
         <Tile value={s.candidates_mine} one="объявление в работе"
               few="объявления в работе" many="объявлений в работе"
               href="/cabinet/candidates" />
+        <Tile value={s.requirements_mine} one="клиент в работе" few="клиента в работе"
+              many="клиентов в работе" href="/cabinet/requirements" />
         <Tile value={s.showings_upcoming} one="показ впереди" few="показа впереди"
-              many="показов впереди" href="/cabinet/objects" />
+              many="показов впереди" href="/cabinet/requirements" />
         {access.agent.is_admin && (
           <Tile
             value={s.agents_pending}
@@ -102,10 +104,10 @@ export default async function CabinetHome() {
       <section className="card">
         <h2>Чего в кабинете пока нет</h2>
         <p>
-          Загрузки фотографий, создания объекта и подбора по требованию. Это не
-          забытое — это следующий шаг: серверная часть подбора и показов готова
-          (<code>object_matches_v</code>, <code>create_match()</code>,{" "}
-          <code>schedule_showing()</code>), а экранов к ней ещё нет.
+          Сделки: её можно создать из подбора (<code>create_deal_from_match()</code>)
+          и закрыть (<code>close_deal()</code>), но экрана для этого ещё нет.
+          Остальной путь — обращение, клиент, объект, подбор, показ — кабинет
+          проходит целиком.
         </p>
       </section>
     </div>
