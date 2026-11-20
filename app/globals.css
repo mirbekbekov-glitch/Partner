@@ -272,3 +272,56 @@ textarea {
 
 .act-body { margin: 6px 0 0; white-space: pre-wrap; }
 .act .actions { margin-top: 6px; }
+
+/* --- Публичный каталог --------------------------------------------------- */
+/* Открытая часть: ширина больше кабинетной, потому что здесь сетка карточек
+   с фотографиями, а не плотные строки данных. */
+.pub-top {
+  display: flex; align-items: center; gap: 16px;
+  padding-bottom: 12px; margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.pub-brand { font-weight: 600; text-decoration: none; margin-right: auto; }
+
+.pub-grid {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.pub-card {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  color: inherit; text-decoration: none; background: var(--panel);
+}
+.pub-card:hover { border-color: var(--accent); }
+.pub-photo {
+  aspect-ratio: 4 / 3; background: var(--hidden-bg);
+  display: flex; align-items: center; justify-content: center;
+}
+.pub-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pub-body { display: flex; flex-direction: column; gap: 4px; padding: 12px; }
+.pub-price { font-size: 1.1rem; }
+.pub-addr { font-weight: 500; }
+
+.pub-price-big { font-size: 1.6rem; font-weight: 600; margin: 4px 0 16px; }
+.pub-gallery {
+  display: grid; gap: 8px; margin-bottom: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.pub-gallery img {
+  width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
+  border-radius: 8px; display: block; background: var(--hidden-bg);
+}
+.pub-desc { white-space: pre-wrap; margin-top: 16px; }
+
+@media (max-width: 480px) {
+  .pub-grid { grid-template-columns: 1fr; }
+}
+
+/* Место фотографии, когда ссылка не открылась: тот же размер, что у снимка,
+   иначе галерея схлопывается и верстка прыгает. */
+.pub-nophoto {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--hidden-bg); border-radius: 8px;
+}
+.pub-gallery .pub-nophoto { width: 100%; aspect-ratio: 4 / 3; }
+.pub-photo .pub-nophoto { width: 100%; height: 100%; border-radius: 0; }

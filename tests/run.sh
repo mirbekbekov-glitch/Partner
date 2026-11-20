@@ -86,6 +86,15 @@ else
 fi
 say ""
 
+say "── публичная часть читает только витрину"
+if DB="$TPL" "$ROOT/tests/check-public.sh" >/tmp/pub.log 2>&1; then
+  sed 's/^/ /' /tmp/pub.log; say "   ПРОЙДЕНА"; pass=$((pass+1))
+else
+  sed 's/^/   /' /tmp/pub.log; say "   ПРОВАЛЕНА"
+  fail=$((fail+1)); failed_names+=("check-public")
+fi
+say ""
+
 say "── сверка вызовов rpc() со схемой"
 if DB="$TPL" "$ROOT/tests/check-rpc.sh" >/tmp/rpc.log 2>&1; then
   say "   ПРОЙДЕНА"; pass=$((pass+1))

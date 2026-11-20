@@ -6,8 +6,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    // Всё, кроме статики и картинок.
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  // Перечислением, а не «всё кроме статики»: обновление сессии ходит в
+  // Supabase на каждом запросе, и на публичном каталоге это был бы лишний
+  // сетевой вызов на каждый просмотр страницы анонимом. Токен агента
+  // обновится, как только он откроет кабинет.
+  matcher: ['/cabinet/:path*', '/login', '/auth/:path*'],
 };

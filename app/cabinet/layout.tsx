@@ -15,6 +15,10 @@ import { ProfileForm } from './profile/ProfileForm';
  * неодобренный агент не видел даже себя, и «строки нет» было не отличить
  * от «ждёт одобрения» — оба случая получали один экран.
  */
+// Кабинет из поиска закрыт. Раньше это делал общий noindex в корневом
+// макете, но он закрывал заодно и публичный каталог.
+export const metadata = { robots: { index: false, follow: false } };
+
 export default async function CabinetLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

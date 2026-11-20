@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { safeNext } from '@/lib/next-param';
 import { LoginForm } from './LoginForm';
 
-export const metadata = { title: 'Вход в кабинет' };
+export const metadata = { title: 'Вход в кабинет', robots: { index: false, follow: false } };
 
 export default async function LoginPage({
   searchParams,
