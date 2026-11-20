@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { MATCH_STATUS_RU, type RequirementMatch } from '@/lib/types';
+import type { RequirementMatch } from '@/lib/types';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
 import { StartDealButton } from '../../deals/StartDealButton';
+import { MatchStatus } from '../../MatchStatus';
 
 const money = (v: number | null, c = 'USD') =>
   v == null ? '—' : `${new Intl.NumberFormat('ru-RU').format(v)} ${c}`;
@@ -97,7 +98,14 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
         rows.map((m) => (
           <div className="card" key={m.match_id}>
             <div className="row">
-              <span className="tag">{MATCH_STATUS_RU[m.match_status]}</span>
+              <MatchStatus
+                matchId={m.match_id}
+                status={m.match_status}
+                showingAt={m.showing_at}
+                rejectionReason={m.rejection_reason}
+                canLead={m.can_lead}
+                hasDeal={Boolean(m.deal_id)}
+              />
               <strong>{m.address}</strong>
               <span>{money(m.price, m.currency)}</span>
               {m.rooms ? <span>{m.rooms} комн.</span> : null}

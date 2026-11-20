@@ -57,7 +57,7 @@ select test.eq(test.visible_count(format($$
          rejection_reason, address, zone, rooms, area, floor, price, currency,
          publication_state, actual_at, mandate_id, contract_confirmed,
          listing_agent_name, owner_name, commission_total, listing_share,
-         closing_share, deal_id, deal_status, created_at
+         closing_share, deal_id, deal_status, created_at, can_lead
     from requirement_matches_v where requirement_id = %L$$, :'req1')),
   1::bigint, 'карточка потребности: список колонок requirement_matches_v существует');
 

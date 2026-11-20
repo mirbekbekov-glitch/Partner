@@ -31,6 +31,7 @@ export type ObjectMatch = {
   closing_share: number | null;
   deal_id: string | null;
   deal_status: string | null;
+  can_lead: boolean;   // право вести подбор считает база, не страница
 };
 
 export type RequirementMatch = {
@@ -58,6 +59,7 @@ export type RequirementMatch = {
   closing_share: number | null;
   deal_id: string | null;
   deal_status: string | null;
+  can_lead: boolean;   // право вести подбор считает база, не страница
 };
 
 export const MATCH_STATUS_RU: Record<MatchStatus, string> = {

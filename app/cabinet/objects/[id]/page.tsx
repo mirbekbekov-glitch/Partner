@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { MATCH_STATUS_RU, type ObjectMatch } from '@/lib/types';
+import type { ObjectMatch } from '@/lib/types';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
 import { ObjectActions } from '../ObjectActions';
 import { StartDealButton } from '../../deals/StartDealButton';
+import { MatchStatus } from '../../MatchStatus';
 
 const money = (v: number | null, c = 'USD') =>
   v == null ? '—' : `${new Intl.NumberFormat('ru-RU').format(v)} ${c}`;
@@ -126,7 +127,14 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
         rows.map((m) => (
           <div className="card" key={m.match_id}>
             <div className="row">
-              <span className="tag">{MATCH_STATUS_RU[m.match_status]}</span>
+              <MatchStatus
+                matchId={m.match_id}
+                status={m.match_status}
+                showingAt={m.showing_at}
+                rejectionReason={m.rejection_reason}
+                canLead={m.can_lead}
+                hasDeal={Boolean(m.deal_id)}
+              />
               <ContactCell name={m.client_name} />
               <span className="key">бюджет</span>
               <span>
