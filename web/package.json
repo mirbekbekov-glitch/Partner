@@ -21,6 +21,7 @@
     "walk:showings": "node scripts/walk-showings.mjs",
     "walk:calendar": "node scripts/walk-calendar.mjs",
     "walk:notifications": "node scripts/walk-notifications.mjs",
+    "demo": "node scripts/demo-shots.mjs",
     "notify": "node --experimental-strip-types --no-warnings scripts/send-notifications.mjs"
   },
   "dependencies": {
