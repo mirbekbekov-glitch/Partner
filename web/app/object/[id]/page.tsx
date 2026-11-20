@@ -70,6 +70,25 @@ export default async function ObjectPage({ params }: Props) {
             {DEAL_LABEL[object.deal_type]}
             {object.zone ? ` · ${object.zone}` : ""}
           </p>
+          {object.photos.length > 0 ? (
+            <div
+              className={`gallery${object.photos.length === 1 ? " gallery-one" : ""}`}
+            >
+              {object.photos.map((key, i) => (
+                <img
+                  key={key}
+                  src={`/photo/${key}`}
+                  alt={`${KIND_LABEL[object.kind]}, ${object.address}, фото ${i + 1}`}
+                  loading={i === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="gallery-empty">
+              Фотографий пока нет. Агент добавит их после съёмки объекта.
+            </div>
+          )}
           {object.description && <p className="descr">{object.description}</p>}
         </div>
 

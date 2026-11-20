@@ -17,8 +17,21 @@ export function ObjectCard({ item }: { item: CatalogObject }) {
     formatFloor(item.floor, item.floors_total),
   ].filter((x): x is string => x !== null);
 
+  const cover = item.photos[0];
+
   return (
     <a className="card" href={`/object/${item.id}`}>
+      {cover ? (
+        <img
+          className="cover"
+          src={`/photo/${cover}`}
+          alt={`${KIND_LABEL[item.kind]}, ${item.address}`}
+          loading="lazy"
+          decoding="async"
+        />
+      ) : (
+        <span className="cover cover-empty">Фотографий пока нет</span>
+      )}
       <span className="tag">
         {KIND_LABEL[item.kind]} · {DEAL_LABEL[item.deal_type]}
         {item.zone ? ` · ${item.zone}` : ""}

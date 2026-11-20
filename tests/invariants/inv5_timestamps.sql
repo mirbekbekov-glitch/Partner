@@ -50,9 +50,15 @@ select test.eq(
   'published_at при правке цены не затронут');
 
 -- ---- 5д. Правка фото поднимает actual_at ---------------------------------
+-- С 0014 фотографии живут в своей таблице, и актуальность поднимает триггер
+-- на ней. Проверяется то же самое утверждение инварианта 5, но по новому пути:
+-- иначе замена фотографий молча перестала бы считаться правкой объекта.
 select actual_at as act1 from objects where id = :'obj1' \gset
 select pg_sleep(0.05);
-update objects set photos = '[{"url":"a.jpg"}]'::jsonb where id = :'obj1';
+insert into object_photos (object_id, storage_key, content_type, uploaded_by_agent_id)
+values (:'obj1',
+        'objects/00000000-0000-0000-0000-0000000b0001/00000000000000000000000000000f05.jpg',
+        'image/jpeg', :'agent_aibek');
 select test.ok(
   (select actual_at > :'act1'::timestamptz from objects where id = :'obj1'),
   'правка фото обновила actual_at');
