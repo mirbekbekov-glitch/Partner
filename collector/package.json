@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Сборщик объявлений с площадок в пул кандидатов",
   "scripts": {
+    "check": "node check-adapter.mjs",
+    "collect": "node collect.mjs --limit 10",
     "run:fixture": "node run.mjs fixtures/example.json"
   },
   "dependencies": {

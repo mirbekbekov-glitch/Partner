@@ -1,0 +1,57 @@
+<!doctype html>
+<!--
+  Образец страницы объявления house.kg для проверки разбора.
+
+  Структура настоящая: тег title в том же виде, блок schema.org/RealEstateListing
+  с теми же полями, бейдж автора тем же текстом. Содержимое выдуманное —
+  чужое объявление и телефон живого человека в репозитории хранить незачем.
+-->
+<html lang="ru">
+<head>
+<title>Продажа 3-комн. квартира: город Бишкек, 7 м-н — за 17 432 400 ⃀ — MHouse (house.kg)</title>
+<meta property="og:title" content="Продажа 3-комн. квартира: город Бишкек, 7 м-н — за 17 432 400 ⃀ — MHouse (house.kg)"/>
+<script type="application/ld+json">[{"@context":"https://schema.org","@type":"Organization","name":"MHouse","url":"https://www.house.kg"}]</script>
+<script type="application/ld+json">{
+  "@context":"https://schema.org",
+  "@type":"RealEstateListing",
+  "name":"3-комн. кв., 80 м², 9 этаж из 10",
+  "description":"Образец описания для проверки разбора. Квартира с ремонтом, встроенная кухня, парковка во дворе.\n\nОтветственный: Образец\nНомер ответственного:996 558 619 615",
+  "url":"https://www.house.kg/details/00000000aaaa0000bbbb0-12345678",
+  "image":[
+    "https://cdn.house.kg/house/images/0/0/1/img1_1200x900.jpg",
+    "https://cdn.house.kg/house/images/0/0/2/img2_1200x900.jpg",
+    "https://cdn.house.kg/house/images/0/0/3/img3_1200x900.jpg",
+    "https://cdn.house.kg/house/images/0/0/4/img4_1200x900.jpg",
+    "https://cdn.house.kg/house/images/0/0/5/img5_1200x900.jpg",
+    "https://cdn.house.kg/house/images/0/0/6/img6_1200x900.jpg",
+    "https://cdn.house.kg/house/images/0/0/7/img7_1200x900.jpg",
+    "https://cdn.house.kg/house/images/0/0/8/img8_1200x900.jpg"
+  ],
+  "datePosted":"2026-11-11T16:32:10",
+  "about":{
+    "@type":"Apartment",
+    "numberOfRooms":3,
+    "floorSize":{"@type":"QuantitativeValue","value":80,"unitCode":"MTK"},
+    "floorLevel":9,
+    "address":{"@type":"PostalAddress","addressLocality":"Бишкек","addressCountry":"KG"},
+    "geo":{"@type":"GeoCoordinates","latitude":42.8281,"longitude":74.6185}
+  },
+  "offers":{
+    "@type":"Offer",
+    "url":"https://www.house.kg/details/00000000aaaa0000bbbb0-12345678",
+    "price":17432400,
+    "priceCurrency":"KGS",
+    "availability":"https://schema.org/InStock"
+  }
+}</script>
+</head>
+<body>
+<h1>3-комн. кв., 80 м², 9 этаж из 10</h1>
+<div class="flex items-center gap-1 whitespace-nowrap">
+  <span class="text-house-text-primary-text flex items-center gap-1 rounded px-1.5 py-[3px] text-xs bg-house-semantic-orange">
+    <span class="truncate">Собственник</span>
+  </span>
+</div>
+<button type="button">показать телефон</button>
+</body>
+</html>
