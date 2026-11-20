@@ -9,10 +9,13 @@
 
 create schema if not exists auth;
 
+-- nullif(..., '') стоит ДО каста в jsonb, как в настоящем Supabase:
+-- иначе `set request.jwt.claims = ''` падает на ''::jsonb, и тест «нет
+-- сессии» невозможно выразить.
 create or replace function auth.uid() returns uuid
   language sql stable as $$
   select nullif(
-    current_setting('request.jwt.claims', true)::jsonb ->> 'sub',
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub',
     ''
   )::uuid
 $$;
@@ -20,7 +23,7 @@ $$;
 create or replace function auth.role() returns text
   language sql stable as $$
   select coalesce(
-    current_setting('request.jwt.claims', true)::jsonb ->> 'role',
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role',
     'anon'
   )
 $$;

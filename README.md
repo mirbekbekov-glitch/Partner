@@ -26,6 +26,7 @@ supabase/migrations/     миграции, применяются по поря�
   0007_api.sql             слой доступа: функции кабинета
   0008_cabinet_views.sql   данные для минимального UI
   0009_schedule.sql        расписание app.expire_mandates() через pg_cron
+  0010_optional_telegram.sql  telegram_id необязателен, якорь инв. 6 — auth_user_id
 
 db/local_supabase_stub.sql  схема auth для локального Postgres. НЕ миграция.
 db/rebuild.sh               пересобрать локальную базу с нуля
@@ -82,7 +83,7 @@ PGDATA=/var/lib/postgresql/partner-test
 | 3 | Комиссия 50/50; продажа 2%, аренда 50% первого месяца; до закрытия индикативно | `app.commission_total()`, `app.commission_shares()`, `deal_commission_v`, `match_commission_v` | `inv3_commission` |
 | 4 | Телефон виден owner_agent, агентам активной сделки, админу | `app.can_see_contact()` + политики на `contacts`, `contact_phones`, `object_ownerships` | `inv4_phone_visibility`, `inv4b_cabinet_views`, `inv4c_page_queries` |
 | 5 | Правка цены/фото/подтверждение обновляет `actual_at`; `published_at` не меняется никогда | `a_object_timestamps` + `app.confirm_actual()` | `inv5_timestamps` |
-| 6 | Один человек — один аккаунт по Telegram | `agents.telegram_id UNIQUE` + `app.login_by_telegram()` | `inv6_one_account` |
+| 6 | Один человек — один аккаунт; повторный вход не плодит дубликат и не теряет объекты | `agents.auth_user_id UNIQUE` + `agents_has_identity` CHECK + `app.ensure_agent()` | `inv6_one_account` |
 | 7 | Каждое изменение в журнале: кто, что, когда | `app.write_audit()` на всех 11 таблицах | `inv7_audit` |
 
 Тесты проверены мутациями: при снятом триггере публикации, при незакрывающемся
@@ -107,6 +108,28 @@ PGDATA=/var/lib/postgresql/partner-test
 **Активности видны автору и админу, а не всей команде.** Заметка «звонил,
 +996…» обошла бы инвариант 4, будь она открыта. Это строже задания; если
 команде нужна общая история, решение придётся ослаблять осознанно.
+
+**Вход через Telegram не делается, якорь инварианта 6 — `auth_user_id`.**
+Решено отдельно. Суть инварианта не изменилась: один человек — один аккаунт,
+повторный вход не создаёт дубликат и не теряет владение объектами. Изменилось
+то, чем он закреплён: вместо Telegram-идентичности это идентичность Supabase
+Auth, и вход идёт через `app.ensure_agent()` — upsert по `auth.uid()`.
+`telegram_id` стал необязательным, но остался уникальным: агентов без Telegram
+может быть сколько угодно (NULL уникальности не нарушает), а два аккаунта на
+один Telegram — по-прежнему нельзя.
+
+Авторизацию это не задело вовсе: `app.current_agent_id()` и `app.is_admin()`
+с самого начала опознают агента по `agents.auth_user_id = auth.uid()`, поэтому
+инвариант 4, гейт «CRM только одобренным» и все политики RLS работают как
+работали, с любым способом входа в Supabase Auth.
+
+Вместе с этим появилось ограничение `agents_has_identity`: у агента обязана
+быть хотя бы одна идентичность. Без него инвариант 6 получил бы дыру — строка
+без `auth_user_id` и без `telegram_id` ни с каким входом не сопоставляется, но
+владеть контактами и объектами может. Человек потом логинится, получает новую
+строку, а объекты остаются за мёртвой. Это ровно та потеря владения, которую
+инвариант 6 запрещает. Если вам нужно заводить агентов заранее, без всякой
+идентичности, это ограничение придётся снимать осознанно.
 
 **Перенос даёт мандат `active` + `contract_confirmed = false`**, а не
 отдельный статус «требует подтверждения». Согласовано отдельно: иначе
@@ -142,7 +165,8 @@ PGDATA=/var/lib/postgresql/partner-test
 
 | Функция | Назначение |
 |---|---|
-| `app.login_by_telegram(tg, name, auth_uid)` | вход; upsert по `telegram_id` (инвариант 6) |
+| `app.ensure_agent(name)` | вход; upsert по `auth.uid()` — основной путь (инвариант 6) |
+| `app.login_by_telegram(tg, name, auth_uid)` | вход, когда известен Telegram-id; upsert по `telegram_id` |
 | `publish_object(id)` / `withdraw_object(id)` | публикация и снятие |
 | `create_match(object_id, requirement_id)` | подбор; `closing_agent` = текущий агент |
 | `create_deal_from_match(match_id)` | сделка; принимает ТОЛЬКО `match_id` |
@@ -153,10 +177,14 @@ PGDATA=/var/lib/postgresql/partner-test
 
 ## Что НЕ сделано
 
-- **Вход агента не реализован.** Страницы кабинета рассчитывают на готовую
-  сессию Supabase. `app.login_by_telegram()` в базе есть и протестирована,
-  но связка «Telegram → Supabase Auth» (проверка подписи initData,
-  выпуск сессии) не писалась.
+- **Страниц входа нет.** Серверная часть готова и протестирована:
+  `app.ensure_agent()` создаёт или находит агента по сессии Supabase Auth,
+  повторный вход не плодит дубликат. Но сам способ входа (почта, OAuth,
+  magic link) не выбран и экрана логина нет — страницы кабинета рассчитывают
+  на готовую сессию. Вход через Telegram решено не делать.
+- **Одобрение агентов вручную.** Новый агент получает `status = 'pending'`
+  и CRM не видит — это проверено тестом. Экрана, где админ одобряет, нет:
+  пока только `update agents set status = 'approved'`.
 - **Страницы не проверены на живой Supabase.** Проверено: сборка, типы и то,
   что все запрашиваемые колонки существуют и отдаются под RLS
   (`inv4c_page_queries`). Запустить страницы против настоящего PostgREST

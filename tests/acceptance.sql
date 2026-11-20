@@ -157,6 +157,7 @@ reset role;
 -- не существовало. Проверяется то, что проверяемо: витрина открыта анониму,
 -- показывает только опубликованное и не выносит наружу ни комиссию, ни контакты.
 
+reset request.jwt.claims;
 set role anon;
 select test.ok(test.visible_count($$select 1 from public_catalog_v$$) > 0,
   'публичный каталог открыт анониму');

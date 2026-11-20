@@ -67,6 +67,7 @@ select test.eq(
 reset role;
 
 -- ---- Аноним к представлениям кабинета не допущен -------------------------
+reset request.jwt.claims;
 set role anon;
 select test.throws($$select 1 from object_matches_v$$, 'permission denied',
   'представления кабинета анониму недоступны');
