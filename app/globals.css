@@ -160,3 +160,10 @@ button.ghost {
 .actions form { margin: 0; }
 
 .inline-error { margin-left: 8px; font-size: 0.85rem; }
+
+/* Формы в столбик: профиль */
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field input { max-width: 340px; }
+.field .key { margin: 0; }
+.field p { margin: 0; }

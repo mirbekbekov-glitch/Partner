@@ -104,17 +104,25 @@ reset role;
 set request.jwt.claims = :'claims_aibek';
 set role authenticated;
 select test.eq(test.visible_count(format($$
-  select id, full_name, email, role, status from agents where auth_user_id = %L$$,
+  select id, full_name, phone, email, role, status from agents where auth_user_id = %L$$,
   '00000000-0000-0000-0000-0000000000b1')),
-  1::bigint, 'гейт кабинета: запрос своей строки агента работает');
+  1::bigint, 'гейт кабинета: список колонок своей строки существует');
 reset role;
 
--- Неодобренный агент получает здесь ноль строк — layout покажет ему экран
--- ожидания. Это ровно тот путь, на который страница и рассчитана.
+-- Неодобренный агент теперь свою строку ВИДИТ (политика agents_read_self,
+-- 0013), поэтому layout различает «ждёт одобрения» и «строки нет» и
+-- показывает разные экраны.
 set request.jwt.claims = :'claims_pending';
 set role authenticated;
 select test.eq(test.visible_count(format($$
-  select id, full_name, email, role, status from agents where auth_user_id = %L$$,
+  select id, full_name, phone, email, role, status from agents where auth_user_id = %L$$,
   '00000000-0000-0000-0000-0000000000b4')),
-  0::bigint, 'гейт кабинета: неодобренный агент своей строки не видит → экран ожидания');
+  1::bigint, 'гейт кабинета: неодобренный агент свою строку видит → экран ожидания с формой имени');
+
+-- ---- app/cabinet/profile/page.tsx ----------------------------------------
+select test.eq(test.visible_count(format($$
+  select full_name, phone, email, role, status, telegram_id, created_at
+    from agents where auth_user_id = %L$$,
+  '00000000-0000-0000-0000-0000000000b4')),
+  1::bigint, 'профиль: список колонок существует и доступен неодобренному');
 reset role;
