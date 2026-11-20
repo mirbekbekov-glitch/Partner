@@ -67,21 +67,27 @@ else
   echo "  db/bundle.sql в SQL Editor панели"
 fi
 
-# --- 2 и 3. настройки входа ------------------------------------------------
-# Шаблон обязан вести на /auth/confirm с token_hash: именно этого ждёт
-# маршрут app/auth/confirm/route.ts.
-TEMPLATE='<h2>Вход в кабинет</h2><p><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email">Войти</a></p><p>Ссылка одноразовая и действует ограниченное время. Если вы её не запрашивали, просто не переходите по ней.</p>'
+# --- 2. настройки входа ----------------------------------------------------
+# Шаблон письма НЕ трогаем: на бесплатном тарифе со стандартным отправителем
+# Supabase отвечает на это 400 с entitlement_required, и тогда отклоняется
+# ВЕСЬ запрос — вместе с Redirect URLs. Штатному входу шаблон и не нужен:
+# родное письмо ведёт на /auth/v1/verify, а тот присылает браузер на
+# /auth/callback с ?code= (поток PKCE). Маршрут /auth/confirm с token_hash
+# остаётся для своего шаблона, если он когда-нибудь станет доступен.
 
-echo "— настраиваю Auth: Redirect URLs и шаблон письма"
-BODY=$(python3 - "$SITE" "$TEMPLATE" <<'PY'
+echo "— настраиваю Auth: Redirect URLs"
+BODY=$(python3 - "$SITE" <<'PY'
 import json, sys
-site, template = sys.argv[1], sys.argv[2]
+site = sys.argv[1]
 print(json.dumps({
     "site_url": site,
-    # Оба адреса: разработка и продакшен добавляются одинаково.
-    "uri_allow_list": ",".join([f"{site}/auth/confirm", f"{site}/**"]),
+    # Оба маршрута приёма ссылки и адрес продакшена.
+    "uri_allow_list": ",".join([
+        f"{site}/auth/callback",
+        f"{site}/auth/confirm",
+        f"{site}/**",
+    ]),
     "mailer_otp_exp": 3600,
-    "mailer_templates_magic_link_content": template,
 }, ensure_ascii=False))
 PY
 )
@@ -94,11 +100,14 @@ echo "— проверяю, что применилось"
 api GET "/v1/projects/$REF/config/auth" | python3 -c '
 import json,sys
 c = json.load(sys.stdin)
+allow = c.get("uri_allow_list") or ""
 tpl = c.get("mailer_templates_magic_link_content") or ""
 print("  site_url:        ", c.get("site_url"))
-print("  uri_allow_list:  ", c.get("uri_allow_list"))
-print("  шаблон с TokenHash:", "да" if "TokenHash" in tpl else "НЕТ — вход не заработает")
-print("  шаблон на /auth/confirm:", "да" if "/auth/confirm" in tpl else "НЕТ — вход не заработает")
+print("  uri_allow_list:  ", allow)
+print("  /auth/callback разрешён:", "да" if "/auth/callback" in allow else "НЕТ — вход не заработает")
+# Про шаблон — только справка: он нужен лишь маршруту /auth/confirm.
+print("  шаблон письма:   ", "свой, с TokenHash → работает и /auth/confirm"
+      if "TokenHash" in tpl else "родной Supabase → вход идёт через /auth/callback")
 '
 
 echo ""

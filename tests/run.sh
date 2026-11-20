@@ -28,7 +28,17 @@ say ""
 pass=0; fail=0; failed_names=()
 shopt -s nullglob
 files=("$ROOT"/tests/invariants/*.sql "$ROOT"/tests/acceptance*.sql)
-[ "$#" -gt 0 ] && files=("$@")
+# Аргументом можно дать и путь, и короткое имя теста.
+if [ "$#" -gt 0 ]; then
+  files=()
+  for a in "$@"; do
+    if [ -f "$a" ]; then files+=("$a")
+    elif [ -f "$ROOT/tests/invariants/$a.sql" ]; then files+=("$ROOT/tests/invariants/$a.sql")
+    elif [ -f "$ROOT/tests/$a.sql" ]; then files+=("$ROOT/tests/$a.sql")
+    else say "нет такого теста: $a"; exit 2
+    fi
+  done
+fi
 
 for f in "${files[@]}"; do
   name="$(basename "$f" .sql)"
@@ -44,7 +54,11 @@ for f in "${files[@]}"; do
   if [ $rc -eq 0 ]; then
     say "   ПРОЙДЕН"; pass=$((pass+1))
   else
-    printf '%s\n' "$out" | grep -E 'ERROR:' | sed 's/^.*ERROR:/   ERROR:/'
+    # Ловим и 'ERROR:' от сервера, и 'psql: error:' в нижнем регистре: без
+    # второго тест, упавший до первого запроса (нет файла, нет базы), падал
+    # молча — ровно так и терялась причина.
+    printf '%s\n' "$out" | grep -E 'ERROR:|psql: error:|DETAIL:' | sed 's/^.*\(ERROR:\|error:\|DETAIL:\)/   \1/' | head -6
+    [ -z "$out" ] && say "   (psql не выдал ничего; проверьте путь к файлу теста)"
     say "   ПРОВАЛЕН"; fail=$((fail+1)); failed_names+=("$name")
   fi
   psql -q -d postgres -c "drop database if exists ${db} with (force)" >/dev/null 2>&1

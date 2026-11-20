@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { safeNext } from '@/lib/next-param';
 import { LoginForm } from './LoginForm';
 
 export const metadata = { title: 'Вход в кабинет' };
@@ -13,19 +14,20 @@ export default async function LoginPage({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Уже вошёл — незачем показывать форму.
-  if (user) redirect(next ?? '/cabinet');
+  // Уже вошёл — незачем показывать форму. Но если вход принёс ошибку, её
+  // надо показать: иначе причина теряется. Так и случилось на живом проекте —
+  // /auth/confirm отправлял сюда понятный текст про занятую почту, а эта
+  // строка молча уводила в кабинет, и человек видел лишь «аккаунт не найден».
+  if (user && !error) redirect(next ?? '/cabinet');
 
-  // next берём только как относительный путь: иначе ссылка вида
-  // /login?next=https://… увела бы человека на чужой сайт после входа.
-  const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/cabinet';
+  const target = safeNext(next);
 
   return (
     <>
       <h1>Вход в кабинет</h1>
       <p className="sub">Кабинет агента открывается после одобрения администратором.</p>
       {error ? <p className="error">{decodeURIComponent(error)}</p> : null}
-      <LoginForm next={safeNext} />
+      <LoginForm next={target} />
     </>
   );
 }

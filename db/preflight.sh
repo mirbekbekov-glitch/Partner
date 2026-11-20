@@ -40,6 +40,11 @@ create or replace function auth.uid() returns uuid language sql stable as $$
 create or replace function auth.jwt() returns jsonb language sql stable as $$
   select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb) $$;
 grant usage on schema auth to anon, authenticated, service_role;
+-- Право на ССЫЛКУ, а не на чтение. С 0027 agents.auth_user_id ссылается на
+-- auth.users; это штатный приём Supabase, где миграции идут под postgres.
+-- Выдаём его отдельной строкой, чтобы требование было видно и проверялось,
+-- а не подразумевалось. Чтение auth.users ниже всё так же отзывается.
+grant references on auth.users to sb_owner;
 grant anon, authenticated, service_role to sb_owner;
 create extension if not exists pgcrypto;
 SQL
@@ -81,6 +86,14 @@ echo "$out" | grep -v '^ *$' | sed 's/^ */  /'
 
 # Ключевая проверка: вход не должен зависеть от чтения auth.users. Отзываем
 # права начисто и логинимся снова — почта обязана прийти из токена.
+#
+# Пользователя заводит суперпользователь, как это делает сам Supabase: сессии
+# без строки в auth.users там не бывает, а с 0027 на неё ещё и ссылается
+# agents.auth_user_id. Проверка при этом остаётся той же — права на ЧТЕНИЕ
+# отозваны, и почта обязана прийти из токена. Ссылка работает и без прав:
+# целостность проверяет сервер, а не вызывающая роль.
+psql -q -d "$DB" -c "insert into auth.users (id, email)
+  values ('22222222-2222-2222-2222-222222222222', 'nouser@partner.kg')" >/dev/null
 psql -q -d "$DB" -c "revoke all on auth.users from sb_owner, authenticated, anon" >/dev/null 2>&1
 out2="$(psql -X -q -t -U sb_owner -d "$DB" 2>&1 <<'SQL'
 set request.jwt.claims = '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated","email":"nouser@partner.kg"}';

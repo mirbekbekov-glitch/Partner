@@ -57,7 +57,8 @@ tests/check-service-key.sh  service_role только в app/api
 docs/ACCESS-AUDIT.md        сквозной разбор слоя доступа на обход
 
 app/login/                    вход по ссылке на почту
-app/auth/confirm/route.ts     приём ссылки из письма + ensure_agent()
+app/auth/callback/route.ts    приём ссылки из письма (?code=) + ensure_agent()
+app/auth/confirm/route.ts     то же для token_hash: нужен свой шаблон письма
 middleware.ts                 обновление сессии, гейт /cabinet
 lib/list-params.ts            разбор фильтров из строки запроса
 app/cabinet/
@@ -134,8 +135,9 @@ SUPABASE_ACCESS_TOKEN=... SUPABASE_PROJECT_REF=... SUPABASE_DB_URL=... \
   SITE_URL=http://localhost:3000 ./db/deploy.sh
 ```
 
-Скрипт применяет миграции и сам прописывает обе настройки Auth через
-Management API — включая шаблон письма. Список проектов аккаунта:
+Скрипт применяет миграции и сам прописывает Redirect URLs через
+Management API. Шаблон письма он не трогает: на бесплатном тарифе это
+запрещено, а штатному входу шаблон и не нужен — см. ниже. Список проектов:
 `./db/deploy.sh --list`.
 
 Где взять: токен — `supabase.com/dashboard/account/tokens`, строка
@@ -143,23 +145,43 @@ Management API — включая шаблон письма. Список про
 Project Settings → API.
 
 **Без доступов** то же самое делается руками: вставить `db/bundle.sql`
-(26 миграций одним файлом, 210 КиБ) в SQL Editor панели, затем сделать две
+(все миграции одним файлом) в SQL Editor панели, затем сделать две
 настройки ниже.
 
-### Обязательная настройка Supabase для входа
+### Настройка Supabase для входа
 
-Вход сделан по ссылке на почту через `/auth/confirm`, и **без двух настроек
-в панели Supabase он не заработает**:
+Вход сделан по ссылке на почту. Нужна **одна** настройка в панели:
 
-1. **Authentication → URL Configuration → Redirect URLs** — добавить
-   `http://localhost:3000/auth/confirm` и адрес продакшена.
-2. **Authentication → Email Templates → Magic Link** — заменить тело на
-   ссылку с `TokenHash`, иначе Supabase пришлёт ссылку на свой
-   `/verify`, а наш маршрут её не получит:
+**Authentication → URL Configuration → Redirect URLs** — добавить
+`http://localhost:3000/auth/callback` и адрес продакшена.
+
+Больше ничего делать не надо: письмо идёт родным шаблоном Supabase.
+Его ссылка ведёт на `/auth/v1/verify` самой Supabase, та проверяет токен и
+отправляет браузер на наш `/auth/callback` с `?code=`, который обменивается
+на сессию (поток PKCE, `@supabase/ssr`). Ссылку надо открывать в том же
+браузере, откуда её запросили: `code_verifier` лежит в его cookie.
+
+Второй маршрут, `/auth/confirm`, ждёт `token_hash` и работает только с
+переписанным шаблоном письма:
 
 ```html
 <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email">Войти в кабинет</a>
 ```
+
+**Шаблоны писем — платная возможность.** На бесплатном тарифе со стандартным
+отправителем Supabase отвечает на попытку их изменить:
+
+> Email template modification is not available for free tier projects using
+> the default email provider.
+
+Поэтому рабочий путь по умолчанию — `/auth/callback`, которому шаблон не
+нужен вовсе. `/auth/confirm` оставлен: он удобен для проверки входа без
+письма (ссылку выдаёт `POST /auth/v1/admin/generate_link`) и пригодится,
+если шаблон однажды станет доступен.
+
+Ещё одно ограничение бесплатного тарифа: стандартный отправитель писем
+сильно ограничен по частоте. Для настоящей работы нужен свой SMTP — он же
+снимает запрет на шаблоны.
 
 ### Напоминания о задачах
 

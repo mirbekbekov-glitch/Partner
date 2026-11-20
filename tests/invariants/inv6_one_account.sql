@@ -8,6 +8,16 @@
 
 select count(*) as n0 from agents \gset
 
+-- Пользователи Supabase. С 0027 agents.auth_user_id ссылается на auth.users,
+-- поэтому строка агента без пользователя невозможна — как и на живом проекте.
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-00000000bb01', 'bb01@partner.kg'),
+  ('00000000-0000-0000-0000-00000000bb02', 'bb02@partner.kg'),
+  ('00000000-0000-0000-0000-00000000bb03', 'bb03@partner.kg'),
+  ('00000000-0000-0000-0000-00000000bb04', 'bb04@partner.kg'),
+  ('00000000-0000-0000-0000-00000000bb05', 'bb05@partner.kg'),
+  ('00000000-0000-0000-0000-00000000bb06', 'bb06@partner.kg');
+
 \set uid_new  '00000000-0000-0000-0000-00000000bb01'
 \set claims_new '{"sub":"00000000-0000-0000-0000-00000000bb01","role":"authenticated"}'
 
@@ -110,8 +120,12 @@ select test.throws(
   'agents_has_identity',
   'аккаунт без auth_user_id и без telegram_id отклонён');
 
+-- Отобрать ВСЕ признаки сразу нельзя. С 0027 почта тоже считается
+-- идентичностью, поэтому обнуляем и её: иначе проверка пропустила бы строку,
+-- в которую человек ещё может вернуться по письму.
 select test.throws(
-  format($$update agents set auth_user_id = null where id = %L$$, :'a1_id'),
+  format($$update agents set auth_user_id = null, telegram_id = null, email = null
+            where id = %L$$, :'a1_id'),
   'agents_has_identity',
   'последнюю идентичность у агента отобрать нельзя');
 

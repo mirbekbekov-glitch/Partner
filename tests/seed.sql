@@ -3,6 +3,15 @@
 -- плюс агент, не причастный к сделке, для инварианта 4.
 -- Выполняется владельцем таблиц, поэтому RLS здесь не мешает.
 
+-- Пользователи Supabase Auth. Заводятся ПЕРВЫМИ: с 0027 agents.auth_user_id
+-- ссылается на auth.users, и агента без пользователя завести нельзя.
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000000a0', 'admin@partner.kg'),
+  ('00000000-0000-0000-0000-0000000000b1', 'aibek@partner.kg'),
+  ('00000000-0000-0000-0000-0000000000b2', 'bakyt@partner.kg'),
+  ('00000000-0000-0000-0000-0000000000b3', 'chyngyz@partner.kg'),
+  ('00000000-0000-0000-0000-0000000000b4', 'pending@partner.kg');
+
 -- Агенты. auth_user_id фиксированы, чтобы тесты могли входить от их имени.
 insert into agents (id, telegram_id, auth_user_id, full_name, role, status) values
   ('00000000-0000-0000-0000-00000000ad01', 1000, '00000000-0000-0000-0000-0000000000a0', 'Админ',   'admin', 'approved'),
@@ -59,12 +68,5 @@ insert into requirements (id, contact_id, deal_type, budget_min, budget_max, zon
 
 -- Пользователи Supabase Auth для агентов выше. Нужны, потому что
 -- app.ensure_agent() берёт почту из auth.users.
-insert into auth.users (id, email) values
-  ('00000000-0000-0000-0000-0000000000a0', 'admin@partner.kg'),
-  ('00000000-0000-0000-0000-0000000000b1', 'aibek@partner.kg'),
-  ('00000000-0000-0000-0000-0000000000b2', 'bakyt@partner.kg'),
-  ('00000000-0000-0000-0000-0000000000b3', 'chyngyz@partner.kg'),
-  ('00000000-0000-0000-0000-0000000000b4', 'pending@partner.kg');
-
 update agents a set email = u.email
   from auth.users u where u.id = a.auth_user_id;
