@@ -860,3 +860,81 @@ export async function showings(): Promise<Showing[]> {
     return rows;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Календарь показов
+// ---------------------------------------------------------------------------
+
+export type Week = {
+  /** Понедельник недели, YYYY-MM-DD. Строкой из базы, а не объектом Date:
+      драйвер отдаёт date как полночь в поясе процесса, и один шаг форматирования
+      не в том поясе сдвинул бы всю неделю на день. */
+  monday: string;
+  /** Часы сетки берутся из базы: правило инварианта 26 и экран — одно число. */
+  opens: string;
+  closes: string;
+  showings: Showing[];
+  /** id показов, у которых в тот же час у объекта есть чужой показ. */
+  clashes: Record<string, string>;
+  /** Сколько дверей, а не показов: пара считается один раз. */
+  clashPairs: number;
+};
+
+/**
+ * Неделя показов.
+ *
+ * Неделя считается в базе, а не в Node: граница недели это граница суток по
+ * Бишкеку, и вычислять её дважды разными способами значит однажды разойтись.
+ */
+export async function week(anchor?: string): Promise<Week | null> {
+  const session = await readSession();
+  if (!session) return null;
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows: frame } = await db.query<{
+      monday: string;
+      opens: string;
+      closes: string;
+    }>(
+      `select date_trunc('week',
+                coalesce($1::date, (now() at time zone 'Asia/Bishkek')::date))::date::text as monday,
+              app.showing_opens()::text  as opens,
+              app.showing_closes()::text as closes`,
+      [anchor ?? null],
+    );
+    if (frame.length === 0) return null;
+    const monday = frame[0].monday;
+
+    const [showings, clashes] = await Promise.all([
+      db.query<Showing>(
+        `select * from my_showings_v
+          where scheduled_at >= $1::date
+            and scheduled_at <  $1::date + 7
+          order by scheduled_at`,
+        [monday],
+      ),
+      db.query<{ id: string; other_id: string; other_agent_name: string | null }>(
+        `select distinct c.id, c.other_id, c.other_agent_name
+           from showing_clashes_v c
+          where c.scheduled_at >= $1::date
+            and c.scheduled_at <  $1::date + 7`,
+        [monday],
+      ),
+    ]);
+
+    return {
+      monday,
+      opens: frame[0].opens,
+      closes: frame[0].closes,
+      showings: showings.rows,
+      clashes: Object.fromEntries(
+        clashes.rows.map((r) => [r.id, r.other_agent_name ?? "другой агент"]),
+      ),
+      // Представление симметрично: одна дверь даёт две строки. Агенту важно
+      // число дверей, а не число строк.
+      clashPairs: new Set(
+        clashes.rows.map((r) => [r.id, r.other_id].sort().join(" ")),
+      ).size,
+    };
+  });
+}

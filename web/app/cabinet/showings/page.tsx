@@ -96,6 +96,11 @@ export default async function ShowingsPage({
         кто показ проводил.
       </p>
 
+      <nav className="views">
+        <span className="now">День</span>
+        <a href="/cabinet/showings/week">Неделя</a>
+      </nav>
+
       {note && <p className="ok-banner">{note}</p>}
 
       {overdue.length > 0 && (

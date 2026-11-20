@@ -17,7 +17,7 @@ set role authenticated;
 
 -- Бакыт ведёт клиента (req1), Айбек — listing-агент всех трёх мандатов.
 select * from create_match(:'obj1', :'req1') \gset m1_
-select * from schedule_showing(:'m1_id', now() + interval '2 days', 'подъезд со двора') \gset sh1_
+select * from schedule_showing(:'m1_id', test.at_hour(2), 'подъезд со двора') \gset sh1_
 
 -- ===========================================================================
 -- 25а. Показ двигают участники подбора
@@ -45,7 +45,7 @@ select test.throws(
   'посторонний агент неявку по чужому показу не отмечает');
 
 select test.throws(
-  format($$select reschedule_showing(%L, now() + interval '3 days')$$, :'sh1_id'),
+  format($$select reschedule_showing(%L, test.at_hour(3))$$, :'sh1_id'),
   'INVARIANT_25',
   'посторонний агент чужой показ не переносит');
 
@@ -72,7 +72,7 @@ select test.eq(
 
 -- А участники — могут. Бакыт ведёт клиента, Айбек отвечает за объект.
 set request.jwt.claims = :'claims_aibek';
-select * from reschedule_showing(:'sh1_id', now() + interval '3 days') \gset r1_
+select * from reschedule_showing(:'sh1_id', test.at_hour(3)) \gset r1_
 select test.eq(
   (select scheduled_at from showings where id = :'sh1_id'),
   :'r1_scheduled_at'::timestamptz,
@@ -80,7 +80,7 @@ select test.eq(
 
 set request.jwt.claims = :'claims_admin';
 select test.eq(
-  (select status from reschedule_showing(:'sh1_id', now() + interval '4 days')),
+  (select status from reschedule_showing(:'sh1_id', test.at_hour(4))),
   'scheduled'::showing_status,
   'админ показ переносит');
 
@@ -92,7 +92,7 @@ select test.eq(
 set request.jwt.claims = :'claims_bakyt';
 select * from create_match(:'obj2', :'req1') \gset m2_
 set request.jwt.claims = :'claims_aibek';
-select * from schedule_showing(:'m2_id', now() - interval '30 minutes', 'показ Айбека') \gset sh2_
+select * from schedule_showing(:'m2_id', test.at_hour(-1, 16), 'показ Айбека') \gset sh2_
 select transfer_object(:'obj2', :'agent_chyngyz') is not null as moved \gset
 select test.ok(
   not app.is_match_participant(:'m2_id', :'agent_aibek'),
@@ -109,10 +109,10 @@ select test.eq(
 set role postgres;
 set request.jwt.claims = '{}';
 insert into showings (match_id, agent_id, scheduled_at, created_by_agent_id)
-values (:'m1_id', :'agent_bakyt', now() + interval '14 days', :'agent_bakyt');
+values (:'m1_id', :'agent_bakyt', test.at_hour(14), :'agent_bakyt');
 select test.eq(
   (select count(*) from showings
-    where match_id = :'m1_id' and scheduled_at > now() + interval '13 days'),
+    where match_id = :'m1_id' and scheduled_at > test.at_hour(13)),
   1::bigint,
   'без вошедшего агента показ заводят миграции и засев');
 set role authenticated;
@@ -129,14 +129,14 @@ select test.throws(
   'показ нельзя назначить на 2019 год');
 
 select test.throws(
-  format($$select reschedule_showing(%L, now() - interval '10 days')$$, :'sh1_id'),
+  format($$select reschedule_showing(%L, test.at_hour(-10))$$, :'sh1_id'),
   'INVARIANT_25',
   'перенести показ в далёкое прошлое тоже нельзя');
 
 -- Забытый утренний показ записывают вечером, и это норма: ограничение
 -- касается НАЗНАЧЕННОЙ встречи, а не записанной истории.
 select test.eq(
-  (select status from schedule_showing(:'m1_id', now() - interval '1 hour', 'записал задним числом')),
+  (select status from schedule_showing(:'m1_id', test.at_hour(-1, 11), 'записал задним числом')),
   'scheduled'::showing_status,
   'показ час назад назначить можно: агент дозаписывает свой день');
 
@@ -155,7 +155,7 @@ select test.ok(
 -- ===========================================================================
 -- Так чистят список: закрыть сегодня всё, что назначено на неделю вперёд.
 
-select * from schedule_showing(:'m1_id', now() + interval '6 days', 'через неделю') \gset sh3_
+select * from schedule_showing(:'m1_id', test.at_hour(6), 'через неделю') \gset sh3_
 
 -- Сообщение базы — это то, что читает агент: кабинет показывает его как есть,
 -- сняв префикс (web/app/cabinet/actions.ts, humanize). Поэтому проверяется и
@@ -174,7 +174,7 @@ select test.throws(
 
 select test.eq(
   (select status from complete_showing(
-     (select id from reschedule_showing(:'sh3_id', now() - interval '20 minutes')),
+     (select id from reschedule_showing(:'sh3_id', test.at_hour(-1, 13))),
      'interested', 'понравилось')),
   'done'::showing_status,
   'после переноса на прошедшее время показ закрывается');
@@ -183,7 +183,7 @@ select test.eq(
 -- 25г. Агент не бывает в двух местах одновременно
 -- ===========================================================================
 
-select * from schedule_showing(:'m1_id', now() + interval '8 days', 'опора') \gset base_
+select * from schedule_showing(:'m1_id', test.at_hour(8), 'опора') \gset base_
 select * from create_match(:'obj3', :'req2') \gset m3_
 
 select test.throws(
@@ -215,7 +215,7 @@ set request.jwt.claims = :'claims_bakyt';
 
 -- Снятый показ освобождает время. Берём свободный вечер, чтобы проверять
 -- именно освобождение, а не соседние показы этого теста.
-select * from schedule_showing(:'m1_id', now() + interval '9 days', 'вечерний') \gset ev_
+select * from schedule_showing(:'m1_id', test.at_hour(9), 'вечерний') \gset ev_
 select test.throws(
   format($$select schedule_showing(%L, %L::timestamptz + interval '20 minutes')$$,
          :'m3_id', :'ev_scheduled_at'),
@@ -235,7 +235,7 @@ select test.eq(
 -- Свежий подбор без прошлых показов: create_match возвращает существующий,
 -- если такая пара уже есть, и состоявшийся показ по нему испортил бы проверку.
 select * from create_match(:'obj3', :'req1') \gset m7_
-select * from schedule_showing(:'m7_id', now() - interval '5 hours') \gset sh7_
+select * from schedule_showing(:'m7_id', test.at_hour(-1, 18)) \gset sh7_
 select test.eq(
   (select status from mark_no_show(:'sh7_id', 'не приехал, телефон молчит')),
   'no_show'::showing_status,
@@ -267,7 +267,7 @@ select test.eq(((:'rep'::jsonb) ->> 'cancelled')::int, 0,
 -- Молчание о показе не значит, что он прошёл хорошо.
 
 set request.jwt.claims = :'claims_bakyt';
-select * from schedule_showing(:'m1_id', now() - interval '26 hours', 'забыл закрыть') \gset old_
+select * from schedule_showing(:'m1_id', test.at_hour(-1, 20), 'забыл закрыть') \gset old_
 
 select test.ok(
   exists (select 1 from overdue_showings_v where id = :'old_id'),
@@ -296,7 +296,7 @@ select test.ok(
 
 -- Подбор отклонён — его показы сняты.
 select * from create_match(:'obj3', :'req1') \gset m4_
-select * from schedule_showing(:'m4_id', now() + interval '20 days') \gset sh4_
+select * from schedule_showing(:'m4_id', test.at_hour(20)) \gset sh4_
 update matches set status = 'rejected', rejection_reason = 'клиенту не подошёл район'
  where id = :'m4_id';
 select test.eq(
@@ -310,7 +310,7 @@ select test.ok(
 -- Договор кончился — показы объекта сняты, причём без вошедшего агента:
 -- мандаты истекают по расписанию, а не руками.
 select * from create_match(:'obj3', :'req2') \gset m5_
-select * from schedule_showing(:'m5_id', now() + interval '25 days') \gset sh5_
+select * from schedule_showing(:'m5_id', test.at_hour(25)) \gset sh5_
 
 set role postgres;
 set request.jwt.claims = '{}';
@@ -329,11 +329,11 @@ select test.eq(
 set role authenticated;
 set request.jwt.claims = :'claims_bakyt';
 select * from create_match(:'obj1', :'req2') \gset m6_
-select * from schedule_showing(:'m6_id', now() + interval '30 days') \gset sh6_
+select * from schedule_showing(:'m6_id', test.at_hour(30)) \gset sh6_
 
 -- У obj2 договор действует: его показ переживёт закрытие мандата obj1.
 select * from create_match(:'obj2', :'req2') \gset m8_
-select * from schedule_showing(:'m8_id', now() + interval '35 days') \gset sh8_
+select * from schedule_showing(:'m8_id', test.at_hour(35)) \gset sh8_
 
 select * from create_deal_from_match(:'m6_id') \gset d6_
 select close_deal(:'d6_id', 90000) is not null as closed \gset
@@ -373,7 +373,7 @@ select test.throws(
 
 -- Каскад проверяет невозможность для КАЖДОГО показа, а не верит аргументу:
 -- у obj2 договор действует, его показ остаётся на месте.
-select * from schedule_showing(:'m2_id', now() + interval '40 days', 'ещё состоится') \gset keep_
+select * from schedule_showing(:'m2_id', test.at_hour(40), 'ещё состоится') \gset keep_
 set role postgres;
 set request.jwt.claims = '{}';
 select test.eq(

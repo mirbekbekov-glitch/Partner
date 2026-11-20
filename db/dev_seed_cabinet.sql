@@ -181,6 +181,39 @@ begin
   end loop;
 end $$;
 
+-- Чужой показ по тому же объекту в тот же час. База это не запрещает
+-- (инвариант 26), а календарь показывает: у двери окажутся две группы.
+do $$
+declare
+  v_aibek uuid := (select id from agents where full_name = 'Айбек');
+  v_bakyt uuid := (select id from agents where full_name = 'Бакыт');
+  v_req   uuid := (select id from requirements
+                    where requirements_text like 'Дом под расширение%');
+  v_obj   uuid := (select id from objects where address = 'Московская 217, кв. 9');
+  v_at    timestamptz := (select scheduled_at from showings s
+                            join matches m on m.id = s.match_id
+                           where m.object_id = (select id from objects
+                                                 where address = 'Московская 217, кв. 9')
+                             and s.status = 'scheduled'
+                           limit 1);
+  v_match uuid;
+begin
+  if v_at is null or v_req is null then return; end if;
+
+  select m.id into v_match from matches m
+   where m.object_id = v_obj and m.requirement_id = v_req;
+
+  if v_match is null then
+    insert into matches (requirement_id, object_id, closing_agent_id,
+                         created_by_agent_id, status)
+    values (v_req, v_obj, v_bakyt, v_bakyt, 'interested')
+    returning id into v_match;
+  end if;
+
+  insert into showings (match_id, agent_id, scheduled_at, status, created_by_agent_id)
+  values (v_match, v_aibek, v_at + interval '30 minutes', 'scheduled', v_aibek);
+end $$;
+
 select 'обращений: ' || count(*) from inquiries
 union all
 select 'кандидатов: ' || count(*) from listing_candidates

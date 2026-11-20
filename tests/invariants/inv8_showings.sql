@@ -17,7 +17,7 @@ select test.throws(
 select * from create_match(:'obj1', :'req1') \gset m1_
 select test.eq(:'m1_status'::text, 'proposed', 'подбор создан в proposed');
 
-select * from schedule_showing(:'m1_id', now() + interval '2 days', 'подъезд со двора') \gset sh1_
+select * from schedule_showing(:'m1_id', test.at_hour(2), 'подъезд со двора') \gset sh1_
 select test.eq(:'sh1_status'::text, 'scheduled', 'показ назначен');
 select test.eq(:'sh1_agent_id'::text, :'agent_bakyt'::text, 'показ проводит текущий агент');
 
@@ -33,7 +33,7 @@ select test.ok(
 -- Чынгыз не ведёт клиента, не создавал подбор и не listing-агент мандата.
 set request.jwt.claims = :'claims_chyngyz';
 select test.throws(
-  format($$select schedule_showing(%L, now() + interval '1 day')$$, :'m1_id'),
+  format($$select schedule_showing(%L, test.at_hour(1))$$, :'m1_id'),
   'INVARIANT_8',
   'посторонний агент показ назначить не может');
 set request.jwt.claims = :'claims_bakyt';
@@ -41,7 +41,7 @@ set request.jwt.claims = :'claims_bakyt';
 -- ---- 8г. Состоявшийся показ двигает подбор и потребность -----------------
 -- Закрыть можно только состоявшийся показ (инвариант 25), поэтому сначала
 -- он наступает: клиент приехал на час раньше договорённого.
-select reschedule_showing(:'sh1_id', now() - interval '30 minutes') is not null as came \gset
+select reschedule_showing(:'sh1_id', test.at_hour(-1, 16)) is not null as came \gset
 select * from complete_showing(:'sh1_id', 'wants_bargain', 'готов, но просит минус 3000') \gset done1_
 select test.eq(:'done1_status'::text, 'done', 'показ завершён');
 select test.ok(:'done1_done_at' is not null, 'время показа зафиксировано');
@@ -58,7 +58,7 @@ select test.eq(
 -- завершённый второй раз не завершить.
 -- Показ в прошлом: инвариант 25 не даёт закрыть ненаступивший показ, а
 -- проверяется здесь обязательность результата, а не время.
-select * from schedule_showing(:'m1_id', now() - interval '3 hours') \gset sh2_
+select * from schedule_showing(:'m1_id', test.at_hour(-1, 11)) \gset sh2_
 select test.throws(
   format($$select complete_showing(%L, null)$$, :'sh2_id'),
   'INVARIANT_8',
@@ -83,14 +83,14 @@ select test.throws(
 update matches set status = 'rejected', rejection_reason = 'не подошёл этаж'
  where id = :'m2_id';
 select test.throws(
-  format($$select schedule_showing(%L, now() + interval '1 day')$$, :'m2_id'),
+  format($$select schedule_showing(%L, test.at_hour(1))$$, :'m2_id'),
   'INVARIANT_8',
   'показ по отклонённому подбору невозможен');
 
 -- ---- 8ж. Отмена возвращает подбор из showing_scheduled -------------------
 select * from create_match(:'obj3', :'req2') \gset m3_
 -- Потребность req2 закрыта? Нет: закрывается только сделкой. Проверим путь.
-select * from schedule_showing(:'m3_id', now() + interval '3 days') \gset sh3_
+select * from schedule_showing(:'m3_id', test.at_hour(3)) \gset sh3_
 select test.eq(
   (select status from matches where id = :'m3_id'), 'showing_scheduled'::match_status,
   'второй подбор тоже ушёл в showing_scheduled');
