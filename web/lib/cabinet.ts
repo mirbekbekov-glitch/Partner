@@ -777,3 +777,28 @@ export async function dealDetail(id: string): Promise<Deal | null> {
     return rows[0] ?? null;
   });
 }
+
+export type TransferTarget = { id: string; full_name: string; role: string };
+
+/**
+ * Кому можно передать работу: действующие агенты, кроме себя.
+ *
+ * Список собирается здесь, а право проверяет база (инвариант 23). Экран
+ * показывает только тех, кому передача пройдёт, — предлагать человека,
+ * которому база откажет, значит обещать то, чего не будет.
+ */
+export async function transferTargets(): Promise<TransferTarget[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<TransferTarget>(
+      `select id, full_name, role::text
+         from agents
+        where status = 'approved'
+          and id <> app.current_agent_id()
+        order by full_name`,
+    );
+    return rows;
+  });
+}

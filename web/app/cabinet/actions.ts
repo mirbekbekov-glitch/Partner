@@ -770,3 +770,39 @@ export async function updateContact(_prev: unknown, form: FormData): Promise<Res
     return "Контакт изменён.";
   }, back);
 }
+
+// ---------------------------------------------------------------------------
+// Передача
+// ---------------------------------------------------------------------------
+// Главный случай — отпуск или увольнение. Правило «ведёт тот, кто ведёт»
+// (инварианты 20 и 22) без передачи означает, что работа встаёт.
+
+export async function transferObject(_prev: unknown, form: FormData): Promise<Result> {
+  const objectId = String(form.get("object_id"));
+  const toAgent = String(form.get("to_agent") ?? "");
+  if (!toAgent) return { ok: false, error: "Выберите, кому передать." };
+
+  return actThenNotice(async (db) => {
+    const { rows } = await db.query<{ full_name: string }>(
+      `select a.full_name from transfer_object($1, $2) m
+         join agents a on a.id = m.listing_agent_id`,
+      [objectId, toAgent],
+    );
+    return `Объект передан: ${rows[0].full_name}. Незакрытые сделки перешли вместе с ним.`;
+  }, `/cabinet/objects/${objectId}`);
+}
+
+export async function transferRequirement(_prev: unknown, form: FormData): Promise<Result> {
+  const requirementId = String(form.get("requirement_id"));
+  const toAgent = String(form.get("to_agent") ?? "");
+  if (!toAgent) return { ok: false, error: "Выберите, кому передать." };
+
+  return actThenNotice(async (db) => {
+    const { rows } = await db.query<{ full_name: string }>(
+      `select a.full_name from transfer_requirement($1, $2) r
+         join agents a on a.id = r.agent_id`,
+      [requirementId, toAgent],
+    );
+    return `Клиент передан: ${rows[0].full_name}. Подборы в работе перешли вместе с ним.`;
+  }, `/cabinet/requirements/${requirementId}`);
+}

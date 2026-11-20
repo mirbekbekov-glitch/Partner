@@ -4,6 +4,9 @@ import { objectDetail } from "../../../../lib/cabinet";
 import { formatPrice, KIND_LABEL, freshness, formatDate, formatDateTime, formatArea, formatPhone, formatShare, PUBLICATION_LABEL } from "../../../../lib/format";
 import { gate } from "../../Gate";
 import { Photos } from "../../Photos";
+import { Transfer } from "../../Transfer";
+import { transferTargets } from "../../../../lib/cabinet";
+import { transferObject } from "../../actions";
 import { ActionForm } from "../../ActionForm";
 import { confirmActual, issueOwnerLink, publish, withdraw } from "../../actions";
 
@@ -26,6 +29,8 @@ export default async function ObjectPage({
   const { note } = await searchParams;
   const data = await objectDetail(id);
   if (!data) notFound();
+
+  const targets = data.canEditPhotos ? await transferTargets() : [];
 
   const o = data.object;
 
@@ -84,6 +89,18 @@ export default async function ObjectPage({
               <input type="hidden" name="object_id" value={o.id} />
             </ActionForm>
           )}
+        </section>
+      )}
+
+      {data.canEditPhotos && (
+        <section>
+          <Transfer
+            action={transferObject}
+            what="объект"
+            hidden={{ object_id: o.id }}
+            targets={targets}
+            note="Договор с собственником перейдёт на него, и править объект будете уже не вы. Незакрытые сделки перейдут вместе с объектом, закрытые останутся за прежним агентом."
+          />
         </section>
       )}
 

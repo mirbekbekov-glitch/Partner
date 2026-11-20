@@ -7,6 +7,9 @@ import {
 } from "../../../../lib/format";
 import { gate } from "../../Gate";
 import { ActionForm } from "../../ActionForm";
+import { Transfer } from "../../Transfer";
+import { transferTargets } from "../../../../lib/cabinet";
+import { transferRequirement } from "../../actions";
 import {
   cancelShowing, completeShowing, proposeObject, scheduleShowing, startDeal,
 } from "../../actions";
@@ -48,6 +51,8 @@ export default async function RequirementPage({
   const data = await requirementDetail(id);
   if (!data) notFound();
 
+  const targets = data.requirement.is_mine ? await transferTargets() : [];
+
   const r = data.requirement;
   const fresh = data.candidates.filter((c) => !c.already_proposed);
   const exact = fresh.filter((c) => c.fit === "подходит");
@@ -72,7 +77,16 @@ export default async function RequirementPage({
       </p>
       {r.client_phone && <p className="phone">{formatPhone(r.client_phone)}</p>}
       {r.is_mine && (
-        <p><a className="btn" href={`/cabinet/requirements/${r.id}/edit`}>Править условия</a></p>
+        <>
+          <p><a className="btn" href={`/cabinet/requirements/${r.id}/edit`}>Править условия</a></p>
+          <Transfer
+            action={transferRequirement}
+            what="клиента"
+            hidden={{ requirement_id: r.id }}
+            targets={targets}
+            note="Подборы в работе перейдут вместе с клиентом, и вести его будете уже не вы. Подборы, по которым сделка уже закрыта, останутся за вами — это история."
+          />
+        </>
       )}
       {r.requirements_text && <p className="note">{r.requirements_text}</p>}
 
