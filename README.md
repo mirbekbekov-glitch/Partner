@@ -10,8 +10,8 @@
 ## Состояние репозитория
 
 Репозиторий был пуст, поэтому проект создан с нуля. Готово и проверено:
-схема, инварианты, слой доступа, тесты, данные для минимального UI.
-Фронтенд кабинета пока не выбран.
+схема, инварианты, слой доступа, тесты и минимальный UI кабинета
+(Next.js App Router + Supabase).
 
 ## Что где лежит
 
@@ -25,11 +25,31 @@ supabase/migrations/     миграции, применяются по поря�
   0006_rls.sql             построчные политики (инвариант 4), публичная витрина
   0007_api.sql             слой доступа: функции кабинета
   0008_cabinet_views.sql   данные для минимального UI
+  0009_schedule.sql        расписание app.expire_mandates() через pg_cron
 
 db/local_supabase_stub.sql  схема auth для локального Postgres. НЕ миграция.
 db/rebuild.sh               пересобрать локальную базу с нуля
-tests/                      136 утверждений, 9 файлов
+tests/                      11 файлов тестов
+
+app/cabinet/
+  objects/[id]/page.tsx       карточка объекта + список подборов
+  requirements/[id]/page.tsx  карточка потребности + список подборов
+  CreateMatchForm.tsx         кнопка «создать подбор»
+  HiddenContact.tsx           отображение контакта, закрытого инвариантом 4
+  actions.ts                  server action: вызов create_match()
+lib/supabase/server.ts        клиент Supabase для серверных компонентов
+lib/types.ts                  формы строк представлений кабинета
 ```
+
+## Запуск кабинета
+
+```bash
+cp .env.example .env.local   # вписать URL проекта и anon key
+npm install
+npm run dev
+```
+
+Страницы: `/cabinet/objects/<id>` и `/cabinet/requirements/<id>`.
 
 ## Прогон тестов
 
@@ -60,7 +80,7 @@ PGDATA=/var/lib/postgresql/partner-test
 | 1 | Публикация только при активном мандате; не больше одного активного мандата на объект | `mandates_one_active_per_object_idx` (partial unique) + `c_objects_publication_requires_mandate` + `c_channels_require_mandate` + `d_mandate_release_withdraws_object` + `app.expire_mandates()` | `inv1_publication` |
 | 2 | Сделка только из подбора; закрытие закрывает мандат и потребность | `deals.match_id NOT NULL` + `b_deal_from_match` + `e_deal_closed` | `inv2_deal_from_match` |
 | 3 | Комиссия 50/50; продажа 2%, аренда 50% первого месяца; до закрытия индикативно | `app.commission_total()`, `app.commission_shares()`, `deal_commission_v`, `match_commission_v` | `inv3_commission` |
-| 4 | Телефон виден owner_agent, агентам активной сделки, админу | `app.can_see_contact()` + политики на `contacts`, `contact_phones`, `object_ownerships` | `inv4_phone_visibility`, `inv4b_cabinet_views` |
+| 4 | Телефон виден owner_agent, агентам активной сделки, админу | `app.can_see_contact()` + политики на `contacts`, `contact_phones`, `object_ownerships` | `inv4_phone_visibility`, `inv4b_cabinet_views`, `inv4c_page_queries` |
 | 5 | Правка цены/фото/подтверждение обновляет `actual_at`; `published_at` не меняется никогда | `a_object_timestamps` + `app.confirm_actual()` | `inv5_timestamps` |
 | 6 | Один человек — один аккаунт по Telegram | `agents.telegram_id UNIQUE` + `app.login_by_telegram()` | `inv6_one_account` |
 | 7 | Каждое изменение в журнале: кто, что, когда | `app.write_audit()` на всех 11 таблицах | `inv7_audit` |
@@ -93,10 +113,22 @@ PGDATA=/var/lib/postgresql/partner-test
 инвариант 1 снял бы с публикации все переносимые объекты. Флаг уже есть в
 модели мандата и означает ровно это.
 
-**`app.expire_mandates()` обязана вызываться по расписанию** (pg_cron или
-Supabase scheduled function). Без этого мандат с прошедшим `valid_to`
-остаётся активным, и объект висит в каталоге с просроченным договором.
-Это единственное место, где инвариант 1 зависит от внешнего планировщика.
+**`app.expire_mandates()` вызывается по расписанию pg_cron** — миграция
+`0009_schedule.sql`, ежедневно в 00:10 UTC (06:10 по Бишкеку, до начала
+рабочего дня). Это единственное место, где инвариант 1 зависит от чего-то
+вне базы, поэтому миграция устроена так:
+
+- если `pg_cron` недоступен, она **не падает**, а выдаёт `WARNING`. Падение
+  заблокировало бы всю цепочку миграций на свежем проекте Supabase, где
+  расширение ещё не включено в панели;
+- проверить, что расписание реально стоит, можно запросом
+  `select * from app.schedule_health()`. Он показывает три вещи: установлен
+  ли `pg_cron`, активно ли задание и нет ли уже просроченных активных
+  мандатов — последнее и есть симптом неработающего расписания.
+
+**После развёртывания запустить `app.schedule_health()` обязательно.** Молча
+незапланированное истечение мандатов — худший из вариантов: инвариант 1
+выглядит рабочим, а объекты висят в каталоге с просроченными договорами.
 
 **Комиссия не выносится в публичную часть.** `public_catalog_v` не содержит
 ни комиссии, ни агентов, ни внутреннего состояния; `deal_commission_v` и
@@ -121,10 +153,16 @@ Supabase scheduled function). Без этого мандат с прошедши
 
 ## Что НЕ сделано
 
-- Фронтенд кабинета: стек не выбран, поэтому страницы не написаны. Серверная
-  часть пункта 4 готова — `object_matches_v`, `requirement_matches_v` и
-  `create_match()`.
+- **Вход агента не реализован.** Страницы кабинета рассчитывают на готовую
+  сессию Supabase. `app.login_by_telegram()` в базе есть и протестирована,
+  но связка «Telegram → Supabase Auth» (проверка подписи initData,
+  выпуск сессии) не писалась.
+- **Страницы не проверены на живой Supabase.** Проверено: сборка, типы и то,
+  что все запрашиваемые колонки существуют и отдаются под RLS
+  (`inv4c_page_queries`). Запустить страницы против настоящего PostgREST
+  в этой сессии было негде.
 - Публичный каталог как страницы: есть только витрина `public_catalog_v`.
 - Выгрузка в lalafo и house.kg: таблица `publication_channels` описывает
   состояние, сами коннекторы не писались.
+- Списки объектов и потребностей: есть только карточки по id.
 - Ничего не задеплоено и не опубликовано.

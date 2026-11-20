@@ -1,0 +1,90 @@
+-- Запросы страниц кабинета.
+--
+-- TypeScript не знает схему базы: опечатка в имени колонки компилируется
+-- и падает только в рантайме. Здесь перечислены ТЕ ЖЕ списки колонок, что
+-- в app/cabinet/**/page.tsx — если колонка исчезнет или переименуется,
+-- тест упадёт раньше, чем страница.
+\i tests/actors.sql
+\set ON_ERROR_STOP on
+
+set request.jwt.claims = :'claims_bakyt';
+set role authenticated;
+select * from create_match(:'obj1', :'req1') \gset m_
+reset role;
+
+-- Посторонний агент: именно его глазами проверяем, что страницы не падают
+-- на скрытом контакте.
+set request.jwt.claims = :'claims_chyngyz';
+set role authenticated;
+
+-- ---- app/cabinet/objects/[id]/page.tsx -----------------------------------
+
+select test.eq(test.visible_count(format($$
+  select id, kind, deal_type, address, zone, rooms, area, floor, price, currency,
+         publication_state, published_at, actual_at
+    from objects where id = %L$$, :'obj1')),
+  1::bigint, 'карточка объекта: список колонок objects существует');
+
+select test.eq(test.visible_count(format($$
+  select match_id, object_id, requirement_id, match_status, showing_at,
+         rejection_reason, closing_agent_name, deal_type, budget_min, budget_max,
+         zones, rooms_wanted, requirement_status, client_name,
+         commission_total, listing_share, closing_share, deal_id, deal_status,
+         created_at
+    from object_matches_v where object_id = %L$$, :'obj1')),
+  1::bigint, 'карточка объекта: список колонок object_matches_v существует');
+
+select test.ok(test.visible_count($$
+  select id, deal_type, budget_min, budget_max, zones
+    from requirements where status not in ('closed','lost')$$) >= 1,
+  'карточка объекта: запрос открытых потребностей для кнопки работает');
+
+select test.eq(test.visible_count(format($$
+  select id, kind, contract_confirmed, valid_to
+    from mandates where object_id = %L and status = 'active'$$, :'obj1')),
+  1::bigint, 'карточка объекта: запрос активного мандата работает');
+
+-- ---- app/cabinet/requirements/[id]/page.tsx ------------------------------
+
+select test.eq(test.visible_count(format($$
+  select id, contact_id, deal_type, budget_min, budget_max, zones, rooms,
+         deadline, requirements_text, status
+    from requirements where id = %L$$, :'req1')),
+  1::bigint, 'карточка потребности: список колонок requirements существует');
+
+select test.eq(test.visible_count(format($$
+  select match_id, requirement_id, object_id, match_status, showing_at,
+         rejection_reason, address, zone, rooms, area, floor, price, currency,
+         publication_state, actual_at, mandate_id, contract_confirmed,
+         listing_agent_name, owner_name, commission_total, listing_share,
+         closing_share, deal_id, deal_status, created_at
+    from requirement_matches_v where requirement_id = %L$$, :'req1')),
+  1::bigint, 'карточка потребности: список колонок requirement_matches_v существует');
+
+select test.ok(test.visible_count($$
+  select id, deal_type, address, zone, rooms, price, currency, publication_state
+    from objects where publication_state = 'published'$$) >= 1,
+  'карточка потребности: запрос опубликованных объектов для кнопки работает');
+
+-- ---- Встроенный контакт (PostgREST: requirements → contacts) -------------
+-- Страница тянет contacts(name) вложенным ресурсом. PostgREST отдаёт null,
+-- если RLS не пускает, и страница показывает «контакт скрыт». Эквивалент
+-- на SQL — LEFT JOIN: он обязан вернуть строку с пустым именем, а не ноль строк.
+select test.eq(
+  (select c.name from requirements r left join contacts c on c.id = r.contact_id
+    where r.id = :'req1'),
+  null::text, 'посторонний агент: имя клиента приходит пустым, строка остаётся');
+select test.eq(test.visible_count(format($$
+  select 1 from requirements r left join contacts c on c.id = r.contact_id
+   where r.id = %L$$, :'req1')),
+  1::bigint, 'посторонний агент: потребность всё равно отдаётся');
+reset role;
+
+-- ---- Тому, кому контакт положен, он приходит -----------------------------
+set request.jwt.claims = :'claims_bakyt';
+set role authenticated;
+select test.eq(
+  (select c.name from requirements r left join contacts c on c.id = r.contact_id
+    where r.id = :'req1'),
+  'Жумаев Клиент', 'агент, приведший клиента: имя приходит');
+reset role;
