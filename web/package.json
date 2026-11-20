@@ -17,7 +17,8 @@
     "walk:deal": "node scripts/walk-deal.mjs",
     "walk:edit": "node scripts/walk-edit.mjs",
     "walk:transfer": "node scripts/walk-transfer.mjs",
-    "walk:stages": "node scripts/walk-stages.mjs"
+    "walk:stages": "node scripts/walk-stages.mjs",
+    "walk:showings": "node scripts/walk-showings.mjs"
   },
   "dependencies": {
     "next": "16.4.6",

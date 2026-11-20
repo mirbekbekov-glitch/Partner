@@ -79,7 +79,14 @@ export default async function CabinetHome() {
         <Tile value={s.requirements_mine} one="клиент в работе" few="клиента в работе"
               many="клиентов в работе" href="/cabinet/requirements" />
         <Tile value={s.showings_upcoming} one="показ впереди" few="показа впереди"
-              many="показов впереди" href="/cabinet/requirements" />
+              many="показов впереди" href="/cabinet/showings" />
+        <Tile
+          value={s.showings_overdue}
+          one="показ без исхода" few="показа без исхода" many="показов без исхода"
+          href="/cabinet/showings"
+          alarm
+          hint="время прошло, а что получилось — не записано"
+        />
         <Tile value={s.deals_open} one="сделка в работе" few="сделки в работе"
               many="сделок в работе" href="/cabinet/deals" />
         <Tile

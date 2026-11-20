@@ -568,8 +568,24 @@ export async function proposeObject(_prev: unknown, form: FormData): Promise<Res
   }, `/cabinet/requirements/${requirementId}`);
 }
 
+/**
+ * Куда вернуться после действия над показом.
+ *
+ * Показ живёт на двух экранах: в карточке клиента (там его назначают) и на
+ * экране показов (там его закрывают). Уведомление об успехе должно появиться
+ * на той странице, с которой нажали, поэтому адрес приходит из формы, а не
+ * зашит здесь. Значение проверяется: оно попадает в redirect, и принимать
+ * туда чужую строку нельзя.
+ */
+function showingBack(form: FormData): string {
+  const requirementId = String(form.get("requirement_id") ?? "");
+  if (/^[0-9a-f-]{36}$/.test(requirementId)) {
+    return `/cabinet/requirements/${requirementId}`;
+  }
+  return "/cabinet/showings";
+}
+
 export async function scheduleShowing(_prev: unknown, form: FormData): Promise<Result> {
-  const requirementId = String(form.get("requirement_id"));
   const matchId = String(form.get("match_id"));
   const at = String(form.get("at") ?? "").trim();
   const note = String(form.get("note") ?? "").trim();
@@ -578,11 +594,10 @@ export async function scheduleShowing(_prev: unknown, form: FormData): Promise<R
   return actThenNotice(async (db) => {
     await db.query("select schedule_showing($1, $2::timestamptz, $3)", [matchId, at, note || null]);
     return "Показ назначен.";
-  }, `/cabinet/requirements/${requirementId}`);
+  }, showingBack(form));
 }
 
 export async function completeShowing(_prev: unknown, form: FormData): Promise<Result> {
-  const requirementId = String(form.get("requirement_id"));
   const showingId = String(form.get("showing_id"));
   const outcome = String(form.get("outcome"));
   const reaction = String(form.get("reaction") ?? "").trim();
@@ -594,17 +609,42 @@ export async function completeShowing(_prev: unknown, form: FormData): Promise<R
       [showingId, outcome, reaction || null, note || null],
     );
     return "Показ закрыт. Состояние подбора и потребности обновлено автоматически.";
-  }, `/cabinet/requirements/${requirementId}`);
+  }, showingBack(form));
 }
 
 export async function cancelShowing(_prev: unknown, form: FormData): Promise<Result> {
-  const requirementId = String(form.get("requirement_id"));
   const showingId = String(form.get("showing_id"));
   const reason = String(form.get("reason") ?? "").trim();
   return actThenNotice(async (db) => {
     await db.query("select cancel_showing($1, $2)", [showingId, reason || null]);
     return "Показ отменён.";
-  }, `/cabinet/requirements/${requirementId}`);
+  }, showingBack(form));
+}
+
+/**
+ * Клиент не пришёл.
+ *
+ * Отдельное действие, а не «отмена с причиной»: отменяют договорившись, а
+ * здесь агент приехал и стоял у подъезда. Собственнику в отчёте это говорит
+ * разное (инвариант 25).
+ */
+export async function markNoShow(_prev: unknown, form: FormData): Promise<Result> {
+  const showingId = String(form.get("showing_id"));
+  const note = String(form.get("note") ?? "").trim();
+  return actThenNotice(async (db) => {
+    await db.query("select mark_no_show($1, $2)", [showingId, note || null]);
+    return "Отмечено: клиент не пришёл.";
+  }, showingBack(form));
+}
+
+export async function rescheduleShowing(_prev: unknown, form: FormData): Promise<Result> {
+  const showingId = String(form.get("showing_id"));
+  const at = String(form.get("at") ?? "").trim();
+  if (!at) return { ok: false, error: "Укажите новое время показа." };
+  return actThenNotice(async (db) => {
+    await db.query("select reschedule_showing($1, $2::timestamptz)", [showingId, at]);
+    return "Показ перенесён.";
+  }, showingBack(form));
 }
 
 // ---------------------------------------------------------------------------

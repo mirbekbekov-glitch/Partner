@@ -925,3 +925,32 @@ textarea { resize: vertical; }
 .stage.done strong::before { content: "✓ "; color: #067647; }
 .stage.now { border-color: #175cd3; box-shadow: 0 0 0 1px #175cd3; }
 .stage.next { opacity: 0.65; }
+
+/* --- показы --------------------------------------------------------------- */
+/* У показа своя первая колонка — время. Агент смотрит этот экран, чтобы
+   понять, куда ехать сейчас, и время должно читаться раньше адреса. */
+.row.showing {
+  grid-template-columns: 4.5rem minmax(12rem, 2fr) minmax(12rem, 1fr);
+}
+.showing-when strong {
+  display: block;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+.showing-when em {
+  display: block;
+  font-style: normal;
+  font-size: 0.78rem;
+  color: var(--cab-alarm);
+  margin-top: 0.2rem;
+}
+.row.showing.late { border-left: 3px solid var(--cab-alarm); background: #fffbfa; }
+/* Четыре исхода у каждого показа, и в столбик они растягивают день на три
+   экрана. В два ряда карточка высотой с собственное содержимое. */
+.row.showing .row-acts { display: grid; grid-template-columns: 1fr 1fr; }
+.row.showing .row-acts .fold[open] { grid-column: 1 / -1; }
+h2.alarm { color: var(--cab-alarm); }
+
+@media (max-width: 760px) {
+  .row.showing { grid-template-columns: 1fr; }
+}

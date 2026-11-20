@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requirementDetail } from "../../../../lib/cabinet";
 import {
   formatPrice, formatArea, formatDate, formatDateTime, formatPhone,
-  freshness, KIND_LABEL, plural, PUBLICATION_LABEL, SHOWING_LABEL,
+  freshness, KIND_LABEL, OUTCOME_LABEL, plural, PUBLICATION_LABEL, SHOWING_LABEL,
 } from "../../../../lib/format";
 import { gate } from "../../Gate";
 import { ActionForm } from "../../ActionForm";
@@ -11,7 +11,7 @@ import { Transfer } from "../../Transfer";
 import { transferTargets } from "../../../../lib/cabinet";
 import { transferRequirement } from "../../actions";
 import {
-  cancelShowing, completeShowing, proposeObject, scheduleShowing, startDeal,
+  cancelShowing, completeShowing, markNoShow, proposeObject, scheduleShowing, startDeal,
 } from "../../actions";
 
 export const metadata: Metadata = {
@@ -135,6 +135,23 @@ export default async function RequirementPage({
                     {showing && (
                       <p className="muted">показ {formatDateTime(showing.scheduled_at)}</p>
                     )}
+                    {(() => {
+                      // Сколько раз этот объект уже показывали этому клиенту и
+                      // чем кончился последний раз. Второй показ того же
+                      // объекта — сильный сигнал, и терять его нельзя.
+                      const history = data.showings.filter(
+                        (h) => h.match_id === m.match_id && h.status !== "scheduled",
+                      );
+                      if (history.length === 0) return null;
+                      const last = history[0];
+                      return (
+                        <p className="muted">
+                          показов: {history.length}
+                          {last.outcome ? `, последний — ${OUTCOME_LABEL[last.outcome] ?? last.outcome}` : ""}
+                          {last.status === "no_show" ? ", клиент не пришёл" : ""}
+                        </p>
+                      );
+                    })()}
                   </div>
 
                   {r.is_mine && (
@@ -166,6 +183,14 @@ export default async function RequirementPage({
                                 </select>
                               </label>
                               <input name="reaction" placeholder="Слова клиента" />
+                            </ActionForm>
+                          </details>
+                          <details className="fold">
+                            <summary>Не пришёл</summary>
+                            <ActionForm action={markNoShow} label="Клиент не пришёл">
+                              <input type="hidden" name="requirement_id" value={r.id} />
+                              <input type="hidden" name="showing_id" value={showing.id} />
+                              <input name="note" placeholder="Что известно" />
                             </ActionForm>
                           </details>
                           <details className="fold">

@@ -85,6 +85,7 @@ declare
   v_aibek uuid := '00000000-0000-0000-0000-0000000000a1';
   v_bakyt uuid := '00000000-0000-0000-0000-0000000000a2';
   v_owner uuid := '00000000-0000-0000-0000-00000000c001';
+  v_day   date := (now() at time zone 'Asia/Bishkek')::date;
   v_match uuid;
   v_show  uuid;
 begin
@@ -104,13 +105,15 @@ begin
      where object_id = v_obj and requirement_id = v_req;
   end if;
 
+  -- Время круглое и по Бишкеку. От now() получался бы показ в 01:21 ночи —
+  -- на экране это читается как поломка, а не как данные.
   insert into showings (match_id, agent_id, scheduled_at, done_at, status,
                         outcome, client_reaction, created_by_agent_id)
-  values (v_match, v_bakyt, now() - interval '5 days', now() - interval '5 days',
+  values (v_match, v_bakyt, (v_day - 5 + time '16:00') at time zone 'Asia/Bishkek', (v_day - 5 + time '17:00') at time zone 'Asia/Bishkek',
           'done', 'wants_bargain', 'нравится, но просит минус 3000', v_bakyt),
-         (v_match, v_bakyt, now() - interval '2 days', now() - interval '2 days',
+         (v_match, v_bakyt, (v_day - 2 + time '13:00') at time zone 'Asia/Bishkek', (v_day - 2 + time '14:00') at time zone 'Asia/Bishkek',
           'done', 'thinking', 'взяли паузу до выходных', v_bakyt),
-         (v_match, v_bakyt, now() + interval '2 days', null,
+         (v_match, v_bakyt, (v_day + 2 + time '18:00') at time zone 'Asia/Bishkek', null,
           'scheduled', null, null, v_bakyt);
 
   -- Ссылка на отчёт. Вставляется напрямую, а не через issue_owner_access:

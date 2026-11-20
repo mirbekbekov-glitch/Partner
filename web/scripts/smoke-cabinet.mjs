@@ -37,6 +37,9 @@ async function asAgent(claims, sql, params = [], mode = "read only") {
   const client = await pool.connect();
   try {
     await client.query(`begin ${mode}`);
+    // Тот же пояс, что ставит lib/db.ts: без него «показ в 15:00», введённый
+    // агентом, лёг бы в базу как 15:00 UTC, то есть 21:00 по Бишкеку.
+    await client.query("set local time zone 'Asia/Bishkek'");
     await client.query("select set_config('request.jwt.claims', $1, true)", [
       JSON.stringify({ ...claims, role: "authenticated" }),
     ]);
@@ -159,6 +162,20 @@ try {
     issued[0].code,
   ]);
   ok(again[0].ok === false, `второй раз тот же код не работает (${again[0].reason})`);
+
+  // --- время показа: пояс агентства -------------------------------------
+  // Ошибка была двойной и потому незаметной: введённое время толковалось как
+  // UTC, а показывалось тоже в UTC, и «15:00» возвращалось как «15:00».
+  // Проверяется не круговорот, а смысл: что база считает это время
+  // пятнадцатью часами ПО БИШКЕКУ.
+  const bishkek = await asAgent(
+    { sub: first.auth_user_id, phone: first.phone },
+    `select to_char($1::timestamptz at time zone 'Asia/Bishkek', 'HH24:MI') as local,
+            to_char($1::timestamptz at time zone 'UTC',          'HH24:MI') as utc`,
+    ["2026-07-15T15:00"],
+  );
+  ok(bishkek[0].local === "15:00", `введённое 15:00 — это 15:00 по Бишкеку (${bishkek[0].local})`);
+  ok(bishkek[0].utc === "09:00", `и 09:00 по UTC (${bishkek[0].utc})`);
 
   // --- служба входа не достаёт до данных агентства -----------------------
   try {

@@ -251,6 +251,7 @@ export type Summary = {
   inquiries_new: number;
   candidates_mine: number;
   showings_upcoming: number;
+  showings_overdue: number;
   requirements_mine: number;
   deals_open: number;
   deals_stuck: number;
@@ -280,8 +281,9 @@ export async function summary(): Promise<Summary | null> {
          (select count(*) from listing_candidates c
            where c.claimed_by_agent_id = app.current_agent_id()
              and c.status = 'in_work')::int                            as candidates_mine,
-         (select count(*) from showings_v sh
+         (select count(*) from my_showings_v sh
            where sh.status = 'scheduled' and sh.scheduled_at > now())::int as showings_upcoming,
+         (select count(*) from overdue_showings_v)::int                    as showings_overdue,
          (select count(*) from requirements rq
            where rq.agent_id = app.current_agent_id()
              and rq.status in ('new', 'qualified', 'in_showings'))::int as requirements_mine,
@@ -804,6 +806,56 @@ export async function transferTargets(): Promise<TransferTarget[]> {
         where status = 'approved'
           and id <> app.current_agent_id()
         order by full_name`,
+    );
+    return rows;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Показы
+// ---------------------------------------------------------------------------
+
+export type Showing = {
+  id: string;
+  match_id: string;
+  status: string;
+  scheduled_at: Date | string;
+  done_at: Date | string | null;
+  outcome: string | null;
+  client_reaction: string | null;
+  note: string | null;
+  cancel_reason: string | null;
+  agent_id: string;
+  agent_name: string | null;
+  i_lead: boolean;
+  object_id: string;
+  address: string;
+  zone: string | null;
+  kind: string;
+  deal_type: string;
+  price: string;
+  currency: string;
+  rooms: number | null;
+  requirement_id: string;
+  client_name: string | null;
+  overdue: boolean;
+  on_day: Date | string;
+};
+
+/**
+ * День агента.
+ *
+ * Берётся всё, что видно: показ это работа двоих, и агент покупателя должен
+ * видеть, что listing-агент назначил по его клиенту. Делёж на «мои» и
+ * «коллег» делает экран, а не запрос, — кто чей, решает i_lead.
+ */
+export async function showings(): Promise<Showing[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<Showing>(
+      `select * from my_showings_v order by scheduled_at`,
     );
     return rows;
   });

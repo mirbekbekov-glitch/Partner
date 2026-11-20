@@ -120,11 +120,16 @@ export function withParam(
  * и падала на странице объекта. Принимаются оба вида: из базы приходит Date,
  * из JSON — строка.
  */
+// Время показывается по Бишкеку, а не по часам сервера: контейнер живёт в
+// UTC, и «показ в 15:00» читался бы как 09:00. Подробности в lib/db.ts.
+const BISHKEK = "Asia/Bishkek";
+
 export function formatDate(value: Date | string | null): string {
   if (!value) return "—";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString("ru-RU", {
+    timeZone: BISHKEK,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -136,6 +141,7 @@ export function formatDateTime(value: Date | string | null): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleString("ru-RU", {
+    timeZone: BISHKEK,
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
@@ -179,9 +185,19 @@ export const PUBLICATION_LABEL: Record<string, string> = {
 };
 
 /** Состояние показа словами. */
+/** Структурная реакция клиента с показа (showing_outcome). */
+export const OUTCOME_LABEL: Record<string, string> = {
+  interested: "понравилось",
+  wants_bargain: "хочет торговаться",
+  thinking: "думает",
+  rejected: "не подошло",
+};
+
 export const SHOWING_LABEL: Record<string, string> = {
   scheduled: "назначен",
   done: "прошёл",
   cancelled: "отменён",
-  no_show: "не состоялся",
+  // Не «не состоялся»: отменённый показ тоже не состоялся. Инвариант 25
+  // развёл эти два случая, и подпись обязана их различать.
+  no_show: "клиент не пришёл",
 };

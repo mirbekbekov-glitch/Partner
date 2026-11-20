@@ -121,6 +121,68 @@ begin
    where id = v_cand;
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- День показов
+-- ---------------------------------------------------------------------------
+-- dev_seed.sql даёт три показа по одному подбору. Для экрана показов этого
+-- мало: не видно ни дня из нескольких встреч, ни просроченного показа, ни
+-- того, как читается неявка рядом с состоявшимся показом.
+--
+-- Время задаётся по Бишкеку и круглыми часами: показ в 01:18 ночи, который
+-- получается из now(), на снимке экрана выглядит ошибкой, а не данными.
+do $$
+declare
+  v_bakyt uuid := (select id from agents where full_name = 'Бакыт');
+  v_req   uuid := (select id from requirements
+                    where requirements_text like 'Квартира для себя%');
+  v_today date := (now() at time zone 'Asia/Bishkek')::date;
+  r       record;
+  v_match uuid;
+begin
+  for r in
+    select * from (values
+      -- адрес объекта,                дней, час, состояние,   исход,          слова клиента
+      ('Горького 183, кв. 7',             0, 11, 'scheduled',  null,           null),
+      ('Исанова 105, кв. 61',             0, 15, 'scheduled',  null,           null),
+      ('Московская 217, кв. 9',           1, 10, 'scheduled',  null,           null),
+      ('Жукеева-Пудовкина 77, кв. 3',     2, 17, 'scheduled',  null,           null),
+      -- время прошло, исход не записан: так выглядит забытый показ
+      ('Киевская 148, кв. 44',           -1, 12, 'scheduled',  null,           null),
+      ('Байтик Баатыра 41, кв. 18',      -3, 16, 'done',      'wants_bargain', 'нравится, но просит минус 4000'),
+      ('Ахунбаева 134, кв. 72',          -4, 14, 'no_show',    null,           null)
+    ) as t(address, day_shift, hour, status, outcome, reaction)
+  loop
+    select m.id into v_match from matches m
+      join objects o on o.id = m.object_id
+     where m.requirement_id = v_req and o.address = r.address;
+
+    if v_match is null then
+      insert into matches (requirement_id, object_id, closing_agent_id, created_by_agent_id,
+                           status)
+      select v_req, o.id, v_bakyt, v_bakyt, 'interested'
+        from objects o where o.address = r.address
+      returning id into v_match;
+    end if;
+
+    if v_match is not null then
+      insert into showings (match_id, agent_id, scheduled_at, done_at, status, outcome,
+                            client_reaction, created_by_agent_id)
+      values (v_match, v_bakyt,
+              ((v_today + r.day_shift)::timestamp + make_interval(hours => r.hour))
+                at time zone 'Asia/Bishkek',
+              case when r.status = 'done'
+                   then ((v_today + r.day_shift)::timestamp + make_interval(hours => r.hour + 1))
+                          at time zone 'Asia/Bishkek' end,
+              r.status::showing_status,
+              r.outcome::showing_outcome,
+              r.reaction,
+              v_bakyt);
+    end if;
+  end loop;
+end $$;
+
 select 'обращений: ' || count(*) from inquiries
 union all
-select 'кандидатов: ' || count(*) from listing_candidates;
+select 'кандидатов: ' || count(*) from listing_candidates
+union all
+select 'показов: ' || count(*) from showings;

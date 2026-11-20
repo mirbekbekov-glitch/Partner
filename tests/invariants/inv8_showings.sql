@@ -39,6 +39,9 @@ select test.throws(
 set request.jwt.claims = :'claims_bakyt';
 
 -- ---- 8г. Состоявшийся показ двигает подбор и потребность -----------------
+-- Закрыть можно только состоявшийся показ (инвариант 25), поэтому сначала
+-- он наступает: клиент приехал на час раньше договорённого.
+select reschedule_showing(:'sh1_id', now() - interval '30 minutes') is not null as came \gset
 select * from complete_showing(:'sh1_id', 'wants_bargain', 'готов, но просит минус 3000') \gset done1_
 select test.eq(:'done1_status'::text, 'done', 'показ завершён');
 select test.ok(:'done1_done_at' is not null, 'время показа зафиксировано');
@@ -53,7 +56,9 @@ select test.eq(
 
 -- Результат у состоявшегося показа обязателен. Нужен ещё назначенный показ:
 -- завершённый второй раз не завершить.
-select * from schedule_showing(:'m1_id', now() + interval '5 days') \gset sh2_
+-- Показ в прошлом: инвариант 25 не даёт закрыть ненаступивший показ, а
+-- проверяется здесь обязательность результата, а не время.
+select * from schedule_showing(:'m1_id', now() - interval '3 hours') \gset sh2_
 select test.throws(
   format($$select complete_showing(%L, null)$$, :'sh2_id'),
   'INVARIANT_8',

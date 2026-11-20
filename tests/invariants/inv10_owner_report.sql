@@ -58,7 +58,9 @@ select test.throws(
 -- Готовим работу по объекту: показ с реакцией и выгрузку в канал.
 set request.jwt.claims = :'claims_bakyt';
 select * from create_match(:'obj1', :'req1') \gset m1_
-select * from schedule_showing(:'m1_id', now() + interval '1 day') \gset sh1_
+-- Показ назначен на вчера и состоялся: закрыть будущий показ инвариант 25
+-- не даёт, и это правильно — отчёт собственнику про уже сделанное.
+select * from schedule_showing(:'m1_id', now() - interval '1 day') \gset sh1_
 select * from complete_showing(:'sh1_id', 'wants_bargain', 'просит минус 3000') \gset d1_
 
 set role postgres;
