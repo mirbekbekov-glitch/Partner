@@ -126,3 +126,61 @@ select test.eq(test.visible_count(format($$
   '00000000-0000-0000-0000-0000000000b4')),
   1::bigint, 'профиль: список колонок существует и доступен неодобренному');
 reset role;
+
+-- ---- app/cabinet/objects/page.tsx ----------------------------------------
+set request.jwt.claims = :'claims_chyngyz';
+set role authenticated;
+
+select test.ok(test.visible_count($$
+  select id, kind, deal_type, address, zone, rooms, area, floor, price, currency,
+         publication_state, actual_at, active_mandate_id, contract_confirmed,
+         listing_agent_name, owners, matches_count, commission_total
+    from object_list_v
+   order by actual_at desc$$) >= 3,
+  'список объектов: список колонок object_list_v существует');
+
+-- Фильтры страницы: те же выражения, что уходят в PostgREST.
+select test.ok(test.visible_count($$
+  select 1 from object_list_v where deal_type = 'sale'$$) >= 3,
+  'список объектов: фильтр по сделке работает');
+select test.ok(test.visible_count($$
+  select 1 from object_list_v where publication_state = 'published'$$) >= 1,
+  'список объектов: фильтр по состоянию работает');
+select test.ok(test.visible_count($$
+  select 1 from object_list_v where zone = 'Центр'$$) >= 1,
+  'список объектов: фильтр по зоне работает');
+select test.ok(test.visible_count($$
+  select 1 from object_list_v where address ilike '%Чүй%'$$) >= 1,
+  'список объектов: поиск по адресу ilike работает');
+
+-- ---- app/cabinet/requirements/page.tsx -----------------------------------
+select test.eq(test.visible_count($$
+  select id, deal_type, budget_min, budget_max, zones, rooms, deadline,
+         requirements_text, status, agent_name, client_name,
+         matches_count, showings_count, deals_count
+    from requirement_list_v
+   order by updated_at desc$$),
+  2::bigint, 'список потребностей: список колонок requirement_list_v существует');
+
+-- contains('zones', [...]) в PostgREST это оператор @> по массиву.
+select test.ok(test.visible_count($$
+  select 1 from requirement_list_v where zones @> array['Центр']$$) >= 1,
+  'список потребностей: фильтр по зоне через @> работает');
+select test.ok(test.visible_count($$
+  select 1 from requirement_list_v where status = 'qualified'$$) >= 1,
+  'список потребностей: фильтр по статусу работает');
+
+-- ---- app/cabinet/page.tsx (счётчики главной) -----------------------------
+select test.ok(test.visible_count($$select 1 from objects$$) >= 3,
+  'главная: счётчик объектов');
+select test.ok(test.visible_count($$
+  select 1 from objects where publication_state = 'published'$$) >= 1,
+  'главная: счётчик опубликованных');
+select test.ok(test.visible_count($$
+  select 1 from requirements where status not in ('closed','lost')$$) >= 1,
+  'главная: счётчик потребностей в работе');
+-- is('active_mandate_id', null) — объекты, которые нельзя опубликовать.
+select test.eq(test.visible_count($$
+  select 1 from object_list_v where active_mandate_id is null$$),
+  0::bigint, 'главная: объектов без мандата сейчас нет');
+reset role;

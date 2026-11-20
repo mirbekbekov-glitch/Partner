@@ -1,0 +1,69 @@
+import Link from 'next/link';
+import { createClient } from '@/lib/supabase/server';
+
+export const metadata = { title: 'Кабинет' };
+
+/**
+ * Главная кабинета.
+ *
+ * Нужна не только для удобства: /auth/confirm после входа ведёт на /cabinet,
+ * и без этой страницы вход упирался в 404.
+ */
+export default async function CabinetHome() {
+  const supabase = await createClient();
+
+  // head: true — нужны только счётчики, строки тянуть незачем.
+  const [objects, published, needMandate, requirements, openReq, matches] = await Promise.all([
+    supabase.from('objects').select('id', { count: 'exact', head: true }),
+    supabase.from('objects').select('id', { count: 'exact', head: true })
+      .eq('publication_state', 'published'),
+    supabase.from('object_list_v').select('id', { count: 'exact', head: true })
+      .is('active_mandate_id', null),
+    supabase.from('requirements').select('id', { count: 'exact', head: true }),
+    supabase.from('requirements').select('id', { count: 'exact', head: true })
+      .not('status', 'in', '("closed","lost")'),
+    supabase.from('matches').select('id', { count: 'exact', head: true }),
+  ]);
+
+  return (
+    <>
+      <h1>Кабинет</h1>
+      <p className="sub">Объекты, потребности и подборы между ними.</p>
+
+      <div className="tiles">
+        <Link className="tile" href="/cabinet/objects">
+          <span className="tile-n">{objects.count ?? 0}</span>
+          <span className="tile-t">объектов</span>
+          <span className="key">{published.count ?? 0} опубликовано</span>
+        </Link>
+
+        <Link className="tile" href="/cabinet/requirements">
+          <span className="tile-n">{requirements.count ?? 0}</span>
+          <span className="tile-t">потребностей</span>
+          <span className="key">{openReq.count ?? 0} в работе</span>
+        </Link>
+
+        <div className="tile">
+          <span className="tile-n">{matches.count ?? 0}</span>
+          <span className="tile-t">подборов</span>
+          <span className="key">связей объект ↔ клиент</span>
+        </div>
+      </div>
+
+      {needMandate.count ? (
+        <div className="card">
+          <div className="row">
+            <span className="warn">требует внимания</span>
+            <span>
+              Объектов без активного мандата: <strong>{needMandate.count}</strong>. Опубликовать
+              их нельзя, пока договор с собственником не заключён.
+            </span>
+          </div>
+          <div className="row" style={{ marginTop: 8 }}>
+            <Link href="/cabinet/objects?state=draft">посмотреть черновики →</Link>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}

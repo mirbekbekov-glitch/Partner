@@ -82,10 +82,13 @@ export default async function CabinetLayout({ children }: { children: React.Reac
     <>
       <nav className="topbar">
         <span className="who">
-          <Link href="/cabinet/profile">{agent.full_name}</Link>
-          {agent.role === 'admin' ? <span className="tag">админ</span> : null}
+          <Link href="/cabinet">Кабинет</Link>
+          <Link href="/cabinet/objects">Объекты</Link>
+          <Link href="/cabinet/requirements">Потребности</Link>
         </span>
         {agent.role === 'admin' ? <Link href="/cabinet/admin/agents">Агенты</Link> : null}
+        <Link href="/cabinet/profile">{agent.full_name}</Link>
+        {agent.role === 'admin' ? <span className="tag">админ</span> : null}
         <SignOutButton />
       </nav>
       {children}

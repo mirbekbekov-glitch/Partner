@@ -167,3 +167,49 @@ button.ghost {
 .field input { max-width: 340px; }
 .field .key { margin: 0; }
 .field p { margin: 0; }
+
+/* Плитки на главной кабинета */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--panel);
+  text-decoration: none;
+  color: inherit;
+}
+
+a.tile:hover { border-color: var(--accent); }
+.tile-n { font-size: 1.6rem; font-weight: 600; line-height: 1.1; }
+.tile-t { font-size: 0.9rem; }
+
+/* Фильтры списков */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.filters input { min-width: 120px; }
+.filters input[type='search'] { min-width: 180px; }
+
+.pager { display: flex; gap: 16px; align-items: center; margin-top: 20px; }
+
+/* Верхняя полоса: на узком экране переносится, а не уезжает за край */
+@media (max-width: 560px) {
+  .topbar { flex-wrap: wrap; gap: 10px; }
+  .topbar .who { margin-right: 0; gap: 12px; }
+}
