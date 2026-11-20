@@ -194,6 +194,10 @@ select price as price_before, created_by_agent_id as agent_before,
        actual_at as actual_before, address as addr_before
   from objects where id = '00000000-0000-0000-0000-0000000fa001' \gset
 
+-- Перенос — разовая работа при развёртывании: его делают миграцией, psql
+-- или админ. С 0025 функция требует отсутствия сессии либо админа, поэтому
+-- удостоверение сбрасываем явно: reset role его не стирает.
+reset request.jwt.claims;
 select test.eq((select count(*)::int from app.backfill_missing_mandates()), 1,
   'перенос выдал мандат объекту, у которого его не было');
 
@@ -227,5 +231,6 @@ select test.eq(
 reset role;
 
 -- Повторный прогон переноса ничего не дублирует.
+reset request.jwt.claims;
 select test.eq((select count(*)::int from app.backfill_missing_mandates()), 0,
   'повторный прогон переноса идемпотентен');

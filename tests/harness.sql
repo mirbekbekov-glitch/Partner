@@ -55,10 +55,20 @@ begin
   return v;
 end $$;
 
--- Тесты работают от имени роли authenticated, значит помощники должны быть
--- ей доступны.
+-- Тесты работают от имени роли authenticated, значит помощники схемы test
+-- должны быть ей доступны.
 grant usage on schema test to authenticated, anon;
 grant execute on all functions in schema test to authenticated, anon;
--- app-помощники нужны тестам целиком, включая те, что в 0006 не выдавались.
-grant usage on schema app to anon;
-grant execute on all functions in schema app to authenticated, anon;
+
+-- ВНИМАНИЕ. Здесь раньше стояло
+--     grant execute on all functions in schema app to authenticated, anon;
+-- и это было ошибкой: харнесс делал тестовое окружение СВОБОДНЕЕ продакшена
+-- и маскировал настоящие границы прав. Проверка «агент не может вызвать
+-- app.claim_notifications()» проходила бы только по случайности, а
+-- обратная — «не может» — не ловила бы ничего.
+--
+-- Теперь права на функции app выдают только миграции, там, где это
+-- осмысленно. Если тест упал на permission denied для app-функции — это не
+-- поломка харнесса, а вопрос: должна ли эта функция быть доступна агенту
+-- вообще. Схема app анониму не нужна ни для чего.
+grant usage on schema app to authenticated;

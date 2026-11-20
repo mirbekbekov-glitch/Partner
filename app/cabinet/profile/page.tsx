@@ -47,9 +47,26 @@ export default async function ProfilePage() {
         />
       </div>
 
+      <h2>Напоминания</h2>
       {agent.telegram_id ? (
-        <p className="key">Telegram: {agent.telegram_id}</p>
-      ) : null}
+        <p className="key">
+          Telegram привязан ({agent.telegram_id}) — напоминания о задачах и показах
+          придут туда.
+        </p>
+      ) : (
+        <div className="card">
+          <p className="warn">Telegram не привязан</p>
+          <p>
+            Напоминания о задачах и показах доставляются в Telegram. Без привязки они
+            остаются в очереди и до вас не доходят.
+          </p>
+          <p className="key">
+            Привязать может администратор: самостоятельная привязка требует
+            подтверждения через бота, и она пока не сделана. Напишите админу свой
+            Telegram ID — его показывает любой бот вроде @userinfobot.
+          </p>
+        </div>
+      )}
     </>
   );
 }

@@ -37,6 +37,10 @@ select test.ok(
   'проверка называет количество просроченных мандатов');
 
 -- Ручной вызов снимает симптом и, по инварианту 1, объект с публикации.
+-- expire_mandates() с 0025 требует админа или отсутствия сессии: вызов
+-- снимает с публикации все объекты с просроченными договорами. reset role
+-- удостоверение не стирает, поэтому сбрасываем явно.
+reset request.jwt.claims;
 select test.eq(app.expire_mandates(), 1, 'expire_mandates() погасила мандат');
 select test.ok(
   (select ok from app.schedule_health()

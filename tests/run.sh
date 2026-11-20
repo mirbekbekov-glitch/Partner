@@ -54,6 +54,15 @@ done
 # Сверка вызовов rpc() со схемой: PostgREST видит только public, и функция,
 # оставленная в app, падает лишь в рантайме. Шаблон уже собран, на нём и
 # проверяем.
+say "── service_role только в app/api"
+if "$ROOT/tests/check-service-key.sh" >/tmp/svc.log 2>&1; then
+  sed 's/^/ /' /tmp/svc.log; say "   ПРОЙДЕНА"; pass=$((pass+1))
+else
+  sed 's/^/   /' /tmp/svc.log; say "   ПРОВАЛЕНА"
+  fail=$((fail+1)); failed_names+=("check-service-key")
+fi
+say ""
+
 say "── разметка: нет вложенных <form>"
 if "$ROOT/tests/check-forms.sh" >/tmp/forms.log 2>&1; then
   sed 's/^/ /' /tmp/forms.log; say "   ПРОЙДЕНА"; pass=$((pass+1))

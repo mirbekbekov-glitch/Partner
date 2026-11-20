@@ -113,6 +113,19 @@ select test.throws(
 -- сделка закрыта, значит мандат закрыт, значит публикация снята.
 select test.eq(test.visible_count($$select 1 from public_catalog_v$$), 2::bigint,
   'аноним видит каталог без проданного объекта');
+
+-- РЕГРЕССИЯ. Публичный каталог не должен зависеть от прав на схему app.
+-- Раньше политика objects_read вызывала app.current_agent_id(), а анониму
+-- ни USAGE на схему, ни EXECUTE миграциями не выдавались — анонимное чтение
+-- падало с «permission denied for function current_agent_id». Тесты этого
+-- не видели: харнесс выдавал анониму права, которых в продакшене нет.
+select test.ok(not has_schema_privilege('anon', 'app', 'usage'),
+  'анониму схема app не выдана — и каталог всё равно читается');
+select test.ok(test.visible_count($$select 1 from objects$$) > 0,
+  'аноним читает и саму таблицу объектов, без вызова функций в политике');
+select test.eq(
+  test.visible_count($$select 1 from objects where publication_state <> 'published'$$),
+  0::bigint, 'и видит ровно опубликованное, а не всё');
 select test.eq(
   test.visible_count(format($$select 1 from public_catalog_v where id = %L$$, :'obj1')),
   0::bigint, 'проданный объект из публичного каталога исчез');

@@ -20,14 +20,19 @@ const ENTITY_PATH: Record<string, string> = {
 export default async function ActivitiesPage() {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from('activity_feed_v')
-    .select('*')
-    .eq('mine', true)
+  const [{ data, error }, { data: reminders }] = await Promise.all([
+    supabase
+      .from('activity_feed_v')
+      .select('*')
+      .eq('mine', true)
     .order('done', { ascending: true })
     .order('due_at', { ascending: true, nullsFirst: false })
-    .order('created_at', { ascending: false })
-    .limit(200);
+      .order('created_at', { ascending: false })
+      .limit(200),
+    // Состояние напоминаний: молчание хуже всего — агент должен видеть,
+    // отправлено ли напоминание и если нет, то почему.
+    supabase.from('my_reminders_v').select('activity_id, kind, status, channel, last_error'),
+  ]);
 
   if (error) {
     return (
@@ -39,6 +44,13 @@ export default async function ActivitiesPage() {
   }
 
   const rows = (data ?? []) as ActivityRow[];
+
+  type Rem = {
+    activity_id: string; kind: string; status: string;
+    channel: string | null; last_error: string | null;
+  };
+  const byActivity = new Map<string, Rem>();
+  for (const r of (reminders ?? []) as Rem[]) byActivity.set(r.activity_id, r);
   const overdue = rows.filter((r) => r.overdue);
   const dueSoon = rows.filter((r) => !r.done && !r.overdue && r.due_at);
   const noDate = rows.filter((r) => !r.done && !r.due_at);
@@ -52,12 +64,16 @@ export default async function ActivitiesPage() {
         карточке — там видно, к чему она относится.
       </p>
 
-      <Section title={`Просрочено (${overdue.length})`} rows={overdue} warn />
-      <Section title={`Со сроком (${dueSoon.length})`} rows={dueSoon} />
-      <Section title={`Без срока (${noDate.length})`} rows={noDate} />
+      <Section title={`Просрочено (${overdue.length})`} rows={overdue}
+               reminders={byActivity} warn />
+      <Section title={`Со сроком (${dueSoon.length})`} rows={dueSoon}
+               reminders={byActivity} />
+      <Section title={`Без срока (${noDate.length})`} rows={noDate}
+               reminders={byActivity} />
 
       {done.length > 0 ? (
-        <Section title={`Выполнено (${done.length})`} rows={done.slice(0, 30)} />
+        <Section title={`Выполнено (${done.length})`} rows={done.slice(0, 30)}
+                 reminders={byActivity} />
       ) : null}
 
       {rows.length === 0 ? (
@@ -70,13 +86,24 @@ export default async function ActivitiesPage() {
   );
 }
 
+const REMINDER_RU: Record<string, string> = {
+  pending: 'напоминание в очереди',
+  sending: 'напоминание отправляется',
+  sent: 'напоминание отправлено',
+  failed: 'напоминание не доставлено',
+  cancelled: 'напоминание отменено',
+  no_channel: 'напомнить нечем: Telegram не привязан',
+};
+
 function Section({
   title,
   rows,
+  reminders,
   warn,
 }: {
   title: string;
   rows: ActivityRow[];
+  reminders: Map<string, { status: string; last_error: string | null }>;
   warn?: boolean;
 }) {
   if (rows.length === 0) return null;
@@ -101,6 +128,22 @@ function Section({
             <span className="key">{KIND_RU[a.kind] ?? a.kind}</span>
           </div>
           <ActivityRowView a={a} />
+          {(() => {
+            const r = reminders.get(a.id);
+            if (!r) return null;
+            const problem = r.status === 'no_channel' || r.status === 'failed';
+            return (
+              <div className="row" style={{ marginTop: 4 }}>
+                <span className={problem ? 'warn' : 'key'}>
+                  {REMINDER_RU[r.status] ?? r.status}
+                </span>
+                {r.last_error ? <span className="key">{r.last_error}</span> : null}
+                {r.status === 'no_channel' ? (
+                  <Link className="key" href="/cabinet/profile">как это исправить →</Link>
+                ) : null}
+              </div>
+            );
+          })()}
         </div>
       ))}
     </>

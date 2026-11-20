@@ -35,15 +35,29 @@ if [ -z "$names" ]; then
 fi
 while read -r fn; do
   [ -z "$fn" ] && continue
-  ok="$(psql -tA -d "$DB" -c "
-    select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public' and p.proname = '$fn'
-       and has_function_privilege('authenticated', p.oid, 'execute')" 2>/dev/null)"
-  if [ "${ok:-0}" = "0" ]; then
-    echo "  ОТСУТСТВУЕТ  $fn — нет в public или не выдан execute роли authenticated"
+  # Главное — функция обязана быть в схеме public: иначе PostgREST её не
+  # отдаст никому. Кому именно выдан execute, зависит от назначения:
+  # функции кабинета — агенту, функции фонового задания — service_role.
+  info="$(psql -tA -F'|' -d "$DB" -c "
+    select has_function_privilege('authenticated', p.oid, 'execute'),
+           has_function_privilege('service_role', p.oid, 'execute')
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = '$fn' limit 1" 2>/dev/null)"
+
+  if [ -z "$info" ]; then
+    echo "  ОТСУТСТВУЕТ  $fn — нет в схеме public, PostgREST её не отдаст"
     fail=$((fail+1))
+    continue
+  fi
+
+  agent="${info%%|*}"; svc="${info##*|}"
+  if [ "$agent" = "t" ]; then
+    echo "  ok           $fn (кабинет)"
+  elif [ "$svc" = "t" ]; then
+    echo "  ok           $fn (фоновое задание)"
   else
-    echo "  ok           $fn"
+    echo "  НЕТ ПРАВ     $fn — есть в public, но execute не выдан ни агенту, ни заданию"
+    fail=$((fail+1))
   fi
 done <<< "$names"
 

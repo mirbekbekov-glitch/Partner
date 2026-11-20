@@ -321,3 +321,16 @@ select test.ok(test.visible_count($$
     from linkable_objects_v order by address$$) >= 1,
   'карточка контакта: список колонок linkable_objects_v существует');
 reset role;
+
+-- ---- Напоминания в списке задач и профиле --------------------------------
+set request.jwt.claims = :'claims_aibek';
+set role authenticated;
+select test.ok(test.visible_count($$
+  select id, activity_id, kind, channel, status, body, attempts, last_error,
+         created_at, sent_at, due_at, activity_kind
+    from my_reminders_v$$) >= 0,
+  'список задач: список колонок my_reminders_v существует');
+select test.ok(test.visible_count($$
+  select activity_id, kind, status, channel, last_error from my_reminders_v$$) >= 0,
+  'список задач: запрос состояния напоминаний работает');
+reset role;

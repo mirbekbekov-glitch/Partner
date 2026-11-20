@@ -85,6 +85,10 @@ select test.throws(
 -- иначе срабатывает check (valid_to >= valid_from).
 update mandates set valid_from = current_date - 10, valid_to = current_date - 1
  where object_id = :'obj2' and status = 'active';
+-- expire_mandates() с 0025 требует админа или отсутствия сессии: вызов
+-- снимает с публикации все объекты с просроченными договорами. reset role
+-- удостоверение не стирает, поэтому сбрасываем явно.
+reset request.jwt.claims;
 select test.eq(app.expire_mandates(), 1, 'app.expire_mandates() закрывает просроченный мандат');
 select test.eq(
   (select publication_state from objects where id = :'obj2'), 'withdrawn'::publication_state,
