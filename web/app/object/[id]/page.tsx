@@ -6,9 +6,9 @@ import {
   DEAL_LABEL,
   KIND_LABEL,
   formatArea,
-  formatFloor,
   formatPrice,
   formatRooms,
+  floorValue,
   freshness,
 } from "@/lib/format";
 
@@ -47,11 +47,12 @@ export default async function ObjectPage({ params }: Props) {
   specs.push(["Тип", KIND_LABEL[object.kind]]);
   specs.push(["Сделка", DEAL_LABEL[object.deal_type]]);
   if (object.zone) specs.push(["Район", object.zone]);
-  const rooms = formatRooms(object.rooms);
-  if (rooms) specs.push(["Комнат", rooms]);
+  // В таблице характеристик слово уже стоит в заголовке строки, поэтому
+  // здесь только число: иначе выходит «Комнат: 3 комнаты».
+  if (object.rooms !== null) specs.push(["Комнат", String(object.rooms)]);
   const area = formatArea(object.area);
   if (area) specs.push(["Площадь", area]);
-  const floor = formatFloor(object.floor, object.floors_total);
+  const floor = floorValue(object.floor, object.floors_total);
   if (floor) specs.push(["Этаж", floor]);
 
   return (

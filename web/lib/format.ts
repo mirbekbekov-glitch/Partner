@@ -41,9 +41,16 @@ export function formatArea(area: string | null) {
   return `${text} м²`;
 }
 
+/** Для строки параметров в карточке: слово «этаж» входит в значение. */
 export function formatFloor(floor: number | null, total: number | null) {
   if (floor === null) return null;
   return total ? `${floor} из ${total} этаж` : `${floor} этаж`;
+}
+
+/** Для таблицы характеристик, где слово «Этаж» уже стоит в заголовке строки. */
+export function floorValue(floor: number | null, total: number | null) {
+  if (floor === null) return null;
+  return total ? `${floor} из ${total}` : String(floor);
 }
 
 /** Склонение существительного при числе: 1 день, 2 дня, 5 дней. */
