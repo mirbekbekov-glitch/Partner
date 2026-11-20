@@ -19,7 +19,9 @@
     "walk:transfer": "node scripts/walk-transfer.mjs",
     "walk:stages": "node scripts/walk-stages.mjs",
     "walk:showings": "node scripts/walk-showings.mjs",
-    "walk:calendar": "node scripts/walk-calendar.mjs"
+    "walk:calendar": "node scripts/walk-calendar.mjs",
+    "walk:notifications": "node scripts/walk-notifications.mjs",
+    "notify": "node --experimental-strip-types --no-warnings scripts/send-notifications.mjs"
   },
   "dependencies": {
     "next": "16.4.6",

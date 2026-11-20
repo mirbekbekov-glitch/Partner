@@ -57,8 +57,8 @@ end $$;
 
 -- Тесты работают от имени ролей authenticated и anon, значит помощники должны
 -- быть доступны обеим.
-grant usage on schema test to authenticated, anon, collector, auth_service;
-grant execute on all functions in schema test to authenticated, anon, collector, auth_service;
+grant usage on schema test to authenticated, anon, collector, auth_service, notifier;
+grant execute on all functions in schema test to authenticated, anon, collector, auth_service, notifier;
 
 -- Права на схему app харнесс НЕ раздаёт. Раньше раздавал — и из-за этого
 -- тесты были зелёными, пока страница отчёта падала с «permission denied for
@@ -84,3 +84,31 @@ $$;
 
 comment on function test.at_hour is
   'Метка времени в заданный час по Бишкеку, со сдвигом в днях. Отрицательный сдвиг — прошлое.';
+
+-- Ближайшее законное время показа: не раньше чем через пару часов и не позже
+-- чем через двадцать, то есть внутри срока уведомления о предстоящем показе.
+-- Нужна по той же причине, что test.at_hour(): иначе проверка уведомлений
+-- зависела бы от времени суток, в которое запустили прогон. Окно сужено до
+-- [открытие, закрытие минус два часа], чтобы к результату можно было
+-- прибавить час-другой и не выйти из рабочих часов (инвариант 26).
+
+create or replace function test.soon(p_plus interval default interval '0')
+  returns timestamptz
+  language sql stable as $$
+  with t as (
+    select (now() at time zone 'Asia/Bishkek') + interval '3 hours' as guess,
+           (now() at time zone 'Asia/Bishkek')::date               as today
+  )
+  select (case
+            when guess::time between app.showing_opens()
+                                 and app.showing_closes() - interval '2 hours'
+              then guess
+            when guess::time < app.showing_opens()
+              then today + app.showing_opens()
+            else (today + 1) + app.showing_opens()
+          end + p_plus) at time zone 'Asia/Bishkek'
+  from t
+$$;
+
+comment on function test.soon is
+  'Законное время показа в пределах срока уведомления о предстоящем. Прогон в три часа ночи не должен давать других результатов, чем прогон в полдень.';

@@ -252,6 +252,7 @@ export type Summary = {
   candidates_mine: number;
   showings_upcoming: number;
   showings_overdue: number;
+  notifications_stuck: number;
   requirements_mine: number;
   deals_open: number;
   deals_stuck: number;
@@ -284,6 +285,10 @@ export async function summary(): Promise<Summary | null> {
          (select count(*) from my_showings_v sh
            where sh.status = 'scheduled' and sh.scheduled_at > now())::int as showings_upcoming,
          (select count(*) from overdue_showings_v)::int                    as showings_overdue,
+         (select count(*) from notifications n
+           where n.agent_id = app.current_agent_id()
+             and n.sent_at is null and n.voided_at is null
+             and n.last_error is not null)::int                           as notifications_stuck,
          (select count(*) from requirements rq
            where rq.agent_id = app.current_agent_id()
              and rq.status in ('new', 'qualified', 'in_showings'))::int as requirements_mine,
@@ -936,5 +941,49 @@ export async function week(anchor?: string): Promise<Week | null> {
         clashes.rows.map((r) => [r.id, r.other_id].sort().join(" ")),
       ).size,
     };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Уведомления
+// ---------------------------------------------------------------------------
+
+export type Notification = {
+  id: string;
+  kind: string;
+  body: string;
+  due_at: Date | string;
+  about_at: Date | string;
+  moved_since: boolean;
+  created_at: Date | string;
+  sent_at: Date | string | null;
+  voided_at: Date | string | null;
+  void_reason: string | null;
+  attempts: number;
+  last_error: string | null;
+  state: string;
+  showing_id: string;
+  scheduled_at: Date | string;
+  showing_status: string;
+  object_id: string;
+  address: string;
+};
+
+/**
+ * Что система сказала агенту и что собирается сказать.
+ *
+ * Очередь показывается ему самому сознательно: «мне не пришло» должно иметь
+ * ответ, а «погашено, потому что показ перенесли» объясняет больше, чем
+ * молчание.
+ */
+export async function notifications(): Promise<Notification[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<Notification>(
+      `select * from my_notifications_v order by created_at desc limit 200`,
+    );
+    return rows;
   });
 }

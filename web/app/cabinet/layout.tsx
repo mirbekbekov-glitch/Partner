@@ -29,6 +29,7 @@ export default async function CabinetLayout({
               <li><a href="/cabinet/inquiries">Обращения</a></li>
               <li><a href="/cabinet/requirements">Клиенты</a></li>
               <li><a href="/cabinet/showings">Показы</a></li>
+              <li><a href="/cabinet/notifications">Уведомления</a></li>
               <li><a href="/cabinet/deals">Сделки</a></li>
               <li><a href="/cabinet/candidates">Площадки</a></li>
               {agent.is_admin && <li><a href="/cabinet/agents">Агенты</a></li>}

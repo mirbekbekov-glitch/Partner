@@ -81,6 +81,13 @@ export default async function CabinetHome() {
         <Tile value={s.showings_upcoming} one="показ впереди" few="показа впереди"
               many="показов впереди" href="/cabinet/showings" />
         <Tile
+          value={s.notifications_stuck}
+          one="уведомление не ушло" few="уведомления не ушли" many="уведомлений не ушли"
+          href="/cabinet/notifications"
+          alarm
+          hint="канал не принял их; они вернутся в очередь"
+        />
+        <Tile
           value={s.showings_overdue}
           one="показ без исхода" few="показа без исхода" many="показов без исхода"
           href="/cabinet/showings"

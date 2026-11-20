@@ -138,6 +138,18 @@ export async function asAgent<T>(
   );
 }
 
+/**
+ * Отправщик уведомлений. Отдельная роль `notifier` (инвариант 27): ей открыты
+ * три функции — взять пачку, отметить отправленным, отметить неудачей — и ни
+ * одной таблицы. Процесс, умеющий только отправлять, при утечке токена и
+ * может только отправлять: ни клиентов, ни сделок он не прочитает.
+ */
+export async function asNotifier<T>(
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return withRole(process.env.NOTIFY_DB_ROLE ?? "notifier", "read write", null, fn);
+}
+
 async function withRole<T>(
   roleName: string,
   mode: "read only" | "read write",
