@@ -328,6 +328,21 @@ export async function summary(): Promise<Summary | null> {
 
 export type ObjectDetail = {
   object: CabinetObject & { description: string | null };
+  /**
+   * Инвариант 37. Условия договора так, как их вправе видеть агент любого
+   * агентства. Берутся поверх политик: иначе по чужому объекту карточка
+   * говорила «нет действующего договора» — то есть ровно то, чего нельзя
+   * говорить, когда договор есть и подтверждён.
+   */
+  terms: {
+    source: "mine" | "agency" | "other";
+    agency_name: string | null;
+    holder_agent_name: string | null;
+    has_mandate: boolean;
+    mandate_kind: string | null;
+    contract_confirmed: boolean | null;
+    valid_to: Date | string | null;
+  };
   photos: {
     storage_key: string;
     sort_order: number;
@@ -433,6 +448,16 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
       ),
     ]);
 
+    // Прямо из app.object_terms_v, а не через поиск: поиск отдаёт первые
+    // триста строк, и объект мог бы в них не попасть.
+    const { rows: termRows } = await db.query(
+      `select app.object_source(t.holder_agent_id, t.agency_id) as source,
+              t.agency_name, t.holder_agent_name, t.has_mandate,
+              t.mandate_kind::text, t.contract_confirmed, t.valid_to
+         from app.object_terms_v t where t.object_id = $1`,
+      [id],
+    );
+
     const { rows: mandateRows } = await db.query(
       `select id, kind::text, valid_to, contract_confirmed,
               closing_share_ratio::text
@@ -471,6 +496,7 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
 
     return {
       object: objectRows[0] as ObjectDetail["object"],
+      terms: termRows[0] as ObjectDetail["terms"],
       photos: photos.rows as ObjectDetail["photos"],
       canEditPhotos: rights[0].can_edit,
       canEditObject: rights[0].can_edit_object,

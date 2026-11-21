@@ -11,6 +11,11 @@ import { transferObject } from "../../actions";
 import { ActionForm } from "../../ActionForm";
 import { confirmActual, issueOwnerLink, publish, withdraw } from "../../actions";
 
+const MANDATE_LABEL: Record<string, string> = {
+  exclusive: "эксклюзив",
+  non_exclusive: "альтернатива",
+};
+
 export const metadata: Metadata = {
   title: "Объект",
   robots: { index: false, follow: false },
@@ -55,15 +60,41 @@ export default async function ObjectPage({
         <span className={`chip ${o.publication_state}`}>
           {PUBLICATION_LABEL[o.publication_state] ?? o.publication_state}
         </span>
-        {o.mandate_status === "active" ? (
-          <span className="chip ok">
-            договор действует{o.mandate_valid_to ? ` до ${formatDate(o.mandate_valid_to)}` : " бессрочно"}
-          </span>
+        {/* Инвариант 37. Договор берётся из app.object_terms_v, а не из
+            таблицы: по чужому объекту таблица молчит, и карточка писала «нет
+            действующего договора» там, где договор есть и подтверждён. Хуже
+            пустоты: это утверждение, и оно было ложным. */}
+        {data.terms.has_mandate ? (
+          data.terms.contract_confirmed ? (
+            <span className="chip ok">
+              {MANDATE_LABEL[data.terms.mandate_kind ?? ""] ?? "договор"} подтверждён
+              {data.terms.valid_to ? ` до ${formatDate(data.terms.valid_to)}` : ""}
+            </span>
+          ) : (
+            <span className="chip warn">
+              {MANDATE_LABEL[data.terms.mandate_kind ?? ""] ?? "договор"} на словах — бумага не подтверждена
+            </span>
+          )
         ) : (
           <span className="chip danger">нет действующего договора</span>
         )}
         <span className="chip">{freshness(o.actual_at).label}</span>
       </p>
+
+      {/* Чьё агентство ведёт объект. Для чужого это первое, что надо знать:
+          с кем договариваться о показе и на чём держится комиссия. */}
+      {data.terms.source === "other" ? (
+        <p className="warn-banner">
+          Объект другой организации:{" "}
+          <b>{data.terms.agency_name ?? "агентство не названо"}</b>
+          {data.terms.holder_agent_name ? `, ведёт ${data.terms.holder_agent_name}` : ""}.
+          Править, публиковать и снимать его может только она. Вы можете
+          предложить его своему клиенту и назначить показ — договорившись с
+          агентом объекта.
+        </p>
+      ) : data.terms.source === "agency" && data.terms.holder_agent_name ? (
+        <p className="muted">Ведёт {data.terms.holder_agent_name}, ваша организация.</p>
+      ) : null}
 
       {o.stale_reasons && o.stale_reasons.length > 0 && (
         <ul className="reasons wide">
@@ -113,24 +144,51 @@ export default async function ObjectPage({
         canEdit={data.canEditPhotos}
         limit={data.photoLimit}
         whyNot={
-          o.mandate_status === "active"
-            ? "Фотографии ведёт listing-агент действующего договора. По этому объекту договор у другого агента."
-            : "Фотографии можно добавить только при действующем договоре с собственником: отвечать за снимки перед ним должен тот, с кем договор. Заключите договор — форма загрузки появится."
+          data.terms.source === "other"
+            ? "Фотографии объекта ведёт то агентство, с которым у собственника договор. Предложить этот объект клиенту и назначить показ вы можете, а снимки — нет."
+            : data.terms.has_mandate
+              ? "Фотографии ведёт listing-агент действующего договора. По этому объекту договор у другого агента."
+              : "Фотографии можно добавить только при действующем договоре с собственником: отвечать за снимки перед ним должен тот, с кем договор. Заключите договор — форма загрузки появится."
         }
       />
 
-      <Channels
-        objectId={o.id}
-        items={channels}
-        available={feeds.map((f) => f.channel)}
-        canEdit={data.canManageChannels}
-        whyNot="Площадками объекта распоряжается агент действующего договора: снять чужой объект с площадки — это выключить чужую рекламу."
-      />
+      {/* Площадок чужого объекта мы не знаем: политика каналов их не
+          показывает, и список выходил бы из умолчаний — три строки «не
+          отдаём» про чужую рекламу. Это не пустота, это неправда. */}
+      {data.terms.source === "other" ? (
+        <section>
+          <h2>Площадки</h2>
+          <p className="muted">
+            Рекламой этого объекта распоряжается{" "}
+            {data.terms.agency_name ?? "другое агентство"}. Куда оно его
+            выгружает, мы не знаем и показывать не будем.
+          </p>
+        </section>
+      ) : (
+        <Channels
+          objectId={o.id}
+          items={channels}
+          available={feeds.map((f) => f.channel)}
+          canEdit={data.canManageChannels}
+          whyNot="Площадками объекта распоряжается агент действующего договора: снять чужой объект с площадки — это выключить чужую рекламу."
+        />
+      )}
 
       <section>
         <h2>Собственник</h2>
         {data.owners.length === 0 ? (
-          <p className="empty">Собственник не записан.</p>
+          /* Пустой список — это два разных ответа. «Не записан» можно
+             сказать только про свой объект; у чужого собственник записан, но
+             его карточка принадлежит другому агентству (инвариант 4). */
+          data.terms.source === "other" ? (
+            <p className="muted">
+              Собственник записан в{" "}
+              {data.terms.agency_name ?? "другом агентстве"}, и его карточка
+              принадлежит ему. Договариваться о показе — с агентом объекта.
+            </p>
+          ) : (
+            <p className="empty">Собственник не записан.</p>
+          )
         ) : (
           data.owners.map((ow) => (
             <article key={ow.contact_id} className="card">
@@ -174,7 +232,11 @@ export default async function ObjectPage({
       <section>
         <h2>Подборы <span className="muted">({data.matches.length})</span></h2>
         {data.matches.length === 0 ? (
-          <p className="empty">Подборов по этому объекту нет.</p>
+          <p className="empty">
+            {data.terms.source === "other"
+              ? "Ваших подборов по этому объекту нет. Чужие вы и не увидите: подбор принадлежит агентству, которое его сделало."
+              : "Подборов по этому объекту нет."}
+          </p>
         ) : (
           <ul className="plain">
             {data.matches.map((m) => (
@@ -189,7 +251,11 @@ export default async function ObjectPage({
       <section>
         <h2>Показы <span className="muted">({data.showings.length})</span></h2>
         {data.showings.length === 0 ? (
-          <p className="empty">Показов не было.</p>
+          <p className="empty">
+            {data.terms.source === "other"
+              ? "Ваших показов по этому объекту не было."
+              : "Показов не было."}
+          </p>
         ) : (
           <ul className="plain">
             {data.showings.map((sh) => (
