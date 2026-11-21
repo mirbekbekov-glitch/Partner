@@ -51,7 +51,12 @@ async function actThenNotice(
 ): Promise<Result> {
   const result = await act(fn, path);
   if (!result.ok) return result;
-  redirect(`${path}?note=${encodeURIComponent(result.message ?? "Готово.")}`);
+  // Разделитель выбирается по пути, а не ставится всегда «?». На экране
+  // воронки объектов путь уже содержал «?deal=sale», и получалось
+  // «...?deal=sale?note=...» — браузер уходил в никуда, а действие при этом
+  // срабатывало. Нашлось проходом в браузере.
+  const sep = path.includes("?") ? "&" : "?";
+  redirect(`${path}${sep}note=${encodeURIComponent(result.message ?? "Готово.")}`);
 }
 
 async function act(
@@ -1024,5 +1029,45 @@ export async function rescheduleTask(_prev: unknown, form: FormData): Promise<Re
   return actThenNotice(async (db) => {
     await db.query("select reschedule_task($1, $2::timestamptz)", [id, due]);
     return "Срок перенесён. Напоминание выпустится заново.";
+  }, path);
+}
+
+// ---------------------------------------------------------------------------
+// Воронка объектов (инвариант 32)
+// ---------------------------------------------------------------------------
+
+export async function setOwnerStage(_prev: unknown, form: FormData): Promise<Result> {
+  const id = String(form.get("object_id"));
+  const stage = String(form.get("stage"));
+  const path = String(form.get("path") ?? "/cabinet/listings");
+  return actThenNotice(async (db) => {
+    await db.query("select set_owner_stage($1, $2::owner_stage)", [id, stage]);
+    return stage === "called" ? "Отмечено: дозвонились." : "Отмечено: съездили на осмотр.";
+  }, path);
+}
+
+export async function signMandate(_prev: unknown, form: FormData): Promise<Result> {
+  const id = String(form.get("object_id"));
+  const kind = String(form.get("mandate_kind") ?? "non_exclusive");
+  const validTo = String(form.get("valid_to") ?? "").trim();
+  const confirmed = form.get("contract_confirmed") === "on";
+  const path = String(form.get("path") ?? "/cabinet/listings");
+  return actThenNotice(async (db) => {
+    await db.query(
+      "select sign_mandate($1, $2::mandate_kind, $3::date, null, $4)",
+      [id, kind, validTo || null, confirmed],
+    );
+    return confirmed
+      ? "Договор заключён и отмечен подписанным."
+      : "Договор заключён. Пока он не подписан, объект виден коллегам как риск.";
+  }, path);
+}
+
+export async function confirmMandate(_prev: unknown, form: FormData): Promise<Result> {
+  const id = String(form.get("object_id"));
+  const path = String(form.get("path") ?? "/cabinet/listings");
+  return actThenNotice(async (db) => {
+    await db.query("select confirm_mandate($1)", [id]);
+    return "Договор подписан. Объект взят в работу.";
   }, path);
 }

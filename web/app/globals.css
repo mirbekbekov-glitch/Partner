@@ -1159,7 +1159,7 @@ h2.alarm { color: var(--cab-alarm); }
 .board {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(13rem, 1fr);
+  grid-auto-columns: minmax(14rem, 1fr);
   gap: 0.75rem;
   overflow-x: auto;
   padding-bottom: 0.75rem;
@@ -1176,7 +1176,7 @@ h2.alarm { color: var(--cab-alarm); }
   border: 1px solid #e4e7ec;
   border-radius: 10px;
   padding: 0.7rem;
-  min-width: 13rem;
+  min-width: 14rem;
 }
 .bcol > header { margin-bottom: 0.6rem; }
 .bcol h2 { font-size: 1rem; margin: 0; }
@@ -1275,3 +1275,28 @@ h2.alarm { color: var(--cab-alarm); }
 .tacts .act.tight { min-width: 11rem; }
 
 .sec-overdue { color: var(--cab-alarm, #b42318); }
+
+
+/* --- воронка объектов (инвариант 32) --------------------------------------- */
+/* Переключатель направлений и фильтр агентов: ссылки, а не кнопки — состояние
+   живёт в адресе, и страницу можно переслать коллеге. */
+.switch { display: flex; gap: 0.35rem; flex-wrap: wrap; margin: 0 0 1rem; }
+.switch a {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  text-decoration: none;
+  color: #344054;
+  font-size: 0.88rem;
+  background: #fff;
+}
+.switch a:hover { background: #f9fafb; }
+.switch a.on { background: #101828; border-color: #101828; color: #fff; font-weight: 600; }
+
+/* Договор одной строкой. Это главное, что агент из другого агентства должен
+   узнать о чужом объекте, поэтому цвет здесь несёт смысл, а не украшает:
+   красное — комиссия под вопросом. */
+.risk { font-size: 0.82rem; color: var(--cab-alarm); font-weight: 600; }
+.risk.none { color: var(--cab-alarm); }
+.ok-line { font-size: 0.82rem; color: var(--cab-ok); }
+.alarm-text { color: var(--cab-alarm); }

@@ -350,6 +350,68 @@ begin
    where id = v_cancelled;
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- Воронка объектов (инвариант 32)
+-- ---------------------------------------------------------------------------
+-- Все объекты каталога заведены сразу с договором, и на доске объектов видна
+-- одна колонка из восьми. В жизни наоборот: больше всего карточек стоит до
+-- договора — именно там агентство и теряет объекты.
+
+do $$
+declare
+  v_aibek uuid := (select id from agents where full_name = 'Айбек');
+  v_bakyt uuid := (select id from agents where full_name = 'Бакыт');
+  r       record;
+  v_obj   uuid;
+begin
+  for r in
+    select * from (values
+      -- адрес,                          вид,     сделка, цена,   собственник,        телефон,        этап,          агент, дней назад
+      ('Панфилова 108, кв. 3',          'flat',  'sale', 68000,  'Асанов Бекжан',    '0555 410 001', 'new',          1, 0),
+      ('Ибраимова 24, кв. 51',          'flat',  'sale', 94000,  'Турсунова Жылдыз', '0555 410 002', 'new',          2, 4),
+      ('Абдрахманова 150, кв. 9',       'flat',  'rent', 500,    'Касымов Нурбек',   '0555 410 003', 'new',          1, 9),
+      ('Токтогула 93, кв. 17',          'flat',  'sale', 112000, 'Эрматов Руслан',   '0555 410 004', 'called',       1, 2),
+      ('Байтик Баатыра 7, кв. 40',      'flat',  'rent', 380,    'Жээнбеков Канат',  '0555 410 005', 'called',       2, 8),
+      ('Ахунбаева 51, кв. 22',          'flat',  'sale', 87000,  'Садыкова Айгуль',  '0555 410 006', 'visited',      1, 3),
+      ('Чүй 219, кв. 64',               'flat',  'sale', 143000, 'Молдалиев Тимур',  '0555 410 007', 'visited',      2, 12),
+      ('Манаса 40, кв. 8',              'flat',  'sale', 76000,  'Бакиров Азат',     '0555 410 008', 'no_contract',  1, 5),
+      ('Сухэ-Батора 18, кв. 2',         'flat',  'rent', 420,    'Исакова Венера',   '0555 410 009', 'no_contract',  2, 20),
+      ('Логвиненко 61, кв. 35',         'flat',  'sale', 99000,  'Нурланов Элдар',   '0555 410 010', 'contracted',   1, 6)
+    ) as v(address, kind, deal_type, price, owner, phone, stage, agent_no, days_ago)
+  loop
+    perform set_config('request.jwt.claims',
+      json_build_object('sub', (select auth_user_id from agents
+                                 where id = case r.agent_no when 1 then v_aibek else v_bakyt end),
+                        'role', 'authenticated')::text, true);
+
+    select id into v_obj from register_object(
+      r.kind::object_kind, r.deal_type::deal_type, r.address, r.price,
+      null, r.owner, r.phone);
+
+    if r.stage in ('called', 'visited') then
+      perform set_owner_stage(v_obj, 'called');
+    end if;
+    if r.stage = 'visited' then
+      perform set_owner_stage(v_obj, 'visited');
+    end if;
+
+    -- «Без договора» — это заключённый, но не подписанный договор: агент
+    -- работает на честном слове. Именно эта колонка и есть риск.
+    if r.stage = 'no_contract' then
+      perform sign_mandate(v_obj, 'non_exclusive');
+    end if;
+    if r.stage = 'contracted' then
+      perform sign_mandate(v_obj, 'exclusive', current_date + 90, null, true);
+    end if;
+
+    perform set_config('request.jwt.claims', '{}', true);
+    update objects set owner_stage_since = now() - (r.days_ago || ' days')::interval
+     where id = v_obj;
+  end loop;
+
+  perform set_config('request.jwt.claims', '{}', true);
+end $$;
+
 -- Кабинет собственника: одна ссылка на все его объекты (инвариант 29).
 -- Без неё экран собственника в разработке нечем открыть.
 do $$
@@ -370,3 +432,15 @@ union all
 select 'показов: ' || count(*) from showings
 union all
 select 'кабинет собственника: /owner/ccccccccddddeeeeffff000011112222';
+
+-- Айбек — руководитель агентства: иначе экран «У кого сколько» в разработке
+-- нечем открыть, а он и есть главное, что просил руководитель.
+do $$
+declare v_admin uuid := (select id from agents where role = 'admin' limit 1);
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', (select auth_user_id from agents where id = v_admin),
+                      'role', 'authenticated')::text, true);
+  perform set_agent_role((select id from agents where full_name = 'Айбек'), 'head');
+  perform set_config('request.jwt.claims', '{}', true);
+end $$;

@@ -34,6 +34,7 @@ export default async function CabinetLayout({
           count: a?.showings_overdue, hint: "без исхода: время прошло" },
         { href: "/cabinet/deals", label: "Сделки",
           count: a?.deals_stuck, hint: "стоят на этапе дольше отведённого" },
+        { href: "/cabinet/listings", label: "Объекты в работе" },
         { href: "/cabinet/objects", label: "Объекты",
           count: a?.objects_critical, hint: "просроченный договор или давно не подтверждали" },
         { href: "/cabinet/notifications", label: "Уведомления",

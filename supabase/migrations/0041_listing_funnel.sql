@@ -354,6 +354,10 @@ select
   md.listing_agent_id,
   a.full_name                as listing_agent_name,
   coalesce(md.listing_agent_id, o.created_by_agent_id) as owner_agent_id,
+  -- Имя ведущего агента, а не только того, у кого договор: до договора объект
+  -- ведёт тот, кто его завёл, и в фильтре руководителя он должен быть назван,
+  -- а не висеть как «без имени».
+  coalesce(a.full_name, ca.full_name)                  as owner_agent_name,
   c.name                     as owner_name,
   app.listing_stage_since(o.id) as stage_since,
   extract(day from now() - app.listing_stage_since(o.id))::int as days_in_stage,
@@ -366,6 +370,7 @@ select
 from objects o
 left join mandates md on md.object_id = o.id and md.status = 'active'
 left join agents a    on a.id = md.listing_agent_id
+left join agents ca   on ca.id = o.created_by_agent_id
 left join object_ownerships oo on oo.object_id = o.id and oo.role = 'owner'
 left join contacts c  on c.id = oo.contact_id;
 

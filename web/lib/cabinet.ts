@@ -1,4 +1,5 @@
 import { asAgent } from "./db";
+import type { DealType, ObjectKind } from "./types";
 import { readSession } from "./session";
 
 /**
@@ -16,9 +17,13 @@ export type Me = {
   email: string;
   phone: string | null;
   phone_verified_at: Date | string | null;
-  role: "agent" | "admin";
+  role: "agent" | "head" | "admin";
   status: "pending" | "approved" | "blocked";
+  directions: ("sale" | "rent")[];
+  agency_id: string;
+  agency_name: string;
   is_admin: boolean;
+  is_head: boolean;
 };
 
 export type CabinetObject = {
@@ -46,14 +51,23 @@ export type CabinetObject = {
   attention: number;
 };
 
-/** Кто вошёл. null означает «входа нет»: сессии нет или она просрочена. */
+/**
+ * Кто вошёл. null означает «входа нет»: сессии нет или она просрочена.
+ *
+ * `directions` приводится к `text[]` намеренно. У пользовательского типа
+ * массива (`deal_type[]`) в драйвере нет разборщика, и поле приходило
+ * строкой «{sale,rent}»: экран брал из неё первый символ и спрашивал у базы
+ * направление «{».
+ */
 export async function me(): Promise<Me | null> {
   const session = await readSession();
   if (!session) return null;
 
   return asAgent(session, "read only", async (db) => {
     const { rows } = await db.query<Me>(
-      `select id, full_name, email, phone, phone_verified_at, role, status, is_admin
+      `select id, full_name, email, phone, phone_verified_at, role, status,
+              directions::text[] as directions,
+              agency_id, agency_name, is_admin, is_head
          from me_v`,
     );
     return rows[0] ?? null;
@@ -1257,5 +1271,94 @@ export async function alerts(): Promise<Alerts | null> {
   return asAgent(session, "read only", async (db) => {
     const { rows } = await db.query<Alerts>("select * from my_alerts_v");
     return rows[0] ?? null;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Воронка объектов (инвариант 32)
+// ---------------------------------------------------------------------------
+
+/**
+ * Колонки воронки объектов.
+ *
+ * Семь, и это сознательный предел: по разборам рынка агенты перестают
+ * переводить карточки после пятнадцати-двадцати этапов на все воронки
+ * вместе. Здесь семь плюс шесть в воронке клиентов.
+ *
+ * Ранние три — решения агента, их ставит он сам. Дальше колонку определяет
+ * факт: есть договор, он подписан, объект в каталоге, по нему идёт сделка.
+ */
+export const LISTING_STAGES = [
+  { key: "new",         title: "Завели",       hint: "объект есть, с собственником не говорили" },
+  { key: "called",      title: "Обзвон",       hint: "дозвонились, интерес есть" },
+  { key: "visited",     title: "Осмотр",       hint: "съездили, видели объект" },
+  { key: "no_contract", title: "Без договора", hint: "работаем на честном слове" },
+  { key: "contracted",  title: "Договор",      hint: "подписан, объявления ещё нет" },
+  { key: "advertised",  title: "В рекламе",    hint: "объект в каталоге" },
+  { key: "in_deal",     title: "Сделка",       hint: "задаток, документы, расчёт" },
+  { key: "sold",        title: "Продан",       hint: "сделка закрыта" },
+] as const;
+
+export type ListingCard = {
+  object_id: string;
+  address: string;
+  kind: ObjectKind;
+  deal_type: DealType;
+  zone: string | null;
+  rooms: number | null;
+  price: string;
+  currency: string;
+  publication_state: string;
+  owner_stage: string;
+  stage: string;
+  mandate_kind: string | null;
+  contract_confirmed: boolean | null;
+  valid_to: string | null;
+  listing_agent_name: string | null;
+  owner_agent_id: string | null;
+  owner_agent_name: string | null;
+  owner_name: string | null;
+  days_in_stage: number;
+  stage_limit_days: number | null;
+  stuck: boolean;
+  showings_done: number;
+  is_mine: boolean;
+};
+
+export async function listingFunnel(deal: "sale" | "rent"): Promise<ListingCard[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<ListingCard>(
+      `select f.*, (f.owner_agent_id = app.current_agent_id()) as is_mine
+         from listing_funnel_v f
+        where f.deal_type = $1::deal_type
+        order by f.stuck desc, f.stage_since asc`,
+      [deal],
+    );
+    return rows;
+  });
+}
+
+export type Workload = {
+  agent_id: string;
+  agent_name: string;
+  stage: string;
+  objects: number;
+  stuck: number;
+};
+
+/** «У кого сколько объектов на каких стадиях» — то, что просил руководитель. */
+export async function workload(): Promise<Workload[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<Workload>(
+      `select agent_id, agent_name, stage, objects, stuck
+         from agency_workload_v order by agent_name`,
+    );
+    return rows;
   });
 }
