@@ -16,7 +16,7 @@ export default async function NotFound() {
   return (
     <>
       <CatalogHeader lang={lang} />
-      <div className="pub-wrap">
+      <div className="wrap" style={{ paddingBlock: 64 }}>
         <h1>{d.notFound}</h1>
         <p className="sub">{d.notFoundLede}</p>
         <p><Link href={`/${lang}`}>{d.seeWhatIsThere}</Link></p>

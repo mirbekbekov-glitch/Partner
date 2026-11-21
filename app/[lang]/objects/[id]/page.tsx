@@ -41,9 +41,11 @@ async function load(id: string) {
   return (data as Row | null) ?? null;
 }
 
-/** Дата по правилам языка: 14.03.2026, 14/03/2026, 2026/3/14. */
+/** Дата по правилам языка: 18.11.2026, 11/18/2026, 2026/11/18.
+ *  Короткая форма, а не «18 нояб. 2026 г.»: длинная не помещалась в
+ *  колонку характеристик и ломалась на две строки. */
 const dateIn = (lang: Lang, iso: string) =>
-  new Intl.DateTimeFormat(LOCALE[lang], { dateStyle: 'medium' }).format(new Date(iso));
+  new Intl.DateTimeFormat(LOCALE[lang], { dateStyle: 'short' }).format(new Date(iso));
 
 export async function generateMetadata(
   { params }: { params: Promise<{ lang: string; id: string }> },
@@ -83,7 +85,7 @@ export default async function PublicObject({
   // остальные занимает рисунок, чтобы сетка не разъезжалась.
   const slots = [0, 1, 2].map((i) => ({
     photo: photos[i] ?? null,
-    facade: <Facade o={o} variant={i} />,
+    facade: <Facade o={o} variant={i} alt={d.drawingAlt} />,
   }));
 
   const specs: [string, string][] = [
@@ -97,69 +99,69 @@ export default async function PublicObject({
   return (
     <>
       <CatalogHeader lang={lang} />
-      <div className="pub-wrap">
-      <p className="key" style={{ marginTop: 16 }}><Link href={`/${lang}`}>{d.toAll}</Link></p>
+      <div className="wrap">
+        <Link className="back" href={`/${lang}`}>{d.toAll}</Link>
 
-      <div className="pub-detail">
-        <div>
-          <div className="gal">
-            <div className="shot">
-              {slots[0].photo ? <Photo src={slots[0].photo} fallback={slots[0].facade} /> : slots[0].facade}
+        <div className="detail">
+          <div>
+            <div className="gal">
+              <div className="pic">
+                {slots[0].photo ? <Photo src={slots[0].photo} fallback={slots[0].facade} /> : slots[0].facade}
+              </div>
+              <div className="side">
+                {slots.slice(1).map((s, i) => (
+                  <div className="pic" key={i}>
+                    {s.photo ? <Photo src={s.photo} fallback={s.facade} /> : s.facade}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="side">
-              {slots.slice(1).map((s, i) => (
-                <div className="shot" key={i}>
-                  {s.photo ? <Photo src={s.photo} fallback={s.facade} /> : s.facade}
-                </div>
+
+            <div className="dhead">
+              <h1>{o.address}</h1>
+              <p className="sub">
+                {o.deal_type === 'sale' ? d.sale : d.rent} · {kindName(lang, o.kind)}
+                {o.zone ? ` · ${o.zone}` : ''}
+              </p>
+              <p className="price-big num">
+                {publicMoney(lang, o.price, o.currency)}
+                {o.deal_type === 'rent' ? <small>{d.perMonth}</small> : null}
+              </p>
+            </div>
+
+            <dl className="specs">
+              {specs.map(([k, v]) => (
+                <div className="spec" key={k}><dt>{k}</dt><dd className="num">{v}</dd></div>
+              ))}
+            </dl>
+
+            {/* Описание и адрес остаются на языке агента: машинный перевод
+                характеристик жилья врёт слишком дорого. */}
+            {o.description ? (
+              <div className="desc">
+                <h2>{d.about}</h2>
+                {o.description}
+              </div>
+            ) : null}
+
+            <p className="fresh"><i className="pulse" />{d.confirmedPrice} · {freshWordIn(lang, days)}</p>
+          </div>
+
+          <div className="aside">
+            <div className="panel-card">
+              <h2>{d.viewObject}</h2>
+              <p className="note">{d.leadNote}</p>
+              <LeadForm lang={lang} objectId={o.id} address={o.address} />
+            </div>
+            <div className="callout">
+              <b>{d.callNow}</b>
+              <span className="mini">{d.salesDept}</span>
+              {AGENCY_PHONES.map((p) => (
+                <a key={p.href} href={p.href} className="mono">{p.display}</a>
               ))}
             </div>
           </div>
-
-          <div className="pub-dhead">
-            <h1>{o.address}</h1>
-            <p className="sub">
-              {o.deal_type === 'sale' ? d.sale : d.rent} · {kindName(lang, o.kind)}
-              {o.zone ? ` · ${o.zone}` : ''}
-            </p>
-            <p className="pub-price-big">
-              {publicMoney(lang, o.price, o.currency)}
-              {o.deal_type === 'rent' ? <span className="per">{d.perMonth}</span> : null}
-            </p>
-          </div>
-
-          <dl className="specs">
-            {specs.map(([k, v]) => (
-              <div className="spec" key={k}><dt>{k}</dt><dd>{v}</dd></div>
-            ))}
-          </dl>
-
-          {/* Описание и адрес остаются на языке агента: машинный перевод
-              характеристик жилья врёт слишком дорого. */}
-          {o.description ? (
-            <div className="pub-desc">
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 8px' }}>{d.about}</h2>
-              {o.description}
-            </div>
-          ) : null}
-
-          <p className="fresh">{d.confirmedPrice} · {freshWordIn(lang, days)}</p>
         </div>
-
-        <div className="aside">
-          <div className="panel-card">
-            <h2>{d.viewObject}</h2>
-            <p className="note">{d.leadNote}</p>
-            <LeadForm lang={lang} objectId={o.id} address={o.address} />
-          </div>
-          <div className="callout">
-            <b>{d.callNow}</b>
-            {d.salesDept}<br />
-            {AGENCY_PHONES.map((p) => (
-              <span key={p.href}><a href={p.href}>{p.display}</a><br /></span>
-            ))}
-          </div>
-        </div>
-      </div>
       </div>
 
       <CatalogFooter lang={lang} />

@@ -30,10 +30,10 @@ export const LOCALE: Record<Lang, string> = {
 
 type Dict = {
   // Шапка и подвал
-  forAgents: string; agency: string; phones: string; sections: string;
+  forAgents: string; forAgentsShort: string; agency: string; city: string; phones: string; sections: string;
   agencyLine: string; cabinetLine: string;
   // Герой
-  heroTitle: string; heroLede: string;
+  heroTitle: string; heroEm: string; heroLede: string;
   prop1: string; prop2: string; prop3: string;
   // Поиск
   address: string; addressHint: string; deal: string; anyDeal: string;
@@ -62,7 +62,7 @@ type Dict = {
   roomsShort: string; sqm: string; floorShort: string; priceHint: string;
   namePlaceholder: string; phonePlaceholder: string;
   messageLabel: string; messagePlaceholder: string; honeypotLabel: string;
-  siteTitle: string; siteDescription: string;
+  siteTitle: string; siteDescription: string; drawingAlt: string;
   // Типы недвижимости
   kinds: Record<string, string>;
 };
@@ -78,7 +78,7 @@ const ru: Dict = {
   forAgents: 'Вход для агентов', agency: 'Liberterra', phones: 'Телефоны',
   sections: 'Разделы', agencyLine: 'Агентство недвижимости, Бишкек',
   cabinetLine: 'Кабинет и CRM — по входу для агентов.',
-  heroTitle: 'Квартиры, дома и участки в Бишкеке',
+  heroTitle: 'Квартиры, дома и участки', heroEm: 'в Бишкеке',
   heroLede: 'Каждое объявление ведёт агент Liberterra: цену и доступность он подтверждает лично, а дата на карточке показывает, когда это было в последний раз.',
   prop1: 'Цену подтверждают, а не копируют',
   prop2: 'Один объект — один ответственный агент',
@@ -122,6 +122,9 @@ const ru: Dict = {
   messagePlaceholder: 'Можно посмотреть в субботу днём?', honeypotLabel: 'Сайт',
   siteTitle: 'Недвижимость в Бишкеке: аренда и продажа — Liberterra',
   siteDescription: 'Liberterra: квартиры, дома и коммерческая недвижимость в Бишкеке.',
+  drawingAlt: 'Рисунок вместо фотографии',
+  forAgentsShort: 'Вход',
+  city: 'Бишкек',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
            land: 'участок', commercial: 'коммерческая', garage: 'гараж' },
 };
@@ -130,7 +133,7 @@ const ky: Dict = {
   forAgents: 'Агенттер үчүн кирүү', agency: 'Liberterra', phones: 'Телефондор',
   sections: 'Бөлүмдөр', agencyLine: 'Кыймылсыз мүлк агенттиги, Бишкек',
   cabinetLine: 'Кабинет жана CRM — агенттер үчүн кирүү аркылуу.',
-  heroTitle: 'Бишкектеги батирлер, үйлөр жана жер тилкелери',
+  heroTitle: 'Батирлер, үйлөр жана жер тилкелери', heroEm: 'Бишкекте',
   heroLede: 'Ар бир жарнаманы Liberterra агенти жүргүзөт: бааны жана жеткиликтүүлүктү өзү ырастайт, картадагы күн акыркы ырастоо качан болгонун көрсөтөт.',
   prop1: 'Баа көчүрүлбөйт, ырасталат',
   prop2: 'Бир объект — бир жооптуу агент',
@@ -174,6 +177,9 @@ const ky: Dict = {
   messagePlaceholder: 'Ишембиде күндүз көрсө болобу?', honeypotLabel: 'Сайт',
   siteTitle: 'Бишкектеги кыймылсыз мүлк: ижара жана сатуу — Liberterra',
   siteDescription: 'Liberterra: Бишкектеги батирлер, үйлөр жана коммерциялык мүлк.',
+  drawingAlt: 'Сүрөттүн ордуна тартылган сүрөт',
+  forAgentsShort: 'Кирүү',
+  city: 'Бишкек',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
            land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж' },
 };
@@ -182,7 +188,7 @@ const en: Dict = {
   forAgents: 'Agent login', agency: 'Liberterra', phones: 'Phones',
   sections: 'Sections', agencyLine: 'Real estate agency, Bishkek',
   cabinetLine: 'The agent cabinet and CRM are behind the agent login.',
-  heroTitle: 'Flats, houses and land in Bishkek',
+  heroTitle: 'Flats, houses and land', heroEm: 'in Bishkek',
   heroLede: 'Every listing is handled by a Liberterra agent who confirms the price and availability in person. The date on each card shows when that last happened.',
   prop1: 'Prices are confirmed, not copied',
   prop2: 'One property, one responsible agent',
@@ -226,6 +232,9 @@ const en: Dict = {
   messagePlaceholder: 'Could I see it on Saturday afternoon?', honeypotLabel: 'Website',
   siteTitle: 'Real estate in Bishkek: for sale and for rent — Liberterra',
   siteDescription: 'Liberterra: flats, houses and commercial property in Bishkek.',
+  drawingAlt: 'Drawing shown instead of a photo',
+  forAgentsShort: 'Log in',
+  city: 'Bishkek',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
            land: 'land', commercial: 'commercial', garage: 'garage' },
 };
@@ -234,7 +243,7 @@ const zh: Dict = {
   forAgents: '经纪人登录', agency: 'Liberterra', phones: '电话',
   sections: '栏目', agencyLine: '比什凯克房地产中介',
   cabinetLine: '经纪人工作台与 CRM 需登录后使用。',
-  heroTitle: '比什凯克的公寓、住宅与地块',
+  heroTitle: '比什凯克的', heroEm: '公寓、住宅与地块',
   heroLede: '每一条房源都由 Liberterra 的经纪人负责，价格与可售状态由本人确认。卡片上的日期显示最近一次确认的时间。',
   prop1: '价格经过确认，不是照搬',
   prop2: '一套房源，一位负责经纪人',
@@ -278,6 +287,9 @@ const zh: Dict = {
   messagePlaceholder: '周六下午可以看房吗？', honeypotLabel: '网站',
   siteTitle: '比什凯克房产：出售与出租 — Liberterra',
   siteDescription: 'Liberterra：比什凯克的公寓、住宅与商业地产。',
+  drawingAlt: '以插图代替照片',
+  forAgentsShort: '登录',
+  city: '比什凯克',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
            land: '地块', commercial: '商业用房', garage: '车库' },
 };

@@ -21,12 +21,14 @@ export type FacadeInput = {
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-export function Facade({ o, variant = 0 }: { o: FacadeInput; variant?: number }) {
+export function Facade({ o, variant = 0, alt }: { o: FacadeInput; variant?: number; alt?: string }) {
   // Устойчивое число из uuid: один и тот же объект всегда рисуется одинаково.
   const seed = [...o.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 9973, 7) + variant * 131;
   const wall = ['var(--wall)', 'var(--wall-2)', 'var(--wall-3)'][seed % 3];
   const sky = `sky-${o.id}-${variant}`;
-  const label = `${o.kind === 'land' ? 'Участок' : 'Здание'}, рисунок вместо фотографии`;
+  // Подпись приходит с языком страницы: раньше она была по-русски
+  // даже на китайской версии.
+  const label = alt ?? 'Рисунок вместо фотографии';
 
   let inner: React.ReactNode = null;
 
