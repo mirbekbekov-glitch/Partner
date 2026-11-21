@@ -419,15 +419,6 @@ main:has(.nav) { max-width: none; padding: 0; }
 .nav-link { color: var(--on-ink-dim); text-decoration: none; font-size: 14px; font-weight: 600;
   white-space: nowrap; transition: color .18s; }
 .nav-link:hover { color: var(--on-ink); }
-.nav-phones { display: flex; flex-wrap: wrap; gap: 2px 18px; }
-.nav-phone { color: var(--on-ink); text-decoration: none; font-size: 14px; font-weight: 600;
-  white-space: nowrap; letter-spacing: -.1px; position: relative; }
-/* Подчёркивание выезжает из-под номера, а не появляется целиком: движение
-   короткое, но оно и отличает живой элемент от картинки. */
-.nav-phone::after { content: ""; position: absolute; left: 0; right: 0; bottom: -3px; height: 1px;
-  background: var(--accent-2); transform: scaleX(0); transform-origin: left;
-  transition: transform .22s cubic-bezier(.2,.7,.3,1); }
-.nav-phone:hover::after { transform: scaleX(1); }
 .enter { background: var(--accent); color: #fff; border: 0; border-radius: var(--r-full);
   padding: 9px 18px; font-weight: 700; font-size: 14px; text-decoration: none; white-space: nowrap;
   transition: background .18s, transform .18s; }
@@ -733,11 +724,7 @@ main:has(.nav) { max-width: none; padding: 0; }
   .gal { grid-template-columns: 1fr; }
   .gal .side { grid-template-columns: 1fr 1fr; }
   .nav-in { flex-wrap: wrap; row-gap: 10px; gap: 10px; }
-  .nav-phones { order: 3; width: 100%; gap: 2px 14px; }
-  /* Ссылка на заявки остаётся в первой строке рядом со знаком: вынесенная
-     отдельной строкой, она делала шапку четырёхэтажной. */
   .nav-link { font-size: 13px; }
-  .nav-phone { font-size: 13px; }
   .nav .spacer { display: none; }
   .lang { margin-left: auto; }
   .enter { padding: 8px 15px; font-size: 13px; }
