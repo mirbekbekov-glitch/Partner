@@ -7,11 +7,17 @@ export function ProfileForm({
   fullName,
   phone,
   email,
+  organization,
+  orgConfirmed,
+  knownOrgs,
   hint,
 }: {
   fullName: string;
   phone: string | null;
   email: string | null;
+  organization: string | null;
+  orgConfirmed: boolean;
+  knownOrgs: string[];
   hint?: string;
 }) {
   const [state, formAction, pending] = useActionState<ProfileResult, FormData>(
@@ -58,6 +64,38 @@ export function ProfileForm({
           autoComplete="tel"
         />
         <p className="key">Не обязателен. Коллегам виден, клиентам — нет.</p>
+      </div>
+
+      <div className="field">
+        <label className="key" htmlFor="organization">
+          Агентство недвижимости
+        </label>
+        <input
+          id="organization"
+          name="organization"
+          type="text"
+          list="known-orgs"
+          defaultValue={organization ?? ''}
+          placeholder="Например: Этажи"
+          autoComplete="organization"
+        />
+        {/* Подсказка из уже заведённых агентств: так «Этажи» не превратятся
+            в «Этажи КГ» и «Агентство Этажи». Совпадение по написанию база
+            сводит сама, но выбрать из списка проще, чем набирать. */}
+        <datalist id="known-orgs">
+          {knownOrgs.map((o) => <option key={o} value={o} />)}
+        </datalist>
+        <label className="check">
+          <input type="checkbox" name="solo" defaultChecked={!organization} />
+          Работаю сам, без агентства
+        </label>
+        <p className="key">
+          {organization && orgConfirmed
+            ? 'Принадлежность подтверждена администратором.'
+            : organization
+              ? 'Указано вами. Администратор подтвердит принадлежность — до этого рядом с вашим именем стоит пометка «не подтверждено».'
+              : 'Если вы в агентстве, впишите его название — админ подтвердит.'}
+        </p>
       </div>
 
       <div className="field">

@@ -8,7 +8,7 @@ select test.eq(
   (select count(distinct c.relname)::int
      from pg_trigger t join pg_class c on c.oid = t.tgrelid
     where t.tgname like 'zz_audit_%' and not t.tgisinternal),
-  12, 'журнальный триггер стоит на всех 12 содержательных таблицах');
+  13, 'журнальный триггер стоит на всех 13 содержательных таблицах');
 
 -- Заявка с сайта (0028) — такая же сущность: её появление и смена статуса
 -- должны быть в журнале наравне с остальными.
@@ -17,6 +17,14 @@ select test.ok(
            where c.relname = 'leads' and t.tgname = 'zz_audit_leads'
              and not t.tgisinternal),
   'заявки с сайта тоже под журналом');
+
+-- Агентство (0029) — тоже сущность: кто его завёл и кто переименовал,
+-- должно быть видно.
+select test.ok(
+  exists (select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid
+           where c.relname = 'organizations' and t.tgname = 'zz_audit_organizations'
+             and not t.tgisinternal),
+  'агентства тоже под журналом');
 
 -- ---- 7б. Кто, что, когда -------------------------------------------------
 -- Чистим журнал от записей сценария приёмки — владельцем таблиц, потому что

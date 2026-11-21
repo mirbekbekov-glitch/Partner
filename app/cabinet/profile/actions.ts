@@ -23,6 +23,24 @@ export async function saveProfile(formData: FormData): Promise<ProfileResult> {
 
   if (error) return { error: error.message, saved: false };
 
+  // Агентство — отдельной функцией: агент его ЗАЯВЛЯЕТ, а подтверждает
+  // админ, и смешивать это с правкой имени нельзя. «Частный агент» — это
+  // отсутствие организации, поэтому пустое поле снимает связь.
+  const org = String(formData.get('organization') ?? '').trim();
+  const solo = formData.get('solo') === 'on';
+  const orgCall = solo || org === ''
+    ? supabase.rpc('clear_my_organization')
+    : supabase.rpc('set_my_organization', { p_name: org });
+  const { error: orgError } = await orgCall;
+  if (orgError) {
+    return {
+      error: orgError.message.includes('BAD_INPUT')
+        ? 'Название агентства — от 2 до 120 символов.'
+        : orgError.message,
+      saved: false,
+    };
+  }
+
   // Имя показывается в верхней полосе на каждой странице кабинета.
   revalidatePath('/cabinet', 'layout');
   return { error: null, saved: true };

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { SignOutButton } from './SignOutButton';
 import { ProfileForm } from './profile/ProfileForm';
+import { orgName } from '@/lib/agency';
 
 /**
  * Гейт кабинета.
@@ -27,7 +28,7 @@ export default async function CabinetLayout({ children }: { children: React.Reac
 
   const { data: agent } = await supabase
     .from('agents')
-    .select('id, full_name, phone, email, role, status')
+    .select('id, full_name, phone, email, role, status, org_confirmed, organizations!agents_organization_id_fkey(name)')
     .eq('auth_user_id', user.id)
     .maybeSingle();
 
@@ -59,6 +60,11 @@ export default async function CabinetLayout({ children }: { children: React.Reac
   }
 
   if (agent.status === 'pending') {
+    const { data: orgs } = await supabase
+      .from('organization_list_v')
+      .select('name')
+      .limit(200);
+    const knownOrgs = (orgs ?? []).map((o) => o.name as string);
     return (
       <Shell email={agent.email ?? user.email}>
         <h1>Заявка на доступ отправлена</h1>
@@ -75,7 +81,10 @@ export default async function CabinetLayout({ children }: { children: React.Reac
             fullName={agent.full_name}
             phone={agent.phone}
             email={agent.email}
-            hint="Это можно заполнить, не дожидаясь одобрения."
+            organization={orgName(agent.organizations)}
+            orgConfirmed={agent.org_confirmed}
+            knownOrgs={knownOrgs}
+            hint="Это можно заполнить, не дожидаясь одобрения. Агентство подтвердит администратор."
           />
         </div>
       </Shell>

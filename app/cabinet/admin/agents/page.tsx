@@ -21,6 +21,8 @@ type Row = {
   role: string;
   status: string;
   created_at: string;
+  organization_name: string | null;
+  org_confirmed: boolean;
   objects_count: number;
   contacts_count: number;
   requirements_count: number;
@@ -90,6 +92,15 @@ function AgentCard({ a }: { a: Row }) {
         <strong>{a.full_name}</strong>
         <span className="tag">{STATUS_RU[a.status] ?? a.status}</span>
         {a.role === 'admin' ? <span className="tag">админ</span> : null}
+        {/* Агентство заявляет сам агент, поэтому неподтверждённое помечаем
+            прямо здесь: иначе «Этажи» в списке читаются как проверенный факт. */}
+        {a.organization_name ? (
+          <span className={a.org_confirmed ? 'tag' : 'warn'}>
+            {a.organization_name}{a.org_confirmed ? '' : ' — не подтверждено'}
+          </span>
+        ) : (
+          <span className="key">частный агент</span>
+        )}
       </div>
       <div className="row" style={{ marginTop: 6 }}>
         <span className="key">почта</span>
@@ -112,7 +123,13 @@ function AgentCard({ a }: { a: Row }) {
           {a.requirements_count}
         </span>
       </div>
-      <AgentActions agentId={a.id} status={a.status} role={a.role} />
+      <AgentActions
+        agentId={a.id}
+        status={a.status}
+        role={a.role}
+        hasOrg={a.organization_name !== null}
+        orgConfirmed={a.org_confirmed}
+      />
     </div>
   );
 }

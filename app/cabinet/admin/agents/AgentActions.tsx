@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { approveAgent, blockAgent, setAgentRole } from './actions';
+import { approveAgent, blockAgent, setAgentRole, confirmAgentOrg } from './actions';
 
 type Result = { error: string | null };
 type Action = (fd: FormData) => Promise<Result>;
@@ -11,12 +11,14 @@ function Button({
   agentId,
   label,
   role,
+  confirmed,
   confirmText,
 }: {
   action: Action;
   agentId: string;
   label: string;
   role?: 'agent' | 'admin';
+  confirmed?: boolean;
   confirmText?: string;
 }) {
   const [state, formAction, pending] = useActionState<Result, FormData>(
@@ -37,6 +39,9 @@ function Button({
       >
         <input type="hidden" name="agent_id" value={agentId} />
         {role ? <input type="hidden" name="role" value={role} /> : null}
+        {confirmed !== undefined
+          ? <input type="hidden" name="confirmed" value={String(confirmed)} />
+          : null}
         <button type="submit" disabled={pending} className="ghost">
           {pending ? '…' : label}
         </button>
@@ -50,13 +55,26 @@ export function AgentActions({
   agentId,
   status,
   role,
+  hasOrg,
+  orgConfirmed,
 }: {
   agentId: string;
   status: string;
   role: string;
+  hasOrg: boolean;
+  orgConfirmed: boolean;
 }) {
   return (
     <div className="actions">
+      {hasOrg && !orgConfirmed ? (
+        <Button action={confirmAgentOrg} agentId={agentId} confirmed
+                label="Подтвердить агентство" />
+      ) : null}
+      {hasOrg && orgConfirmed ? (
+        <Button action={confirmAgentOrg} agentId={agentId} confirmed={false}
+                label="Снять подтверждение"
+                confirmText="Снять подтверждение принадлежности к агентству?" />
+      ) : null}
       {status !== 'approved' ? (
         <Button action={approveAgent} agentId={agentId} label="Одобрить" />
       ) : null}

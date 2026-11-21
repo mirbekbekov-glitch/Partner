@@ -24,3 +24,17 @@ export const AGENCY_NAME = 'Liberterra';
  * тому, ни другому ничего.
  */
 export const CATALOG_TITLE = 'Недвижимость в Бишкеке';
+
+/**
+ * Название агентства из вложенного ответа PostgREST.
+ *
+ * Связь agents → organizations «многие к одному», и в ответе приходит
+ * объект. Но типы считают вложение массивом, и подогнать их приведением
+ * нечестно: тогда настоящая форма ответа перестанет проверяться. Поэтому
+ * разбираем оба вида.
+ */
+export function orgName(value: unknown): string | null {
+  const row = Array.isArray(value) ? value[0] : value;
+  const name = (row as { name?: unknown } | null | undefined)?.name;
+  return typeof name === 'string' ? name : null;
+}

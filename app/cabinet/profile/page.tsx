@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { ProfileForm } from './ProfileForm';
+import { orgName } from '@/lib/agency';
 
 export const metadata = { title: 'Профиль' };
 
@@ -12,9 +13,16 @@ export default async function ProfilePage() {
   // Свою строку агент видит при любом статусе (политика agents_read_self).
   const { data: agent } = await supabase
     .from('agents')
-    .select('full_name, phone, email, role, status, telegram_id, created_at')
+    .select('full_name, phone, email, role, status, telegram_id, created_at, org_confirmed, organizations!agents_organization_id_fkey(name)')
     .eq('auth_user_id', user.id)
     .maybeSingle();
+
+  // Список уже заведённых агентств — чтобы выбирали из существующих, а не
+  // плодили написания. Видят его все вошедшие (политика organizations_read).
+  const { data: orgs } = await supabase
+    .from('organization_list_v')
+    .select('name')
+    .limit(200);
 
   if (!agent) {
     return (
@@ -44,6 +52,9 @@ export default async function ProfilePage() {
           fullName={agent.full_name}
           phone={agent.phone}
           email={agent.email}
+          organization={orgName(agent.organizations)}
+          orgConfirmed={agent.org_confirmed}
+          knownOrgs={(orgs ?? []).map((o) => o.name as string)}
         />
       </div>
 
