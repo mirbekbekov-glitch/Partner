@@ -63,15 +63,19 @@ select test.eq(
 
 -- ---- 15б. Каталогу открыты ровно две функции ------------------------------
 -- Посетитель каталога — это роль anon. Ей нужны отчёт собственника по ссылке
--- и определение агента, иначе каталог не читается. Больше ничего.
+-- и определение агента, иначе каталог не читается. Плюс три функции фида
+-- (инвариант 28): по ту сторону ссылки площадка, а не вошедший агент, и
+-- отдаёт ей тот же публичный каталог. Ни таблиц, ни чего-либо сверх
+-- публичного роль при этом не получает. Больше ничего.
 set role postgres;
 select test.eq(
   (select array_agg(p.proname::text order by p.proname)
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'app'
       and has_function_privilege('anon', p.oid, 'execute')),
-  array['current_agent_id', 'owner_report'],
-  'анониму открыты ровно две функции схемы app');
+  array['channel_by_token', 'channel_feed', 'current_agent_id',
+        'owner_report', 'record_channel_fetch'],
+  'анониму открыты ровно пять функций схемы app и ни одной больше');
 
 -- Из схемы public анониму не открыто ничего: отчёт собственника по ссылке —
 -- это app.owner_report() выше, и кабинетных функций в этом списке быть не

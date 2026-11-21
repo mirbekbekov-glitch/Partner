@@ -31,7 +31,11 @@ export default async function CabinetLayout({
               <li><a href="/cabinet/showings">Показы</a></li>
               <li><a href="/cabinet/notifications">Уведомления</a></li>
               <li><a href="/cabinet/deals">Сделки</a></li>
-              <li><a href="/cabinet/candidates">Площадки</a></li>
+              {/* «Объявления» — то, что приносим С площадок; «Площадки» — то,
+                  что отдаём туда. Пока в меню стояли два пункта с одним
+                  названием, различить их можно было только методом тыка. */}
+              <li><a href="/cabinet/candidates">Объявления</a></li>
+              <li><a href="/cabinet/channels">Площадки</a></li>
               {agent.is_admin && <li><a href="/cabinet/agents">Агенты</a></li>}
               {agent.is_admin && <li><a href="/cabinet/scheduler">Расписание</a></li>}
             </ul>

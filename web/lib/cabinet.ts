@@ -330,6 +330,8 @@ export type ObjectDetail = {
    * отсутствующей кнопки.
    */
   canEditObject: boolean;
+  /** Право распоряжаться площадками объекта (инвариант 28). */
+  canManageChannels: boolean;
   photoLimit: number;
   mandate: {
     id: string;
@@ -423,6 +425,7 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
     const { rows: rights } = await db.query<{
       can_edit: boolean;
       can_edit_object: boolean;
+      can_manage_channels: boolean;
       limit: number;
     }>(
       `select
@@ -438,6 +441,12 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
                            where o.id = $1
                              and o.created_by_agent_id = app.current_agent_id())))
            as can_edit_object,
+         -- Право на площадки спрашивается у базы той же функцией, которой
+         -- проверяет триггер (инвариант 28). Переиспользовать здесь флаг
+         -- фотографий было бы ошибкой наоборот: админ площадками
+         -- распоряжается, а фотографии чужого объекта не ведёт, и экран
+         -- прятал бы кнопку, которую база разрешает.
+         app.can_manage_channel($1) as can_manage_channels,
          app.max_photos_per_object() as limit`,
       [id],
     );
@@ -447,6 +456,7 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
       photos: photos.rows as ObjectDetail["photos"],
       canEditPhotos: rights[0].can_edit,
       canEditObject: rights[0].can_edit_object,
+      canManageChannels: rights[0].can_manage_channels,
       photoLimit: rights[0].limit,
       mandate: (mandateRows[0] as ObjectDetail["mandate"]) ?? null,
       owners: owners.rows as ObjectDetail["owners"],
@@ -986,6 +996,78 @@ export async function notifications(): Promise<Notification[]> {
   return asAgent(session, "read only", async (db) => {
     const { rows } = await db.query<Notification>(
       `select * from my_notifications_v order by created_at desc limit 200`,
+    );
+    return rows;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Выгрузка на площадки
+// ---------------------------------------------------------------------------
+
+export type Channel = {
+  channel: string;
+  enabled: boolean;
+  objects_in_feed: number;
+  last_fetched_at: Date | string | null;
+  fetches_week: number;
+  rotated_at: Date | string | null;
+};
+
+export type ObjectChannel = {
+  channel: string;
+  enabled: boolean;
+  in_catalog: boolean;
+  state: string;
+  last_error: string | null;
+  channel_fetched_at: Date | string | null;
+};
+
+/** Каналы выгрузки: сколько объектов отдаём и когда оттуда приходили. */
+export async function channels(): Promise<Channel[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<Channel>(
+      `select channel::text, enabled, objects_in_feed, last_fetched_at,
+              fetches_week, rotated_at
+         from channel_feeds_v
+        order by channel`,
+    );
+    return rows;
+  });
+}
+
+/** Ссылка на фид. База отдаёт её только администратору (инвариант 28). */
+export async function feedUrl(channel: string): Promise<string | null> {
+  const session = await readSession();
+  if (!session) return null;
+
+  return asAgent(session, "read only", async (db) => {
+    try {
+      const { rows } = await db.query<{ url: string }>(
+        "select feed_url($1::publication_channel) as url",
+        [channel],
+      );
+      return rows[0]?.url ?? null;
+    } catch {
+      // Агенту ссылка не положена, и это не ошибка экрана.
+      return null;
+    }
+  });
+}
+
+/** Площадки конкретного объекта. */
+export async function objectChannels(objectId: string): Promise<ObjectChannel[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<ObjectChannel>(
+      `select channel::text, enabled, in_catalog, state, last_error, channel_fetched_at
+         from channel_state_v where object_id = $1 order by channel`,
+      [objectId],
     );
     return rows;
   });

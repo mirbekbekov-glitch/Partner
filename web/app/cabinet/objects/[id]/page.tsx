@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { objectDetail } from "../../../../lib/cabinet";
+import { channels as channelList, objectChannels, objectDetail } from "../../../../lib/cabinet";
 import { formatPrice, KIND_LABEL, freshness, formatDate, formatDateTime, formatArea, formatPhone, formatShare, PUBLICATION_LABEL } from "../../../../lib/format";
 import { gate } from "../../Gate";
 import { Photos } from "../../Photos";
+import { Channels } from "../../Channels";
 import { Transfer } from "../../Transfer";
 import { transferTargets } from "../../../../lib/cabinet";
 import { transferObject } from "../../actions";
@@ -28,6 +29,8 @@ export default async function ObjectPage({
   const { id } = await params;
   const { note } = await searchParams;
   const data = await objectDetail(id);
+  const channels = await objectChannels(id);
+  const feeds = await channelList();
   if (!data) notFound();
 
   const targets = data.canEditPhotos ? await transferTargets() : [];
@@ -114,6 +117,14 @@ export default async function ObjectPage({
             ? "Фотографии ведёт listing-агент действующего договора. По этому объекту договор у другого агента."
             : "Фотографии можно добавить только при действующем договоре с собственником: отвечать за снимки перед ним должен тот, с кем договор. Заключите договор — форма загрузки появится."
         }
+      />
+
+      <Channels
+        objectId={o.id}
+        items={channels}
+        available={feeds.map((f) => f.channel)}
+        canEdit={data.canManageChannels}
+        whyNot="Площадками объекта распоряжается агент действующего договора: снять чужой объект с площадки — это выключить чужую рекламу."
       />
 
       <section>

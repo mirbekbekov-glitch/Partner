@@ -73,10 +73,17 @@ set role authenticated;
 select test.throws(
   $$select publish_object('00000000-0000-0000-0000-0000000fa001')$$,
   'INVARIANT_1', 'публикация без мандата: функция кабинета отклонена');
+-- У объекта без мандата нет и listing-агента, поэтому обычного агента
+-- первым останавливает инвариант 28, а до инварианта 1 доходит только
+-- администратор. Проверяются оба барьера: каждый отвечает за своё.
 select test.throws(
-  $$insert into publication_channels (object_id, channel, status)
-    values ('00000000-0000-0000-0000-0000000fa001', 'house_kg', 'exported')$$,
-  'INVARIANT_1', 'публикация без мандата: выгрузка в канал отклонена');
+  $$select set_channel('00000000-0000-0000-0000-0000000fa001', 'house_kg', true)$$,
+  'INVARIANT_28', 'публикация без мандата: чужой объект на площадку не поставить');
+set request.jwt.claims = :'claims_admin';
+select test.throws(
+  $$select set_channel('00000000-0000-0000-0000-0000000fa001', 'house_kg', true)$$,
+  'INVARIANT_1', 'публикация без мандата: выгрузка в канал отклонена и администратору');
+set request.jwt.claims = :'claims_aibek';
 reset role;
 
 select test.eq(

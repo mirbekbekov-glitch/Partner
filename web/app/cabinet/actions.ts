@@ -880,3 +880,38 @@ export async function setDealStage(_prev: unknown, form: FormData): Promise<Resu
     return "Этап изменён.";
   }, `/cabinet/deals/${dealId}`);
 }
+
+// ---------------------------------------------------------------------------
+// Выгрузка на площадки
+// ---------------------------------------------------------------------------
+
+/**
+ * Включить или выключить площадку для объекта.
+ *
+ * Проверок прав здесь нет: площадками объекта распоряжается агент его
+ * договора, и это решает триггер инварианта 28. Прямая запись в таблицу
+ * закрыта правами — путь ровно один, через set_channel().
+ */
+export async function setChannel(_prev: unknown, form: FormData): Promise<Result> {
+  const objectId = String(form.get("object_id"));
+  const channel = String(form.get("channel"));
+  const enabled = String(form.get("enabled")) === "1";
+
+  return actThenNotice(async (db) => {
+    await db.query("select set_channel($1, $2::publication_channel, $3)", [
+      objectId,
+      channel,
+      enabled,
+    ]);
+    return enabled ? "Площадка включена." : "Площадка выключена.";
+  }, `/cabinet/objects/${objectId}`);
+}
+
+/** Новая ссылка на фид. Старая перестаёт работать сразу. */
+export async function rotateFeedToken(_prev: unknown, form: FormData): Promise<Result> {
+  const channel = String(form.get("channel"));
+  return actThenNotice(async (db) => {
+    await db.query("select app.rotate_feed_token($1::publication_channel)", [channel]);
+    return "Ссылка заменена. Старая больше не работает — выдайте площадке новую.";
+  }, "/cabinet/channels");
+}

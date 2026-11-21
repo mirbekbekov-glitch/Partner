@@ -56,8 +56,12 @@ begin
     values (v_obj, v_owner, 'owner', 1);
 
     -- Инвариант 1: без активного мандата публикация невозможна.
-    insert into mandates (object_id, kind, start_price, listing_agent_id, contract_confirmed, status)
-    values (v_obj, 'non_exclusive', r.price,
+    -- Договор начался два месяца назад: в данных разработки есть показы
+    -- прошедших дней, а показ до начала договора инвариант 26 не пропустит —
+    -- и правильно сделает.
+    insert into mandates (object_id, kind, valid_from, start_price,
+                          listing_agent_id, contract_confirmed, status)
+    values (v_obj, 'non_exclusive', current_date - 60, r.price,
             case r.agent_no when 1 then v_agent else v_agent2 end, true, 'active');
 
     -- Публикация не трогает actual_at: цена и фото не менялись.
@@ -89,10 +93,21 @@ declare
   v_match uuid;
   v_show  uuid;
 begin
-  insert into publication_channels (object_id, channel, status, last_sync_at)
-  values (v_obj, 'lalafo',   'exported', now() - interval '6 days'),
-         (v_obj, 'house_kg', 'updated',  now() - interval '2 days'),
-         (v_obj, 'site',     'exported', now() - interval '6 days')
+  -- Каналы — это намерение отдавать объект на площадку (инвариант 28).
+  -- «Размещено» здесь больше не пишется: площадка нам этого не сообщает.
+  insert into publication_channels (object_id, channel, enabled)
+  values (v_obj, 'lalafo',   true),
+         (v_obj, 'house_kg', true),
+         (v_obj, 'site',     true)
+  on conflict (object_id, channel) do nothing;
+
+  -- Остальные опубликованные объекты тоже отдаём на площадки: на одном
+  -- объекте не видно ни фида, ни экрана каналов.
+  insert into publication_channels (object_id, channel, enabled)
+  select o.id, c, true
+    from objects o
+    cross join (values ('lalafo'::publication_channel), ('house_kg'::publication_channel)) as t(c)
+   where o.publication_state = 'published'
   on conflict (object_id, channel) do nothing;
 
   insert into matches (object_id, requirement_id, closing_agent_id, created_by_agent_id)

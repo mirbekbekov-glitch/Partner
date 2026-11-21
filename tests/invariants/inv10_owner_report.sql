@@ -63,9 +63,13 @@ select * from create_match(:'obj1', :'req1') \gset m1_
 select * from schedule_showing(:'m1_id', test.at_hour(-1)) \gset sh1_
 select * from complete_showing(:'sh1_id', 'wants_bargain', 'просит минус 3000') \gset d1_
 
+-- `set role postgres` не сбрасывает клеймы, и с чужими клеймами триггер
+-- инварианта 28 справедливо откажет: Бакыт не ведёт этот объект. Ошибка,
+-- которую этот проект делал уже дважды.
 set role postgres;
-insert into publication_channels (object_id, channel, status, last_sync_at)
-values (:'obj1', 'lalafo', 'exported', now());
+set request.jwt.claims = '{}';
+insert into publication_channels (object_id, channel, enabled)
+values (:'obj1', 'lalafo', true);
 set role anon;
 set request.jwt.claims = '{"role":"anon"}';
 
@@ -84,6 +88,39 @@ select test.eq(
 select test.eq(
   jsonb_array_length(app.owner_report(:'t1_token') -> 'channels'), 1,
   'отчёт показывает каналы размещения');
+
+-- ЧТО ИМЕННО СКАЗАНО ПРО КАНАЛ (инвариант 28). Раньше здесь стояло
+-- «размещено» — слово о чужой площадке, которого система не знала. Теперь
+-- отчёт говорит ровно две вещи: отдаём ли мы объект в этот канал прямо
+-- сейчас и когда оттуда приходили за фидом.
+select test.eq(
+  (app.owner_report(:'t1_token') -> 'channels' -> 0 ->> 'in_feed')::boolean,
+  true,
+  'отчёт говорит, что объект сейчас отдаётся в канал');
+
+select test.ok(
+  app.owner_report(:'t1_token')::text not like '%exported%'
+  and app.owner_report(:'t1_token')::text not like '%updated%',
+  'и не утверждает, что площадка его разместила');
+
+-- Выключили канал — отчёт обязан сказать это, не дожидаясь никакого обмена
+-- с площадкой.
+set role postgres;
+set request.jwt.claims = '{}';
+update publication_channels set enabled = false
+ where object_id = :'obj1' and channel = 'lalafo';
+set role anon;
+set request.jwt.claims = '{"role":"anon"}';
+select test.eq(
+  (app.owner_report(:'t1_token') -> 'channels' -> 0 ->> 'in_feed')::boolean,
+  false,
+  'выключенный канал виден собственнику как «не отдаём»');
+set role postgres;
+set request.jwt.claims = '{}';
+update publication_channels set enabled = true
+ where object_id = :'obj1' and channel = 'lalafo';
+set role anon;
+set request.jwt.claims = '{"role":"anon"}';
 select test.eq(
   (app.owner_report(:'t1_token') -> 'interest' ->> 'matches')::int, 1,
   'отчёт показывает число заинтересованных');

@@ -151,8 +151,8 @@ select test.eq(
 
 -- ---- Ошибка размещения на площадке ---------------------------------------
 set role postgres;
-insert into publication_channels (object_id, channel, status, last_error)
-values (:'obj2', 'lalafo', 'error', 'объявление отклонено модерацией');
+insert into publication_channels (object_id, channel, enabled, last_error)
+values (:'obj2', 'lalafo', true, 'объявление отклонено модерацией');
 set role authenticated;
 
 select test.ok(

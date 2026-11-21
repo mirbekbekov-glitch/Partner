@@ -26,10 +26,18 @@ select test.throws(
 
 -- Выгрузка в канал — тоже публикация.
 select test.throws(
-  $$insert into publication_channels (object_id, channel, status)
-    values ('00000000-0000-0000-0000-00000000f001', 'lalafo', 'exported')$$,
+  $$select set_channel('00000000-0000-0000-0000-00000000f001', 'lalafo', true)$$,
+  'INVARIANT_28',
+  'объект без договора на площадку не поставить: у него нет и агента');
+
+-- До инварианта 1 здесь доходит только администратор — у объекта без
+-- мандата listing-агента не существует.
+set request.jwt.claims = :'claims_admin';
+select test.throws(
+  $$select set_channel('00000000-0000-0000-0000-00000000f001', 'lalafo', true)$$,
   'INVARIANT_1',
-  'выгрузка в канал без мандата невозможна');
+  'выгрузка в канал без мандата невозможна и администратору');
+set request.jwt.claims = :'claims_aibek';
 
 reset role;
 
@@ -61,18 +69,23 @@ select test.eq(
 -- ---- 1г. Потеря мандата снимает объект с публикации ----------------------
 -- Без этого инвариант держался бы только на входе: истёкший договор оставлял
 -- бы объект в каталоге.
-insert into publication_channels (object_id, channel, status)
-values (:'obj1', 'site', 'exported');
+select set_channel(:'obj1', 'site', true) is not null as ch1 \gset
 
 update mandates set status = 'terminated' where id = :'mandate1';
 
 select test.eq(
   (select publication_state from objects where id = :'obj1'), 'withdrawn'::publication_state,
   'расторжение мандата снимает объект с публикации');
+-- С инварианта 28 каналы при этом НЕ переписываются: членство в фиде
+-- считается вместе с каталогом, а не хранится вторым экземпляром. Проверяем
+-- не статус строки, а то, ради чего он был нужен, — что объект ушёл из фида.
 select test.eq(
-  (select status from publication_channels where object_id = :'obj1' and channel = 'site'),
-  'withdrawn'::channel_status,
-  'расторжение мандата снимает объект с каналов');
+  (select count(*) from app.channel_feed('site') f where f.id = :'obj1'),
+  0::bigint,
+  'расторжение мандата убирает объект из фида канала');
+select test.ok(
+  (select enabled from publication_channels where object_id = :'obj1' and channel = 'site'),
+  'а намерение отдавать его на площадку остаётся: договор продлят — вернётся');
 
 -- ---- 1д. Истечение по дате ------------------------------------------------
 select test.throws(
