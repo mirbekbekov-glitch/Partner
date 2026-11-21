@@ -161,8 +161,10 @@ select test.ok(test.visible_count($$select 1 from objects$$) > 0,
   'объекты агенту видны');
 select test.ok(test.visible_count($$select 1 from mandates$$) > 0,
   'условия мандатов агенту видны');
-select test.ok(test.visible_count($$select 1 from deal_commission_v$$) > 0,
-  'комиссия агенту видна');
+-- А комиссии по чужим сделкам — нет: с инварианта 34 работа личная, и суммы
+-- по сделке видят только её стороны и руководитель агентства.
+select test.eq(test.visible_count($$select 1 from deal_commission_v$$), 0::bigint,
+  'комиссия по чужой сделке агенту не видна');
 reset role;
 
 -- ===========================================================================

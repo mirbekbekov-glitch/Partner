@@ -49,7 +49,10 @@ select test.eq(
 
 -- А теперь то же самое, но с фактом. Карточка переезжает сама.
 select * from create_match(:'obj1', :'req1') \gset m1_
-select * from schedule_showing(:'m1_id', test.at_hour(0, 10)) \gset sh1_
+-- Вчерашний день, а не «сегодня в 10:00»: прогон после полуночи по Бишкеку
+-- получал будущее время, и показ отказывался закрываться. Откат на сутки
+-- инвариант 25 разрешает.
+select * from schedule_showing(:'m1_id', test.at_hour(-1, 15)) \gset sh1_
 select * from complete_showing(:'sh1_id', 'thinking') \gset done_
 
 select test.eq(
@@ -117,20 +120,28 @@ select test.throws(
   'INVARIANT_30',
   'и разобраться за чужого агента нельзя');
 
+set request.jwt.claims = :'claims_bakyt';
 select test.eq(
   (select status from requirements where id = :'foreign_id'),
   'new'::requirement_status,
   'после отказов карточка на месте');
 
--- Но видеть её он должен: инвариант 4 прячет ИМЯ клиента, а не существование
--- работы. Карточка, пропавшая из воронки целиком, — это соврамший счёт.
+-- И в воронке рядового агента её нет вовсе: с инварианта 34 работа личная.
+set request.jwt.claims = :'claims_chyngyz';
+select test.eq(
+  (select count(*) from funnel_v where requirement_id = :'req1'),
+  0::bigint,
+  'чужая карточка в воронку коллеги не попадает');
+
+-- А руководитель видит всё агентство — и имя клиента в его воронке тоже
+-- есть: инвариант 4 про контакт, а не про должность.
+set request.jwt.claims = :'claims_admin';
 select test.eq(
   (select count(*) from funnel_v where requirement_id = :'req1'),
   1::bigint,
-  'чужая карточка в воронке видна');
-select test.ok(
-  (select contact_name from funnel_v where requirement_id = :'req1') is null,
-  'а имени клиента в ней нет');
+  'руководитель видит карточку любого агента агентства');
+
+set request.jwt.claims = :'claims_chyngyz';
 
 -- Администратор может: он разбирает случаи, когда агент уволился.
 set request.jwt.claims = :'claims_admin';

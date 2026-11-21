@@ -22,36 +22,49 @@ reset role;
 set request.jwt.claims = :'claims_chyngyz';
 set role authenticated;
 
+-- С инварианта 34 работа личная: подбор по чужому объекту видит агент
+-- потребности, агент объекта и руководитель — но не посторонний коллега.
+-- Раньше его видел любой агент, и это утверждение закрепляло старое правило.
 select test.eq(
   test.visible_count(format($$select 1 from object_matches_v where object_id = %L$$, :'obj1')),
-  1::bigint, 'Чынгыз ВИДИТ подбор на карточке объекта');
+  0::bigint, 'Чынгыз подбор на карточке чужого объекта НЕ видит');
 
-select test.ok(
-  (select client_name is null from object_matches_v where match_id = :'m_id'),
-  'но имя клиента у него пустое');
+-- Раньше строка подбора была видна всем, а имя клиента в ней пряталось.
+-- Теперь прячется сама строка, и проверять нечего — но проверить стоит, что
+-- имя не утекает другим путём: через представление без фильтра по объекту.
+select test.eq(
+  test.visible_count($$select 1 from object_matches_v where client_name is not null$$),
+  0::bigint,
+  'и ни одного чужого имени клиента ему не видно ни в одной строке');
 
-select test.ok(
-  (select commission_total is not null from object_matches_v where match_id = :'m_id'),
-  'а комиссия по подбору ему видна');
+-- И комиссия по чужому подбору тоже исчезла вместе со строкой. Прежде она
+-- была видна всем агентам: «объект и условия да, контакт нет». С инварианта
+-- 34 граница сдвинулась — чужая работа чужая целиком.
+select test.eq(
+  test.visible_count(format($$select 1 from object_matches_v where match_id = %L$$, :'m_id')),
+  0::bigint,
+  'и комиссии по чужому подбору — тоже');
 
-select test.ok(
-  (select deal_type is not null and budget_max is not null
-     from object_matches_v where match_id = :'m_id'),
-  'и условия потребности ему видны');
-
--- То же со стороны потребности.
+-- То же со стороны потребности: чужого клиента постороннему не видно.
 select test.eq(
   test.visible_count(format($$select 1 from requirement_matches_v where requirement_id = %L$$, :'req1')),
-  2::bigint, 'Чынгыз видит оба подбора на карточке потребности');
+  0::bigint, 'и на карточке чужой потребности подборов он не видит');
+reset role;
+
+-- ---- А вот участник подбора видит строку, но не контакт ------------------
+-- Это и есть инвариант 4 в чистом виде: Бакыт ведёт клиента и подбор, а
+-- собственника чужого объекта не видит. Проверка переехала сюда с
+-- постороннего агента, которому с инварианта 34 не видно и самой строки.
+set request.jwt.claims = :'claims_bakyt';
+set role authenticated;
 
 select test.ok(
   (select owner_name is null from requirement_matches_v where match_id = :'m_id'),
-  'имя собственника у него пустое');
-
+  'имя собственника агенту потребности не видно');
 select test.ok(
   (select address is not null and price is not null and mandate_id is not null
      from requirement_matches_v where match_id = :'m_id'),
-  'адрес, цена и мандат ему видны');
+  'а адрес, цена и мандат — видны: без них подбор бесполезен');
 reset role;
 
 -- ---- Агент внутри активной сделки получает контакт -----------------------

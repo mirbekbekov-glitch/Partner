@@ -78,9 +78,16 @@ set request.jwt.claims = :'claims_aibek';
 select test.ok(
   test.visible_count('select 1 from mandates') > 0,
   'свои договоры видно');
+-- Клиенты личные (инвариант 34), поэтому смотрит их агент, а не коллега.
+set request.jwt.claims = :'claims_bakyt';
 select test.ok(
   test.visible_count('select 1 from requirements') > 0,
-  'клиентов своего агентства видно');
+  'своих клиентов агент видит');
+set request.jwt.claims = :'claims_admin';
+select test.ok(
+  test.visible_count('select 1 from requirements') > 0,
+  'и руководитель видит клиентов своего агентства');
+set request.jwt.claims = :'claims_aibek';
 select test.ok(
   test.visible_count('select 1 from matches') > 0,
   'и подборы своего агентства');

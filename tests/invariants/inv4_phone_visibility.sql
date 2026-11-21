@@ -85,10 +85,19 @@ set role authenticated;
 select test.eq(
   test.visible_count(format($$select 1 from contact_phones where contact_id = %L$$, :'contact_owner')),
   0::bigint, 'чужая активная сделка Чынгызу телефон не открывает');
--- Но комиссию по ней он видит: «объект, условия и комиссия да».
+-- И комиссию по ней тоже не видит. Так было не всегда: до инварианта 34
+-- суммы по сделке видел любой агент агентства — «объект, условия и
+-- комиссия да». Теперь работа личная, и чужая комиссия к ней относится.
 select test.eq(
   test.visible_count(format($$select 1 from deal_commission_v where deal_id = %L$$, :'dd_id')),
-  1::bigint, 'Чынгыз видит комиссию по чужой сделке');
+  0::bigint, 'и комиссию по чужой сделке Чынгыз не видит');
+
+-- А руководитель агентства видит: у него это отчёт, а не любопытство.
+set request.jwt.claims = :'claims_admin';
+select test.eq(
+  test.visible_count(format($$select 1 from deal_commission_v where deal_id = %L$$, :'dd_id')),
+  1::bigint, 'руководителю комиссия по сделке агентства видна');
+set request.jwt.claims = :'claims_chyngyz';
 reset role;
 
 -- ---- 4д. Закрытие сделки доступ закрывает --------------------------------

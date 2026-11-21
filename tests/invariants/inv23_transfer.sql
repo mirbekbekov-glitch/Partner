@@ -50,9 +50,16 @@ set request.jwt.claims = :'claims_aibek';
 select test.eq(
   (select listing_agent_id from transfer_object(:'obj3', :'agent_chyngyz')),
   :'agent_chyngyz'::uuid, 'объект со сделкой передан');
+-- Читает НОВЫЙ агент: передав объект, прежний перестал быть стороной сделки
+-- и больше её не видит (инвариант 34). Это и есть смысл передачи.
+set request.jwt.claims = :'claims_chyngyz';
 select test.eq(
   (select listing_agent_id from deals where id = :'d2'),
   :'agent_chyngyz'::uuid, 'незакрытая сделка перешла вместе с объектом');
+set request.jwt.claims = :'claims_aibek';
+select test.eq(
+  test.visible_count(format($$select 1 from deals where id = %L$$, :'d2')),
+  0::bigint, 'а прежний агент её больше не видит');
 
 -- ---- 23г. Закрытая сделка сторон не меняет --------------------------------
 -- Там комиссия уже посчитана и записана: менять стороны значит менять, кому
@@ -166,10 +173,14 @@ select test.eq(
 select test.eq(
   (select agent_id from transfer_requirement(:'req1', :'agent_chyngyz')),
   :'agent_chyngyz'::uuid, 'клиент передан');
+-- Читает НОВЫЙ агент: передав клиента, прежний перестал видеть его подборы
+-- (инвариант 34). В этом и смысл передачи.
+set request.jwt.claims = :'claims_chyngyz';
 select test.eq(
   (select closing_agent_id from matches where id = :'m3'),
   :'agent_chyngyz'::uuid,
   'подбор перешёл вместе с клиентом: иначе инвариант 20 не даст по нему работать');
+set request.jwt.claims = :'claims_bakyt';
 
 -- Новый агент работает по переданному клиенту, прежний — нет.
 set request.jwt.claims = :'claims_chyngyz';
