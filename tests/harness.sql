@@ -96,19 +96,24 @@ create or replace function test.soon(p_plus interval default interval '0')
   returns timestamptz
   language sql stable as $$
   with t as (
-    select (now() at time zone 'Asia/Bishkek') + interval '3 hours' as guess,
-           (now() at time zone 'Asia/Bishkek')::date               as today
+    select (now() at time zone 'Asia/Bishkek') + interval '3 hours' as guess
   )
   select (case
             when guess::time between app.showing_opens()
                                  and app.showing_closes() - interval '2 hours'
               then guess
+            -- Дата берётся У GUESS, а не у «сегодня». После 21:00 по Бишкеку
+            -- now() + 3 часа переваливает за полночь, и «сегодня + 08:00»
+            -- давало время В ПРОШЛОМ: показ создавался задним числом (откат
+            -- на двое суток инвариант 25 разрешает), уведомление о
+            -- предстоящем не выпускалось, и инвариант 27 падал — но только
+            -- у того, кто запускал прогон вечером.
             when guess::time < app.showing_opens()
-              then today + app.showing_opens()
-            else (today + 1) + app.showing_opens()
+              then guess::date + app.showing_opens()
+            else (guess::date + 1) + app.showing_opens()
           end + p_plus) at time zone 'Asia/Bishkek'
   from t
 $$;
 
 comment on function test.soon is
-  'Законное время показа в пределах срока уведомления о предстоящем. Прогон в три часа ночи не должен давать других результатов, чем прогон в полдень.';
+  'Законное время показа в пределах срока уведомления о предстоящем, и ВСЕГДА в будущем. Прогон в три часа ночи, в полдень и в десять вечера обязан давать один результат.';

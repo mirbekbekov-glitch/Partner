@@ -623,38 +623,108 @@ a {
 
 .cabinet { --cab-alarm: #b42318; --cab-ok: #067647; --cab-warn: #b54708; }
 
-.cab-nav {
-  background: #111827;
-  color: #e5e7eb;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+/* --- оболочка кабинета -----------------------------------------------------
+   Меню разделов стоит слева, а не в шапке. Горизонтально одиннадцать пунктов
+   не помещаются: на 1280 пикселях они переносились на вторую строку, на
+   телефоне уезжали вбок. Но главная причина другая — рядом с пунктом слева
+   помещается цифра «что требует внимания», а в шапке для неё места нет. */
+
+/* Своей шапки у кабинета нет: бренд уже стоит в шапке сайта сверху, и вторая
+   полоса с тем же названием — не навигация, а эхо. Кто вошёл — внизу меню,
+   там же, где его ищут в любой системе с боковым меню. */
+.cab-who {
+  display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap;
+  padding: 0.7rem 0.65rem; margin-top: 0.5rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
 }
-.cab-nav .wrap {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 0.65rem 1rem;
-  flex-wrap: wrap;
+.cab-who a { color: #344054; }
+.cab-who form { margin: 0; }
+.cab-bare {
+  display: flex; justify-content: flex-end; gap: 0.9rem; align-items: center;
+  padding: 0.6rem max(16px, env(safe-area-inset-right, 0px)) 0.6rem max(16px, env(safe-area-inset-left, 0px));
+  border-bottom: 1px solid var(--line);
 }
-.cab-brand { color: #fff; font-weight: 600; text-decoration: none; }
-/* Пунктов в меню стало восемь, и на телефоне они не умещались в строку —
-   страница уезжала вбок на 264 пикселя. Перенос, а не прокрутка: пункт,
-   спрятанный за жестом, для агента всё равно что отсутствует. */
-.cab-nav ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.1rem;
+
+.cab-shell { display: block; }
+.cab-main { min-width: 0; }
+
+.cab-side ul {
   list-style: none;
   margin: 0;
-  padding: 0;
-  min-width: 0;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
 }
-.cab-nav a { color: #cbd5e1; text-decoration: none; }
-.cab-nav a:hover { color: #fff; }
-.cab-who { margin-left: auto; display: flex; align-items: center; gap: 0.9rem; }
-.cab-who a { color: #e5e7eb; }
-.cab-who form { margin: 0; }
+.cab-side a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 7px;
+  color: #344054;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+.cab-side a:hover { background: #f2f4f7; color: #101828; }
+.cab-side a[aria-current="page"] { background: #eef2f7; color: #101828; font-weight: 600; }
+
+/* Цифра означает «надо что-то сделать», а не «сколько всего». Поэтому она
+   всегда тревожная: нейтральных счётчиков в меню нет вовсе. */
+.badge {
+  min-width: 1.35rem;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.05rem 0.35rem;
+  border-radius: 20px;
+  background: #fef3f2;
+  color: var(--cab-alarm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Телефон: панель выдвигается кнопкой. Прятать пункты за жестом нельзя —
+   кнопка названа словом и носит на себе общее число того, что горит. */
+.nav-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  font: inherit;
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 0;
+  border-bottom: 1px solid #374151;
+  padding: 0.55rem max(16px, env(safe-area-inset-left, 0px));
+  cursor: pointer;
+}
+.nav-toggle .badge { background: #7f1d1d; color: #fecaca; }
+.cab-side { display: none; background: #fff; border-bottom: 1px solid var(--line, #e4e7ec); }
+.cab-side.open { display: block; }
+
+@media (min-width: 62rem) {
+  .nav-toggle { display: none; }
+  .cab-shell {
+    display: grid;
+    grid-template-columns: 14rem minmax(0, 1fr);
+    align-items: start;
+  }
+  .cab-side {
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    border-bottom: 0;
+    border-right: 1px solid var(--line, #e4e7ec);
+    background: transparent;
+    min-height: 100vh;
+  }
+  .cab-side .cab-who { margin-top: auto; }
+  .cab-side ul { padding: 0.75rem 0.6rem; }
+}
+
 button.link {
   background: none; border: 0; color: #94a3b8; cursor: pointer;
   font: inherit; padding: 0; text-decoration: underline;
@@ -1078,6 +1148,14 @@ h2.alarm { color: var(--cab-alarm); }
 /* Шесть колонок на телефоне не умещаются, и прятать их нельзя: воронка без
    «ушёл» — не воронка, по ней нечего считать. Доска прокручивается вбок, как
    календарь показов. */
+/* Градиент у правого края: доска шире экрана, и обрезанная колонка без этой
+   подсказки читается как «колонок пять». */
+.boardwrap { position: relative; }
+.boardwrap::after {
+  content: ""; position: absolute; top: 0; bottom: 0.7rem; right: 0; width: 2rem;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--bg, #faf9f7));
+}
 .board {
   display: grid;
   grid-auto-flow: column;

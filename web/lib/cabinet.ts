@@ -281,20 +281,15 @@ export async function summary(): Promise<Summary | null> {
            where md.listing_agent_id = app.current_agent_id()
              and md.status = 'active'
              and o.publication_state = 'published')::int               as objects_published,
-         (select count(*) from stale_objects_v s
-           where s.severity = 'critical')::int                         as stale_critical,
-         (select count(*) from inquiries_v i
-           where i.status = 'new')::int                                as inquiries_new,
+         (select a.objects_critical from my_alerts_v a)                as stale_critical,
+         (select a.inquiries_new from my_alerts_v a)                   as inquiries_new,
          (select count(*) from listing_candidates c
            where c.claimed_by_agent_id = app.current_agent_id()
              and c.status = 'in_work')::int                            as candidates_mine,
          (select count(*) from my_showings_v sh
            where sh.status = 'scheduled' and sh.scheduled_at > now())::int as showings_upcoming,
-         (select count(*) from overdue_showings_v)::int                    as showings_overdue,
-         (select count(*) from notifications n
-           where n.agent_id = app.current_agent_id()
-             and n.sent_at is null and n.voided_at is null
-             and n.last_error is not null)::int                           as notifications_stuck,
+         (select a.showings_overdue from my_alerts_v a)                as showings_overdue,
+         (select a.notifications_stuck from my_alerts_v a)             as notifications_stuck,
          (select count(*) from requirements rq
            where rq.agent_id = app.current_agent_id()
              and rq.status in ('new', 'qualified', 'in_showings'))::int as requirements_mine,
@@ -302,18 +297,16 @@ export async function summary(): Promise<Summary | null> {
            where (dl.listing_agent_id = app.current_agent_id()
                   or dl.closing_agent_id = app.current_agent_id())
              and dl.status not in ('closed', 'failed'))::int as deals_open,
-         (select count(*) from stuck_deals_v sd where sd.mine)::int     as deals_stuck,
-         (select count(*) from overdue_tasks_v)::int                   as tasks_overdue,
+         (select a.deals_stuck from my_alerts_v a)                     as deals_stuck,
+         (select a.tasks_overdue from my_alerts_v a)                   as tasks_overdue,
          (select count(*) from my_tasks_v t
            where t.agent_id = app.current_agent_id()
              and t.done_at is null and t.cancelled_at is null
              and t.due_at::date <= (now() at time zone 'Asia/Bishkek')::date)::int
                                                                         as tasks_today,
-         (select count(*) from stuck_requirements_v sr
-           where sr.agent_id = app.current_agent_id())::int             as funnel_stuck,
-         (select count(*) from agents a where a.status = 'pending')::int as agents_pending,
-         (select count(*) from maintenance_health_v h
-           where h.enabled and h.status <> 'в норме')::int             as scheduler_broken`,
+         (select a.funnel_stuck from my_alerts_v a)                    as funnel_stuck,
+         (select a.agents_pending from my_alerts_v a)                  as agents_pending,
+         (select a.scheduler_broken from my_alerts_v a)                as scheduler_broken`,
     );
     return rows[0] ?? null;
   });
@@ -1228,5 +1221,41 @@ export async function taskTargets(): Promise<{
         where status = 'approved' order by full_name`,
     );
     return { requirements: reqs.rows, agents: ags.rows };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Что требует внимания — для меню
+// ---------------------------------------------------------------------------
+
+export type Alerts = {
+  objects_critical: number;
+  inquiries_new: number;
+  funnel_stuck: number;
+  tasks_overdue: number;
+  showings_overdue: number;
+  notifications_stuck: number;
+  deals_stuck: number;
+  channels_not_ready: number;
+  agents_pending: number;
+  scheduler_broken: number;
+};
+
+/**
+ * Цифры рядом с разделами меню.
+ *
+ * Берутся из того же представления, что и плитки главной: два запроса об
+ * одном расходятся при первой правке, и после этого верить нельзя ни одной
+ * цифре. Числа здесь означают «надо что-то сделать» — размер хозяйства
+ * («моих объектов 12») рядом с пунктом меню читался бы как дело, которого
+ * нет.
+ */
+export async function alerts(): Promise<Alerts | null> {
+  const session = await readSession();
+  if (!session) return null;
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<Alerts>("select * from my_alerts_v");
+    return rows[0] ?? null;
   });
 }
