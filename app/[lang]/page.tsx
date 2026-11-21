@@ -9,6 +9,8 @@ import {
 import { t, kindName, freshWordIn, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { CatalogHeader } from '../CatalogHeader';
 import { HeroArt } from '../HeroArt';
+import { RequestPitch } from '../RequestPitch';
+import { CityMap } from '../CityMap';
 import { CatalogFooter } from '../CatalogFooter';
 import { Facade } from '../Facade';
 import { Photo } from '../Photo';
@@ -296,7 +298,11 @@ export default async function Catalog({
             {f.page < pages ? <Link href={catalogHref(lang, f, f.page + 1)}>{d.forward}</Link> : null}
           </div>
         ) : null}
+        <CityMap lang={lang} f={f} counts={byZone}
+                 title={d.mapTitle} hint={d.mapHint} empty={d.mapEmpty} />
       </div>
+
+      <RequestPitch lang={lang} />
 
       <CatalogFooter lang={lang} />
     </>

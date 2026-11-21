@@ -64,6 +64,12 @@ type Dict = {
   namePlaceholder: string; phonePlaceholder: string;
   messageLabel: string; messagePlaceholder: string; honeypotLabel: string;
   siteTitle: string; siteDescription: string; drawingAlt: string;
+  // Полоса «оставьте заявку» на главной
+  pitchEyebrow: string; pitchTitle: string; pitchLede: string; pitchButton: string;
+  pitchStep1: string; pitchStep1Note: string;
+  pitchStep2: string; pitchStep2Note: string;
+  pitchStep3: string; pitchStep3Note: string;
+  mapTitle: string; mapHint: string; mapEmpty: string;
   // Заявка «что я ищу»
   reqNav: string; reqTitle: string; reqLede: string;
   reqDeal: string; reqBuy: string; reqRent: string;
@@ -152,6 +158,15 @@ const ru: Dict = {
   reqWhy1: 'Отвечаем в течение часа',
   reqWhy2: 'Покажем то, чего нет в открытом каталоге',
   reqWhy3: 'Телефон увидит один агент, а не весь рынок',
+  pitchEyebrow: 'Не нашли подходящее?',
+  pitchTitle: 'Опишите, что ищете — искать будут агенты',
+  pitchLede: 'В каталоге только то, что уже подтверждено и свободно. Остальное агенты знают, но не публикуют: хозяин просил не выкладывать, объект ещё готовится, цена обсуждается. Заявка открывает вам этот слой.',
+  pitchButton: 'Оставить заявку',
+  pitchStep1: 'Вы описываете, что нужно', pitchStep1Note: 'Две минуты, обязателен только телефон',
+  pitchStep2: 'Заявку видят агенты', pitchStep2Note: 'Отвечаем в течение часа — это норматив, а не обещание',
+  pitchStep3: 'Вам приносят варианты', pitchStep3Note: 'Появится позже — позвоним, заявка остаётся в работе',
+  mapTitle: 'Районы города', mapHint: 'Нажмите район — покажем, что в нём есть',
+  mapEmpty: 'пока пусто',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
            land: 'участок', commercial: 'коммерческая', garage: 'гараж' },
 };
@@ -224,6 +239,15 @@ const ky: Dict = {
   reqWhy1: 'Бир сааттын ичинде жооп беребиз',
   reqWhy2: 'Ачык каталогдо жоктурун көрсөтөбүз',
   reqWhy3: 'Телефонуңузду бир агент гана көрөт',
+  pitchEyebrow: 'Ылайыктуусун таппадыңызбы?',
+  pitchTitle: 'Эмне издеп жатканыңызды жазыңыз — агенттер издеп беришет',
+  pitchLede: 'Каталогдо ырасталган жана бош объекттер гана бар. Калганын агенттер билет, бирок жарыялабайт: ээси сураган, объект даярдалып жатат, баа талкууланууда. Арыз ошол катмарды ачат.',
+  pitchButton: 'Арыз калтыруу',
+  pitchStep1: 'Эмне керектигин жазасыз', pitchStep1Note: 'Эки мүнөт, телефон гана милдеттүү',
+  pitchStep2: 'Арызды агенттер көрөт', pitchStep2Note: 'Бир сааттын ичинде жооп беребиз — бул норматив',
+  pitchStep3: 'Сизге варианттар келет', pitchStep3Note: 'Кийин пайда болсо — чалабыз, арыз иште калат',
+  mapTitle: 'Шаардын райондору', mapHint: 'Районду басыңыз — андагысын көрсөтөбүз',
+  mapEmpty: 'азырынча жок',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
            land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж' },
 };
@@ -296,6 +320,15 @@ const en: Dict = {
   reqWhy1: 'We answer within the hour',
   reqWhy2: 'We show what is not publicly listed yet',
   reqWhy3: 'One agent sees your number, not the whole market',
+  pitchEyebrow: 'Nothing fits?',
+  pitchTitle: 'Describe what you need — agents do the searching',
+  pitchLede: 'The catalogue holds only what is confirmed and available. Agents know the rest but do not publish it: the owner asked them not to, the place is still being prepared, the price is under discussion. A request opens that layer to you.',
+  pitchButton: 'Send a request',
+  pitchStep1: 'You describe what you need', pitchStep1Note: 'Two minutes; only the phone number is required',
+  pitchStep2: 'Agents see the request', pitchStep2Note: 'We answer within the hour — a standard, not a promise',
+  pitchStep3: 'They bring you options', pitchStep3Note: 'If it appears later, we call: the request stays open',
+  mapTitle: 'Districts of the city', mapHint: 'Tap a district to see what it holds',
+  mapEmpty: 'empty for now',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
            land: 'land', commercial: 'commercial', garage: 'garage' },
 };
@@ -368,6 +401,15 @@ const zh: Dict = {
   reqWhy1: '一小时内回复',
   reqWhy2: '提供尚未公开的房源',
   reqWhy3: '只有一位经纪人能看到您的号码',
+  pitchEyebrow: '没有合适的？',
+  pitchTitle: '写下您的需求 — 由经纪人去找',
+  pitchLede: '目录里只有已确认且可售的房源。其余的经纪人知道，但不公开：业主要求不发布、房子仍在准备、价格尚在商议。提交需求即可进入这一层。',
+  pitchButton: '提交需求',
+  pitchStep1: '您写下需求', pitchStep1Note: '两分钟，仅电话为必填',
+  pitchStep2: '经纪人看到需求', pitchStep2Note: '一小时内回复 — 这是标准，不是口号',
+  pitchStep3: '他们为您带来房源', pitchStep3Note: '日后出现也会致电：需求一直有效',
+  mapTitle: '城市区域', mapHint: '点击区域，查看其中房源',
+  mapEmpty: '暂无',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
            land: '地块', commercial: '商业用房', garage: '车库' },
 };
