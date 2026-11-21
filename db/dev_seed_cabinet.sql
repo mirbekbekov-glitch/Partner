@@ -214,6 +214,142 @@ begin
   values (v_match, v_aibek, v_at + interval '30 minutes', 'scheduled', v_aibek);
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- Воронка и задачи
+-- ---------------------------------------------------------------------------
+-- На двух клиентах воронки не видно: ни пустых колонок, ни вставших карточек,
+-- ни того, что карточка переезжает сама. Клиенты заводятся настоящим путём —
+-- функциями от имени агента, — потому что статусы теперь проверяются фактами
+-- (инвариант 30), и «просто вписать in_deal» база не даст. Это и есть
+-- проверка модели данными.
+
+do $$
+declare
+  v_aibek uuid := (select id from agents where full_name = 'Айбек');
+  v_bakyt uuid := (select id from agents where full_name = 'Бакыт');
+  r       record;
+  v_req   uuid;
+  v_obj   uuid;
+  v_match uuid;
+  v_show  uuid;
+  v_day   date := (now() at time zone 'Asia/Bishkek')::date;
+begin
+  for r in
+    select * from (values
+      -- Телефоны выдуманные: чужой номер в репозитории хранить незачем.
+      -- имя,                 телефон,        агент, сделка, от,     до,     районы,      комнаты, куда довести, дней назад
+      ('Нургуль Сапарова',  '0555 201 001', 1, 'sale', 70000,  95000,  '{Центр}',    '{2}',   'new',         0),
+      ('Азамат Осмонов',    '0555 201 002', 1, 'rent', 250,    400,    '{Центр,Юг}', '{1}',   'new',         5),
+      ('Гульмира Токтоева', '0555 201 003', 2, 'sale', 100000, 150000, '{Центр}',    '{3}',   'qualified',   2),
+      ('Эркин Бейшеналиев', '0555 201 004', 1, 'sale', 150000, 220000, '{Юг,Запад}', '{4,5}', 'qualified',  40),
+      ('Айжан Кадырова',    '0555 201 005', 2, 'rent', 400,    700,    '{Центр}',    '{2,3}', 'showings',    7),
+      ('Марат Сыдыков',     '0555 201 006', 1, 'sale', 55000,  95000,  '{Центр}',    '{1,2}', 'deal',        3),
+      ('Данияр Токтосунов', '0555 201 008', 2, 'sale', 60000,  90000,  '{Юг}',       '{1,2}', 'closed',      1),
+      ('Бегимай Асанова',   '0555 201 007', 2, 'sale', 60000,  90000,  '{Юг}',       '{2}',   'lost',       12)
+    ) as v(name, phone, agent_no, deal_type, lo, hi, zones, rooms, target, days_ago)
+  loop
+    perform set_config('request.jwt.claims',
+      json_build_object('sub', (select auth_user_id from agents
+                                 where id = case r.agent_no when 1 then v_aibek else v_bakyt end),
+                        'role', 'authenticated')::text, true);
+
+    select id into v_req from create_requirement(
+      r.deal_type::deal_type, null, r.name, r.phone, r.lo, r.hi,
+      r.zones::text[], r.rooms::smallint[]);
+
+    if r.target in ('qualified', 'showings', 'deal', 'closed') then
+      perform qualify_requirement(v_req);
+    end if;
+
+    if r.target in ('showings', 'deal', 'closed') then
+      -- Подходящий объект берём подбором, а не наугад: иначе инвариант 20
+      -- откажет, и сеяние молча потеряет половину клиентов.
+      select object_id into v_obj from app.matching_objects(v_req) limit 1;
+      if v_obj is not null then
+        select id into v_match from create_match(v_obj, v_req);
+
+        if r.target = 'showings' then
+          -- Показ в прошлом, но внутри срока отката (инвариант 25) и в
+          -- рабочих часах (инвариант 26).
+          select id into v_show from schedule_showing(
+            v_match, (v_day - 1 + time '14:00') at time zone 'Asia/Bishkek');
+          perform complete_showing(v_show, 'thinking', 'сравнивает с другими');
+        else
+          perform create_deal_from_match(v_match);
+          if r.target = 'closed' then
+            -- Закрытие сделки закрывает и клиента (инвариант 2), и колонка
+            -- «Купил» наполняется фактом, а не правкой статуса.
+            perform close_deal((select id from deals
+                                 where requirement_id = v_req
+                                   and status not in ('closed', 'failed')
+                                 limit 1),
+                               r.hi);
+          end if;
+        end if;
+      end if;
+    end if;
+
+    if r.target = 'lost' then
+      perform lose_requirement(v_req, 'купил напрямую у собственника');
+    end if;
+
+    -- Возраст карточки задаётся правкой даты входа в колонку: иначе все
+    -- карточки «сегодня здесь» и вставших не видно вовсе.
+    perform set_config('request.jwt.claims', '{}', true);
+    update requirements set stage_since = now() - (r.days_ago || ' days')::interval
+     where id = v_req;
+  end loop;
+
+  perform set_config('request.jwt.claims', '{}', true);
+end $$;
+
+-- Задачи: просроченная, сегодняшняя, завтрашняя, сделанная и снятая. На
+-- пустом экране не видно ни одного из пяти состояний.
+do $$
+declare
+  v_aibek uuid := (select id from agents where full_name = 'Айбек');
+  v_bakyt uuid := (select id from agents where full_name = 'Бакыт');
+  v_req   uuid := (select r.id from requirements r
+                    join contacts c on c.id = r.contact_id
+                   where c.name = 'Гульмира Токтоева' limit 1);
+  v_req2  uuid := (select r.id from requirements r
+                    join contacts c on c.id = r.contact_id
+                   where c.name = 'Эркин Бейшеналиев' limit 1);
+  v_obj   uuid := (select id from objects where address = 'Киевская 148, кв. 44');
+  v_day   date := (now() at time zone 'Asia/Bishkek')::date;
+  v_done  uuid;
+  v_cancelled uuid;
+begin
+  insert into tasks (kind, title, due_at, agent_id, created_by_agent_id, requirement_id)
+  values ('call', 'Перезвонить и назвать цену после торга',
+          (v_day - 1 + time '11:00') at time zone 'Asia/Bishkek', v_aibek, v_aibek, v_req2),
+         ('call', 'Перезвонить: Гульмира Токтоева',
+          (v_day + time '17:00') at time zone 'Asia/Bishkek', v_bakyt, v_bakyt, v_req),
+         ('meeting', 'Показать Джал и Асанбай подряд',
+          (v_day + 1 + time '12:00') at time zone 'Asia/Bishkek', v_aibek, v_aibek, null),
+         ('document', 'Забрать справку из Госрегистра',
+          (v_day + 2 + time '09:30') at time zone 'Asia/Bishkek', v_aibek, v_aibek, null);
+
+  insert into tasks (kind, title, due_at, agent_id, created_by_agent_id, object_id)
+  values ('other', 'Переснять фотографии: тёмные',
+          (v_day - 2 + time '15:00') at time zone 'Asia/Bishkek', v_aibek, v_aibek, v_obj)
+  returning id into v_done;
+
+  insert into tasks (kind, title, due_at, agent_id, created_by_agent_id)
+  values ('call', 'Позвонить в банк по ипотеке клиента',
+          (v_day - 3 + time '10:00') at time zone 'Asia/Bishkek', v_aibek, v_aibek)
+  returning id into v_cancelled;
+
+  -- Закрываются правкой, а не функцией: у сеяния нет входа, а правило
+  -- «закрытая задача окончательна» проверяется в тестах, не здесь.
+  update tasks set done_at = now() - interval '2 days',
+                   done_note = 'переснял, загрузил пять штук'
+   where id = v_done;
+  update tasks set cancelled_at = now() - interval '1 day',
+                   cancel_reason = 'клиент сам дозвонился'
+   where id = v_cancelled;
+end $$;
+
 -- Кабинет собственника: одна ссылка на все его объекты (инвариант 29).
 -- Без неё экран собственника в разработке нечем открыть.
 do $$

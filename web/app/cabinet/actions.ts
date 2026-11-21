@@ -937,3 +937,92 @@ export async function setFeedFormat(_prev: unknown, form: FormData): Promise<Res
     return "Настройки канала сохранены.";
   }, "/cabinet/channels");
 }
+
+// ---------------------------------------------------------------------------
+// Воронка (инвариант 30)
+// ---------------------------------------------------------------------------
+// Два перехода, и только они: остальные колонки ставит работа, а не кнопка.
+// Экран не повторяет матрицу переходов из базы — он показывает кнопку там,
+// где база разрешит, и отдаёт её отказ словами, если не разрешит.
+
+export async function qualifyRequirement(_prev: unknown, form: FormData): Promise<Result> {
+  const id = String(form.get("requirement_id"));
+  return actThenNotice(async (db) => {
+    await db.query("select qualify_requirement($1)", [id]);
+    return "Клиент взят в работу.";
+  }, "/cabinet/funnel");
+}
+
+export async function loseRequirement(_prev: unknown, form: FormData): Promise<Result> {
+  const id = String(form.get("requirement_id"));
+  const reason = String(form.get("reason") ?? "").trim();
+  return actThenNotice(async (db) => {
+    await db.query("select lose_requirement($1, $2)", [id, reason || null]);
+    return "Клиент закрыт с причиной.";
+  }, "/cabinet/funnel");
+}
+
+// ---------------------------------------------------------------------------
+// Задачи и напоминания (инвариант 31)
+// ---------------------------------------------------------------------------
+
+/**
+ * Срок приходит с экрана как местное время Бишкека: `datetime-local` отдаёт
+ * строку без пояса, и отправить её как есть значит записать 15:00 UTC.
+ * Та же ошибка, что была на экране показов, и чинится она в одном месте.
+ */
+function bishkekStamp(value: string): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  return `${raw.replace("T", " ")} Asia/Bishkek`;
+}
+
+export async function createTask(_prev: unknown, form: FormData): Promise<Result> {
+  const title = String(form.get("title") ?? "").trim();
+  const due = bishkekStamp(String(form.get("due_at") ?? ""));
+  const kind = String(form.get("kind") ?? "call");
+  const agent = String(form.get("agent_id") ?? "").trim();
+  const requirement = String(form.get("requirement_id") ?? "").trim();
+  const path = String(form.get("path") ?? "/cabinet/tasks");
+
+  if (!due) return { ok: false, error: "Без срока это не напоминание. Поставьте дату и время." };
+
+  return actThenNotice(async (db) => {
+    await db.query(
+      `select create_task($1, $2::timestamptz, $3::task_kind, $4, null, $5)`,
+      [title, due, kind, agent || null, requirement || null],
+    );
+    return "Напоминание поставлено.";
+  }, path);
+}
+
+export async function completeTask(_prev: unknown, form: FormData): Promise<Result> {
+  const id = String(form.get("task_id"));
+  const note = String(form.get("note") ?? "").trim();
+  const path = String(form.get("path") ?? "/cabinet/tasks");
+  return actThenNotice(async (db) => {
+    await db.query("select complete_task($1, $2)", [id, note || null]);
+    return "Сделано.";
+  }, path);
+}
+
+export async function cancelTask(_prev: unknown, form: FormData): Promise<Result> {
+  const id = String(form.get("task_id"));
+  const reason = String(form.get("reason") ?? "").trim();
+  const path = String(form.get("path") ?? "/cabinet/tasks");
+  return actThenNotice(async (db) => {
+    await db.query("select cancel_task($1, $2)", [id, reason || null]);
+    return "Задача снята.";
+  }, path);
+}
+
+export async function rescheduleTask(_prev: unknown, form: FormData): Promise<Result> {
+  const id = String(form.get("task_id"));
+  const due = bishkekStamp(String(form.get("due_at") ?? ""));
+  const path = String(form.get("path") ?? "/cabinet/tasks");
+  if (!due) return { ok: false, error: "Новый срок не указан." };
+  return actThenNotice(async (db) => {
+    await db.query("select reschedule_task($1, $2::timestamptz)", [id, due]);
+    return "Срок перенесён. Напоминание выпустится заново.";
+  }, path);
+}

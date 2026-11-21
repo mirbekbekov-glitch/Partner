@@ -661,6 +661,11 @@ button.link {
 }
 
 .wrap.narrow { max-width: 38rem; }
+/* Доске нужна ширина: шесть колонок в текстовую колонку не помещаются, и
+   обрезанная справа «Ушёл» читается как «колонок пять». Расширяется страница,
+   а не доска через 100vw: vw включает полосу прокрутки, и доска вылезала бы
+   за экран, добавляя странице горизонтальную прокрутку целиком. */
+.wrap.wide { max-width: 90rem; }
 .lead { color: #475467; max-width: 46rem; }
 .muted { color: #667085; }
 .small { font-size: 0.85rem; }
@@ -1068,3 +1073,127 @@ h2.alarm { color: var(--cab-alarm); }
   padding: 0.5rem 0.7rem; border: 1px solid #d0d5dd; border-radius: 8px; font: inherit;
 }
 .owner-act .hint { color: #667085; font-size: 0.85rem; }
+
+/* --- воронка (инвариант 30) ------------------------------------------------ */
+/* Шесть колонок на телефоне не умещаются, и прятать их нельзя: воронка без
+   «ушёл» — не воронка, по ней нечего считать. Доска прокручивается вбок, как
+   календарь показов. */
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(13rem, 1fr);
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.75rem;
+  margin-bottom: 2rem;
+  align-items: start;
+}
+
+/* Колонка не ужимается ниже 14rem, и это важнее, чем «влезть в экран»:
+   попытка втиснуть шесть колонок в ширину страницы кончилась тем, что
+   карточки стали шире своих колонок и легли поверх соседних. Пусть лучше
+   доска прокручивается вбок, как календарь показов. */
+.bcol {
+  background: #f9fafb;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  padding: 0.7rem;
+  min-width: 13rem;
+}
+.bcol > header { margin-bottom: 0.6rem; }
+.bcol h2 { font-size: 1rem; margin: 0; }
+.bcol .hint { color: #667085; font-size: 0.8rem; margin: 0.15rem 0 0; }
+.bempty { color: #98a2b3; font-size: 0.85rem; margin: 0.4rem 0; }
+
+.fcard {
+  /* Длинные слова («Бейшеналиев», адрес без пробелов) рвутся по месту, а не
+     распирают карточку наружу. */
+  overflow-wrap: anywhere;
+  background: #fff;
+  border: 1px solid #e4e7ec;
+  border-radius: 9px;
+  padding: 0.6rem 0.7rem;
+  margin-bottom: 0.55rem;
+}
+/* Чужая карточка бледная, но видимая: на своей воронке агент ищет глазами
+   своих клиентов, а чужие нужны, чтобы понимать, кто ещё работает с этим
+   контактом. */
+.fcard.other { opacity: 0.6; }
+.fcard h3 { font-size: 0.97rem; margin: 0 0 0.25rem; }
+.fcard p { margin: 0 0 0.2rem; }
+.fcard .small { font-size: 0.8rem; }
+.fcard .fold { margin-top: 0.45rem; }
+.fcard .fold > summary { padding: 0.3rem 0.5rem; font-size: 0.85rem; }
+
+/* Сколько карточка стоит в колонке — главное число этого экрана. */
+.fdays {
+  font-size: 0.83rem;
+  color: #475467;
+  font-variant-numeric: tabular-nums;
+}
+.fdays.stuck { color: var(--cab-alarm, #b42318); font-weight: 600; }
+
+.ftask { font-size: 0.82rem; color: #175cd3; }
+.ftask.none { color: #98a2b3; }
+
+.act.tight { gap: 0.3rem; margin-top: 0.4rem; align-items: stretch; }
+/* `min-width: 0` здесь не косметика. У datetime-local своя внутренняя
+   минимальная ширина, и во flex-колонке она сильнее, чем width: 100%: поле
+   вылезало за карточку вправо, утаскивало за собой кнопку «Поставить», и
+   кнопка оказывалась поверх соседней колонки — нажать её было нельзя. Нашлось
+   проходом в браузере, а не чтением стилей. */
+.act.tight input, .act.tight select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 0.86rem;
+  width: 100%;
+  min-width: 0;
+}
+.act.tight button { width: 100%; }
+.act.tight label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.83rem; min-width: 0; }
+.act.tight .hint { color: #667085; font-size: 0.78rem; }
+
+/* --- задачи (инвариант 31) ------------------------------------------------- */
+/* `align-items: start`, а не `end`: у одного поля под ним стоит пояснение, и
+   при выравнивании по низу вся строка расползалась ступенькой. */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.7rem 1rem;
+  align-items: start;
+}
+.form-grid label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.88rem; }
+.form-grid input, .form-grid select {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font: inherit;
+}
+.form-grid .hint { color: #667085; font-size: 0.8rem; }
+.form-grid button { grid-column: 1 / -1; justify-self: start; }
+
+.trow {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.55rem;
+}
+/* Просроченное обещание отличается рамкой, а не только разделом: список
+   читают с середины. */
+.trow.overdue { border-left: 3px solid var(--cab-alarm, #b42318); }
+.trow.closed { opacity: 0.62; }
+.tmain { flex: 1 1 22rem; min-width: 0; }
+.tmain p { margin: 0 0 0.2rem; }
+.ttitle { font-weight: 600; }
+.tacts { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: flex-start; }
+.tacts .act.tight { min-width: 11rem; }
+
+.sec-overdue { color: var(--cab-alarm, #b42318); }

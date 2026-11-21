@@ -259,6 +259,9 @@ export type Summary = {
   requirements_mine: number;
   deals_open: number;
   deals_stuck: number;
+  tasks_overdue: number;
+  tasks_today: number;
+  funnel_stuck: number;
   agents_pending: number;
   scheduler_broken: number;
 };
@@ -300,6 +303,14 @@ export async function summary(): Promise<Summary | null> {
                   or dl.closing_agent_id = app.current_agent_id())
              and dl.status not in ('closed', 'failed'))::int as deals_open,
          (select count(*) from stuck_deals_v sd where sd.mine)::int     as deals_stuck,
+         (select count(*) from overdue_tasks_v)::int                   as tasks_overdue,
+         (select count(*) from my_tasks_v t
+           where t.agent_id = app.current_agent_id()
+             and t.done_at is null and t.cancelled_at is null
+             and t.due_at::date <= (now() at time zone 'Asia/Bishkek')::date)::int
+                                                                        as tasks_today,
+         (select count(*) from stuck_requirements_v sr
+           where sr.agent_id = app.current_agent_id())::int             as funnel_stuck,
          (select count(*) from agents a where a.status = 'pending')::int as agents_pending,
          (select count(*) from maintenance_health_v h
            where h.enabled and h.status <> 'в норме')::int             as scheduler_broken`,
@@ -1077,5 +1088,145 @@ export async function objectChannels(objectId: string): Promise<ObjectChannel[]>
       [objectId],
     );
     return rows;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Воронка (инвариант 30)
+// ---------------------------------------------------------------------------
+
+/**
+ * Колонки воронки.
+ *
+ * Список и порядок заданы здесь, а не выведены из данных: пустая колонка
+ * обязана быть видна. Воронка, в которой «Новые» пропадают, когда новых нет,
+ * показывает не воронку, а её остатки.
+ */
+export const FUNNEL_STAGES = [
+  { key: "new",         title: "Новые",      hint: "позвонить и понять, что ищет" },
+  { key: "qualified",   title: "В работе",   hint: "знаем, что ищет, — подбираем" },
+  { key: "in_showings", title: "На показах", hint: "смотрит варианты" },
+  { key: "in_deal",     title: "В сделке",   hint: "этапы — на экране сделок" },
+  { key: "closed",      title: "Купил",      hint: "сделка закрыта" },
+  { key: "lost",        title: "Ушёл",       hint: "с причиной, иначе не закрыть" },
+] as const;
+
+export type FunnelCard = {
+  requirement_id: string;
+  status: string;
+  stage_since: Date | string;
+  agent_id: string;
+  agent_name: string;
+  contact_name: string | null;
+  deal_type: string;
+  budget_min: string | null;
+  budget_max: string | null;
+  zones: string[];
+  rooms: number[];
+  closed_reason: string | null;
+  days_in_stage: number;
+  stage_limit_days: number | null;
+  stuck: boolean;
+  matches_count: number;
+  showings_done: number;
+  next_showing_at: Date | string | null;
+  is_mine: boolean;
+  open_tasks: number;
+  next_task_at: Date | string | null;
+};
+
+export async function funnel(): Promise<FunnelCard[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<FunnelCard>(
+      `select f.*,
+              (f.agent_id = app.current_agent_id()) as is_mine,
+              (select count(*) from my_tasks_v t
+                where t.requirement_id = f.requirement_id
+                  and t.done_at is null and t.cancelled_at is null)::int as open_tasks,
+              (select min(t.due_at) from my_tasks_v t
+                where t.requirement_id = f.requirement_id
+                  and t.done_at is null and t.cancelled_at is null)      as next_task_at
+         from funnel_v f
+        order by (f.agent_id = app.current_agent_id()) desc,
+                 f.stuck desc, f.stage_since asc`,
+    );
+    return rows;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Задачи и напоминания (инвариант 31)
+// ---------------------------------------------------------------------------
+
+export type Task = {
+  id: string;
+  kind: string;
+  title: string;
+  due_at: Date | string;
+  agent_id: string;
+  agent_name: string;
+  created_by_agent_id: string;
+  done_at: Date | string | null;
+  done_note: string | null;
+  cancelled_at: Date | string | null;
+  cancel_reason: string | null;
+  state: string;
+  overdue: boolean;
+  subject_name: string | null;
+  subject_kind: string | null;
+  contact_id: string | null;
+  requirement_id: string | null;
+  object_id: string | null;
+  deal_id: string | null;
+  inquiry_id: string | null;
+  is_mine: boolean;
+};
+
+export async function tasks(): Promise<Task[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<Task>(
+      `select t.*, (t.agent_id = app.current_agent_id()) as is_mine
+         from my_tasks_v t
+        order by (t.done_at is null and t.cancelled_at is null) desc,
+                 t.due_at asc`,
+    );
+    return rows;
+  });
+}
+
+/**
+ * Клиенты, на которых можно повесить задачу, и агенты, которым её можно
+ * поручить. Оба списка приходят из базы под правами агента: в выпадающем
+ * списке не должно быть того, чего человек не видит.
+ */
+export async function taskTargets(): Promise<{
+  requirements: { id: string; label: string }[];
+  agents: { id: string; full_name: string }[];
+}> {
+  const session = await readSession();
+  if (!session) return { requirements: [], agents: [] };
+
+  return asAgent(session, "read only", async (db) => {
+    const reqs = await db.query<{ id: string; label: string }>(
+      `select r.id,
+              coalesce(c.name, 'без имени') || ' · ' ||
+              case r.deal_type when 'sale' then 'покупка' else 'аренда' end as label
+         from requirements r
+         left join contacts c on c.id = r.contact_id
+        where r.agent_id = app.current_agent_id()
+          and r.status not in ('closed', 'lost')
+        order by c.name`,
+    );
+    const ags = await db.query<{ id: string; full_name: string }>(
+      `select id, full_name from agents
+        where status = 'approved' order by full_name`,
+    );
+    return { requirements: reqs.rows, agents: ags.rows };
   });
 }

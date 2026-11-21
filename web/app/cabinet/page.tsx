@@ -73,6 +73,25 @@ export default async function CabinetHome() {
           alarm
           hint="чем дольше ждёт, тем меньше шансов"
         />
+        {/* Задачи стоят в начале, а не в конце: экран читают сверху, а
+            просроченное обещание позвонить дороже любого счётчика ниже. */}
+        <Tile
+          value={s.tasks_overdue}
+          one="задача просрочена" few="задачи просрочены" many="задач просрочено"
+          href="/cabinet/tasks"
+          alarm
+          hint="срок прошёл, а ответа нет"
+        />
+        <Tile value={s.tasks_today} one="задача на сегодня" few="задачи на сегодня"
+              many="задач на сегодня" href="/cabinet/tasks" />
+        <Tile
+          value={s.funnel_stuck}
+          one="клиент стоит в воронке" few="клиента стоят в воронке"
+          many="клиентов стоят в воронке"
+          href="/cabinet/funnel"
+          alarm
+          hint="дольше, чем этой колонке отведено"
+        />
         <Tile value={s.candidates_mine} one="объявление в работе"
               few="объявления в работе" many="объявлений в работе"
               href="/cabinet/candidates" />
