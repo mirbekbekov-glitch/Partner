@@ -363,6 +363,31 @@ main:has(.pub-top) { max-width: none; padding: 0; }
   border-left: 1px solid var(--line); padding-left: 16px; }
 .pub-agents:hover { color: var(--accent); }
 
+/* Выбор языка. Кнопка перебивает общее правило button: та красная и
+   залитая, а здесь нужен тихий элемент — глобус с кодом языка, который
+   не спорит со знаком агентства и не зовёт нажать себя. */
+.lang { position: relative; }
+.lang-btn { display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--line); border-radius: var(--r-full);
+  padding: 5px 10px; font-size: 13px; font-weight: 700; line-height: 1;
+  font-family: inherit; cursor: pointer; }
+.lang-btn:hover,
+.lang-btn[aria-expanded='true'] { color: var(--accent); border-color: var(--accent); }
+.lang-now { letter-spacing: .3px; }
+.lang-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 40;
+  list-style: none; margin: 0; padding: 6px; min-width: 164px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-lg); box-shadow: var(--sh-lg); }
+.lang-menu a { display: block; padding: 9px 10px; border-radius: var(--r-md);
+  text-decoration: none; color: var(--fg); font-size: 14px; font-weight: 600;
+  white-space: nowrap; }
+.lang-menu a:hover { background: var(--sunk); }
+/* Текущий язык отмечен точкой, а не только цветом: в списке из четырёх
+   строк цвет один легко принять за наведение. */
+.lang-menu a.on { color: var(--accent); }
+.lang-menu a.on::after { content: ' •'; }
+
 /* Герой во всю ширину: страница у нас в узком main, поэтому полосу
    растягиваем отрицательными полями, а содержимое держим в центре. */
 .hero { background: var(--sunk); border-bottom: 1px solid var(--line); }
@@ -373,6 +398,12 @@ main:has(.pub-top) { max-width: none; padding: 0; }
 .hero h1 { font-size: 34px; line-height: 38px; font-weight: 800; letter-spacing: -.7px;
   max-width: 18ch; margin: 0; }
 .hero .lede { color: var(--muted); font-size: 15px; line-height: 22px; max-width: 58ch; margin: 0; }
+/* Китайский переносится в любом месте строки, и заголовок разрывал слово
+   «地块» пополам. Мера в ch считана по ширине цифры — для латиницы и
+   кириллицы это верно, а иероглиф вдвое шире, и 18ch оказывается в полтора
+   раза уже задуманного. Поэтому меру снимаем, а разрыв внутри слова
+   запрещаем: заголовок тут и так короткий. */
+html[lang='zh'] .hero h1 { max-width: none; word-break: keep-all; }
 
 .search { display: grid; gap: 8px; grid-template-columns: 1.4fr 1fr 1fr .9fr .9fr auto;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
@@ -486,7 +517,10 @@ main:has(.pub-top) { max-width: none; padding: 0; }
   .gal .side { grid-template-columns: 1fr 1fr; }
   .pub-top-in { flex-wrap: wrap; row-gap: 8px; }
   .pub-phones { order: 3; width: 100%; }
-  .pub-agents { border-left: 0; padding-left: 0; margin-left: auto; }
+  .pub-agents { border-left: 0; padding-left: 0; }
+  /* Телефоны уходят на вторую строку, язык и дверь для агентов
+     остаются рядом со знаком. */
+  .lang { margin-left: auto; }
   .pub-price-big { font-size: 27px; }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -57,24 +57,47 @@ done
 
 # --- список типов объектов не должен разъезжаться со схемой -----------------
 # Витрина отдаёт kind как есть. Если в базе появился вид, которого нет в
-# KIND_RU, посетитель увидит английское слово, а фильтр этот вид потеряет.
+# словаре, посетитель увидит английское слово, а фильтр этот вид потеряет.
+# Проверяем КАЖДЫЙ язык: пропущенный вид в китайском словаре так же ломает
+# выдачу, как пропущенный в русском, но заметить его некому.
 if [ -n "${DB:-}" ]; then
   db_kinds="$(psql -X -q -t -A -d "$DB" -c "
     select string_agg(e.enumlabel, ' ' order by e.enumlabel)
       from pg_type t join pg_enum e on e.enumtypid = t.oid
      where t.typname = 'object_kind'" 2>/dev/null)"
-  # Только ключи из блока KIND_RU, а не любые поля объектов в файле.
-  ts_kinds="$(sed -n '/export const KIND_RU/,/^};/p' "$ROOT/lib/catalog-params.ts" \
-    | grep -oE '^  [a-z]+:' | tr -d ' :' | sort | tr '\n' ' ' | sed 's/ $//')"
-  if [ -n "$db_kinds" ] && [ "$db_kinds" != "$ts_kinds" ]; then
-    echo "  ЗАПРЕЩЕНО    KIND_RU разошёлся с перечислением object_kind"
-    echo "                 в базе: $db_kinds"
-    echo "                 в коде: $ts_kinds"
+  for lang in ky ru en zh; do
+    # Ключи из блока kinds именно этого словаря.
+    ts_kinds="$(sed -n "/^const $lang: Dict = {/,/^};/p" "$ROOT/lib/i18n.ts" \
+      | sed -n '/kinds: {/,/},/p' \
+      | grep -oE "[a-z_]+: '" | sed "s/: '//" | sort | tr '\n' ' ' | sed 's/ $//')"
+    if [ -n "$db_kinds" ] && [ "$db_kinds" != "$ts_kinds" ]; then
+      echo "  ЗАПРЕЩЕНО    словарь «$lang» разошёлся с перечислением object_kind"
+      echo "                 в базе: $db_kinds"
+      echo "                 в коде: $ts_kinds"
+      bad=$((bad+1))
+    else
+      echo "  ok           словарь «$lang» покрывает object_kind целиком"
+    fi
+  done
+fi
+
+# --- каждая подпись интерфейса переведена на все четыре языка ---------------
+# Пропущенное поле typescript поймает сам — тип Dict обязателен. А вот
+# подпись, оставленную на русском в английском словаре, не поймает никто,
+# поэтому проверяем хотя бы отсутствие кириллицы там, где её быть не может.
+# Диапазон задан кодами: класс вида [А-Яа-я] в grep -E сравнивает байты и
+# ловит заодно китайский, из-за чего проверка срабатывала всегда.
+for lang in en zh; do
+  cyr="$(sed -n "/^const $lang: Dict = {/,/^};/p" "$ROOT/lib/i18n.ts" \
+    | grep -nP "(*UTF)'[^']*[\x{0400}-\x{04FF}]" || true)"
+  if [ -n "$cyr" ]; then
+    echo "  ЗАПРЕЩЕНО    в словаре «$lang» осталась кириллица:"
+    echo "$cyr" | sed 's/^/                 /'
     bad=$((bad+1))
   else
-    echo "  ok           KIND_RU покрывает object_kind целиком"
+    echo "  ok           словарь «$lang» без кириллицы"
   fi
-fi
+done
 
 echo ""
 if [ "$bad" -gt 0 ]; then

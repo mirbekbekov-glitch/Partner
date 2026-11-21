@@ -12,12 +12,12 @@ export const CATALOG_PAGE_SIZE = 12;
 
 export type CatalogSort = 'fresh' | 'cheap' | 'big';
 
-export const SORTS: { key: CatalogSort; label: string; column: string; asc: boolean }[] = [
+export const SORTS: { key: CatalogSort; column: string; asc: boolean }[] = [
   // «Свежие» — по дате подтверждения, а не по дате публикации: объявление,
   // которое агент подтвердил вчера, полезнее того, что висит с лета.
-  { key: 'fresh', label: 'Сначала свежие', column: 'actual_at', asc: false },
-  { key: 'cheap', label: 'Дешевле', column: 'price', asc: true },
-  { key: 'big', label: 'Больше площади', column: 'area', asc: false },
+  { key: 'fresh', column: 'actual_at', asc: false },
+  { key: 'cheap', column: 'price', asc: true },
+  { key: 'big', column: 'area', asc: false },
 ];
 
 export type CatalogFilters = {
@@ -33,22 +33,7 @@ export type CatalogFilters = {
 };
 
 const DEALS = ['rent', 'sale'];
-const KINDS = ['flat', 'room', 'house', 'townhouse', 'land', 'commercial', 'garage'];
-
-/**
- * Все значения object_kind из схемы. Список обязан совпадать с перечислением
- * в базе целиком: пропущенный вид показывался бы посетителю по-английски и
- * не находился бы фильтром. Совпадение проверяет tests/check-public.sh.
- */
-export const KIND_RU: Record<string, string> = {
-  flat: 'квартира',
-  room: 'комната',
-  house: 'дом',
-  townhouse: 'таунхаус',
-  land: 'участок',
-  commercial: 'коммерческая',
-  garage: 'гараж',
-};
+export const KINDS = ['flat', 'room', 'house', 'townhouse', 'land', 'commercial', 'garage'];
 
 const num = (v: string | undefined) => {
   if (!v) return null;
@@ -81,12 +66,12 @@ export function parseCatalogFilters(
 }
 
 /** Та же подборка с другой сортировкой. */
-export function sortHref(f: CatalogFilters, sort: CatalogSort) {
-  return catalogHref({ ...f, sort }, 1);
+export function sortHref(lang: string, f: CatalogFilters, sort: CatalogSort) {
+  return catalogHref(lang, { ...f, sort }, 1);
 }
 
 /** Та же подборка, другая страница. */
-export function catalogHref(f: CatalogFilters, page: number) {
+export function catalogHref(lang: string, f: CatalogFilters, page: number) {
   const p = new URLSearchParams();
   if (f.deal) p.set('deal', f.deal);
   if (f.kind) p.set('kind', f.kind);
@@ -98,7 +83,7 @@ export function catalogHref(f: CatalogFilters, page: number) {
   if (f.sort !== 'fresh') p.set('sort', f.sort);
   if (page > 1) p.set('page', String(page));
   const qs = p.toString();
-  return qs ? `/?${qs}` : '/';
+  return qs ? `/${lang}?${qs}` : `/${lang}`;
 }
 
 export const hasAnyFilter = (f: CatalogFilters) =>
@@ -184,38 +169,23 @@ export function daysSince(iso: string): number {
   return Math.max(0, Math.floor(ms / 86400000));
 }
 
-export function freshWord(days: number): string {
-  if (days === 0) return 'сегодня';
-  if (days === 1) return 'вчера';
-  const d = days % 10, h = days % 100;
-  const word = d === 1 && h !== 11 ? 'день' : d >= 2 && d <= 4 && (h < 10 || h >= 20) ? 'дня' : 'дней';
-  return `${days} ${word} назад`;
-}
-
-/** Склонение для счётчика найденного. */
-export function objectsWord(n: number): string {
-  const d = n % 10, h = n % 100;
-  if (d === 1 && h !== 11) return 'объект';
-  if (d >= 2 && d <= 4 && (h < 10 || h >= 20)) return 'объекта';
-  return 'объектов';
-}
-
 /**
- * Цена для публичной части: «85 000 $», «38 000 сом».
+ * Цена для публичной части: «85 000 $», «38 000 сом», «85,000 $».
  *
  * В кабинете цена подписана кодом валюты — там это точнее, а посетителю
- * привычнее знак. Пробел между тысячами неразрывный, иначе число ломается
- * по строкам. Правило из дизайн-системы: «1 500 000 сом».
+ * привычнее знак. Разделитель тысяч берётся по языку: англичанин ждёт
+ * запятую, и «85 000» он читает хуже, чем «85,000». Пробел неразрывный,
+ * иначе число ломается по строкам. Правило дизайн-системы: «1 500 000 сом».
+ *
+ * Валюту не пересчитываем. Курс — не наше дело: цену назвал собственник
+ * в своей валюте, и пересчёт по вчерашнему курсу был бы ложью о цене.
  */
-export function publicMoney(v: number, currency: string): string {
-  const n = new Intl.NumberFormat('ru-RU').format(v).replace(/\u00A0|\s/g, '\u00A0');
+const SOM: Record<string, string> = { ru: 'сом', ky: 'сом', en: 'som', zh: '索姆' };
+
+export function publicMoney(lang: string, v: number, currency: string): string {
+  const locale = lang === 'en' ? 'en-US' : lang === 'zh' ? 'zh-CN' : 'ru-RU';
+  const n = new Intl.NumberFormat(locale).format(v).replace(/\u00A0|\s/g, '\u00A0');
   if (currency === 'USD') return `${n}\u00A0$`;
-  if (currency === 'KGS') return `${n}\u00A0сом`;
+  if (currency === 'KGS') return `${n}\u00A0${SOM[lang] ?? 'KGS'}`;
   return `${n}\u00A0${currency}`;
 }
-
-/** Тип объекта с заглавной: в начале строки «Квартира · Центр». */
-export const kindTitle = (kind: string) => {
-  const ru = KIND_RU[kind] ?? kind;
-  return ru[0].toUpperCase() + ru.slice(1);
-};

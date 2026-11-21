@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
+import { DEFAULT_LANG, isLang } from '@/lib/i18n';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -8,9 +10,13 @@ export const metadata: Metadata = {
 // robots здесь больше нет: общий noindex закрыл бы и публичный каталог.
 // Кабинет и вход закрывают себя сами — см. app/cabinet/layout.tsx и app/login.
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Язык ставит middleware: корневой макет не видит участок [lang].
+  const raw = (await headers()).get('x-lang');
+  const lang = isLang(raw) ? raw : DEFAULT_LANG;
+
   return (
-    <html lang="ru">
+    <html lang={lang}>
       <head>
         {/* Manrope — шрифт дизайн-системы. Ссылкой, а не next/font: сборка
             идёт в сети, где Google Fonts недоступен, а браузер читателя
