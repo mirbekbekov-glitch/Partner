@@ -65,6 +65,15 @@ type Dict = {
   namePlaceholder: string; phonePlaceholder: string;
   messageLabel: string; messagePlaceholder: string; honeypotLabel: string;
   siteTitle: string; siteDescription: string; drawingAlt: string;
+  // Заявка «что я ищу»
+  reqNav: string; reqTitle: string; reqLede: string;
+  reqDeal: string; reqBuy: string; reqRent: string;
+  reqType: string; reqRooms: string; reqDistrict: string; reqDistrictAny: string;
+  reqBudget: string; reqWishes: string; reqWishesHint: string;
+  reqConsent: string; reqConsentHint: string;
+  reqSend: string; reqSending: string; reqSent: string; reqSentNote: string;
+  reqErrPhone: string; reqErrInput: string; reqErrMany: string; reqErrGeneric: string;
+  reqWhy1: string; reqWhy2: string; reqWhy3: string;
   // Типы недвижимости
   kinds: Record<string, string>;
 };
@@ -129,6 +138,25 @@ const ru: Dict = {
   city: 'Бишкек',
   tabBuy: 'Купить', tabRent: 'Снять', tabAll: 'Всё сразу',
   moreFilters: 'Дополнительные фильтры', priceFrom: 'Цена от',
+  reqNav: 'Заявки',
+  reqTitle: 'Что вы ищете?',
+  reqLede: 'Не нашли подходящее в каталоге — опишите, что нужно. Заявку разберёт агент и предложит то, чего в открытом доступе ещё нет.',
+  reqDeal: 'Купить или снять', reqBuy: 'Купить', reqRent: 'Снять',
+  reqType: 'Тип жилья', reqRooms: 'Комнат', reqDistrict: 'Район',
+  reqDistrictAny: 'Любой район', reqBudget: 'Бюджет до',
+  reqWishes: 'Что важно', reqWishesHint: 'Первый этаж не предлагать, нужен лифт и парковка',
+  reqConsent: 'Разрешаю показать мой телефон агенту, который возьмёт заявку',
+  reqConsentHint: 'Без этого агент увидит только параметры поиска и не сможет вам позвонить.',
+  reqSend: 'Отправить заявку', reqSending: 'Отправляем…',
+  reqSent: 'Заявка принята.',
+  reqSentNote: 'Агент свяжется с вами в течение часа. Если найдём раньше — позвоним раньше.',
+  reqErrPhone: 'Проверьте номер телефона: по нему с вами свяжутся.',
+  reqErrInput: 'Проверьте заполненные поля.',
+  reqErrMany: 'С этого номера сегодня уже несколько заявок. Позвоните нам напрямую.',
+  reqErrGeneric: 'Не удалось отправить заявку. Попробуйте ещё раз.',
+  reqWhy1: 'Отвечаем в течение часа',
+  reqWhy2: 'Покажем то, чего нет в открытом каталоге',
+  reqWhy3: 'Телефон увидит один агент, а не весь рынок',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
            land: 'участок', commercial: 'коммерческая', garage: 'гараж' },
 };
@@ -186,6 +214,25 @@ const ky: Dict = {
   city: 'Бишкек',
   tabBuy: 'Сатып алуу', tabRent: 'Ижарага алуу', tabAll: 'Баары',
   moreFilters: 'Кошумча чыпкалар', priceFrom: 'Баасы',
+  reqNav: 'Арыздар',
+  reqTitle: 'Эмне издеп жатасыз?',
+  reqLede: 'Каталогдон туура келгенин таппадыңызбы — эмне керектигин жазыңыз. Арызды агент карап, ачык жарыяланбаганын сунуштайт.',
+  reqDeal: 'Сатып алуу же ижара', reqBuy: 'Сатып алуу', reqRent: 'Ижарага алуу',
+  reqType: 'Турак жайдын түрү', reqRooms: 'Бөлмө', reqDistrict: 'Район',
+  reqDistrictAny: 'Бардык райондор', reqBudget: 'Бюджет',
+  reqWishes: 'Эмне маанилүү', reqWishesHint: 'Биринчи кабат керек эмес, лифт жана унаа токтотуучу жай керек',
+  reqConsent: 'Арызды алган агентке телефонумду көрсөтүүгө уруксат берем',
+  reqConsentHint: 'Болбосо агент издөө шарттарын гана көрөт жана чала албайт.',
+  reqSend: 'Арыз жөнөтүү', reqSending: 'Жөнөтүлүүдө…',
+  reqSent: 'Арыз кабыл алынды.',
+  reqSentNote: 'Агент бир сааттын ичинде байланышат. Эртерээк тапсак — эртерээк чалабыз.',
+  reqErrPhone: 'Телефон номерин текшериңиз: ушул номер аркылуу байланышабыз.',
+  reqErrInput: 'Толтурулган талааларды текшериңиз.',
+  reqErrMany: 'Бул номерден бүгүн бир нече арыз келди. Бизге түз чалыңыз.',
+  reqErrGeneric: 'Арызды жөнөтүү мүмкүн болгон жок. Кайра аракет кылыңыз.',
+  reqWhy1: 'Бир сааттын ичинде жооп беребиз',
+  reqWhy2: 'Ачык каталогдо жоктурун көрсөтөбүз',
+  reqWhy3: 'Телефонуңузду бир агент гана көрөт',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
            land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж' },
 };
@@ -243,6 +290,25 @@ const en: Dict = {
   city: 'Bishkek',
   tabBuy: 'Buy', tabRent: 'Rent', tabAll: 'Everything',
   moreFilters: 'More filters', priceFrom: 'Price from',
+  reqNav: 'Requests',
+  reqTitle: 'What are you looking for?',
+  reqLede: 'Nothing in the catalogue fits? Tell us what you need. An agent will take it up and show you what is not listed publicly yet.',
+  reqDeal: 'Buy or rent', reqBuy: 'Buy', reqRent: 'Rent',
+  reqType: 'Property type', reqRooms: 'Rooms', reqDistrict: 'District',
+  reqDistrictAny: 'Any district', reqBudget: 'Budget up to',
+  reqWishes: 'What matters', reqWishesHint: 'Not the ground floor; a lift and parking are a must',
+  reqConsent: 'I allow my phone number to be shown to the agent who takes this request',
+  reqConsentHint: 'Without it the agent sees only the search parameters and cannot call you.',
+  reqSend: 'Send request', reqSending: 'Sending…',
+  reqSent: 'Request received.',
+  reqSentNote: 'An agent will contact you within the hour. If we find something sooner, we call sooner.',
+  reqErrPhone: 'Check the phone number — the agent will call you on it.',
+  reqErrInput: 'Please check the fields you filled in.',
+  reqErrMany: 'Several requests from this number today already. Please call us directly.',
+  reqErrGeneric: 'The request could not be sent. Please try again.',
+  reqWhy1: 'We answer within the hour',
+  reqWhy2: 'We show what is not publicly listed yet',
+  reqWhy3: 'One agent sees your number, not the whole market',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
            land: 'land', commercial: 'commercial', garage: 'garage' },
 };
@@ -300,6 +366,25 @@ const zh: Dict = {
   city: '比什凯克',
   tabBuy: '购买', tabRent: '租赁', tabAll: '全部',
   moreFilters: '更多筛选', priceFrom: '价格下限',
+  reqNav: '需求登记',
+  reqTitle: '您在找什么样的房子？',
+  reqLede: '目录里没有合适的？写下您的需求。经纪人会跟进，并为您提供尚未公开发布的房源。',
+  reqDeal: '购买或租赁', reqBuy: '购买', reqRent: '租赁',
+  reqType: '房屋类型', reqRooms: '房间数', reqDistrict: '区域',
+  reqDistrictAny: '不限区域', reqBudget: '预算上限',
+  reqWishes: '您的要求', reqWishesHint: '不要一楼，需要电梯和车位',
+  reqConsent: '同意将我的电话提供给承接此需求的经纪人',
+  reqConsentHint: '不同意时，经纪人只能看到搜索条件，无法与您联系。',
+  reqSend: '提交需求', reqSending: '提交中…',
+  reqSent: '需求已收到。',
+  reqSentNote: '经纪人将在一小时内与您联系；若更早找到合适房源，会更早致电。',
+  reqErrPhone: '请检查电话号码，经纪人将拨打此号码。',
+  reqErrInput: '请检查已填写的内容。',
+  reqErrMany: '该号码今天已提交多次。请直接致电我们。',
+  reqErrGeneric: '提交失败，请重试。',
+  reqWhy1: '一小时内回复',
+  reqWhy2: '提供尚未公开的房源',
+  reqWhy3: '只有一位经纪人能看到您的号码',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
            land: '地块', commercial: '商业用房', garage: '车库' },
 };

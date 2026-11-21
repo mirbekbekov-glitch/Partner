@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState } from 'react';
 import { submitLead, type LeadError } from './lead-actions';
 import { t, type Lang } from '@/lib/i18n';
 
@@ -18,10 +18,11 @@ export function LeadForm({
   lang: Lang; objectId: string; address: string;
 }) {
   const d = t(lang);
-  const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
-  const [error, setError] = useState<LeadError | null>(null);
+  // useActionState, а не обработчик onSubmit: форма работает и без
+  // JavaScript, не выбрасывая телефон в адресную строку.
+  const [result, action, pending] = useActionState(submitLead, null);
 
-  if (state === 'sent') {
+  if (result?.ok) {
     return (
       <div>
         <strong>{d.sent}</strong>
@@ -30,21 +31,10 @@ export function LeadForm({
     );
   }
 
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    setState('sending');
-    const result = await submitLead(new FormData(e.currentTarget));
-    if (result.ok) {
-      setState('sent');
-    } else {
-      setError(result.code);
-      setState('idle');
-    }
-  }
+  const error = result && !result.ok ? result.code : null;
 
   return (
-    <form className="stack" onSubmit={onSubmit}>
+    <form className="stack" action={action}>
       <input type="hidden" name="object_id" value={objectId} />
 
       {/* Приманка для ботов: человек этого поля не видит и не заполнит.
@@ -74,8 +64,8 @@ export function LeadForm({
       </div>
 
       <div>
-        <button type="submit" disabled={state === 'sending'} style={{ width: '100%', padding: 12 }}>
-          {state === 'sending' ? d.sending : d.sendRequest}
+        <button type="submit" disabled={pending} style={{ width: '100%', padding: 12 }}>
+          {pending ? d.sending : d.sendRequest}
         </button>
       </div>
 

@@ -18,8 +18,15 @@ export type LeadResult = { ok: boolean; code: LeadError | null };
  * бы ничего.
  *
  * Задача этого кода — свести ответ базы к одному из известных кодов.
+ *
+ * Подпись с первым аргументом — требование useActionState. Благодаря ей
+ * форма уходит POST-ом и без JavaScript: иначе браузер отправлял бы её
+ * обычным GET, и телефон человека попадал бы в адресную строку.
  */
-export async function submitLead(formData: FormData): Promise<LeadResult> {
+export async function submitLead(
+  _prev: LeadResult | null,
+  formData: FormData,
+): Promise<LeadResult> {
   // Приманка для ботов: поле скрыто от человека, но живо в разметке.
   // Заполнено — значит заполнял не человек. Отвечаем как при успехе,
   // чтобы бот не знал, по какому признаку его отличили.

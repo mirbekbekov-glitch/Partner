@@ -24,6 +24,9 @@ export function CatalogHeader({ lang }: { lang: Lang }) {
         <Link href={`/${lang}`} className="brand" aria-label={AGENCY_NAME}>
           <Image src={logo} alt={AGENCY_NAME} priority />
         </Link>
+        {/* Единственный раздел рядом со знаком: человек, не нашедший
+            объект в каталоге, не должен искать, куда написать. */}
+        <Link href={`/${lang}/request`} className="nav-link">{d.reqNav}</Link>
         <span className="spacer" />
         <div className="nav-phones">
           {AGENCY_PHONES.map((p) => (
