@@ -161,19 +161,12 @@ export default async function Catalog({
   if (f.priceMax != null) query = query.lte('price', f.priceMax);
   if (f.q) for (const token of searchTokens(f.q)) query = query.or(tokenFilter(token));
 
-  // Числа для полосы под заголовком. Отдельным запросом и без фильтров:
-  // это состояние каталога целиком, а не текущей подборки.
+  // Все опубликованные объекты — по ним строится строка районов под
+  // пультом поиска. Без фильтров: это состояние каталога целиком.
   const { data: all } = await supabase
     .from('public_catalog_v')
-    .select('zone, actual_at')
+    .select('zone')
     .limit(1000);
-  const dayAgo = Date.now() - 86400000;
-  const stats = {
-    objects: all?.length ?? 0,
-    fresh: (all ?? []).filter((r) => new Date(r.actual_at as string).getTime() > dayAgo).length,
-    zones: new Set((all ?? []).map((r) => r.zone).filter(Boolean)).size,
-  };
-
   const { data, count, error } = await query;
   const rows = (data ?? []) as Row[];
   const total = count ?? 0;
@@ -200,31 +193,6 @@ export default async function Catalog({
         <div className="hero-in wrap">
           <span className="eyebrow">Liberterra · {d.city}</span>
           <h1>{d.heroTitle} <em>{d.heroEm}</em></h1>
-          <p className="lede">{d.heroLede}</p>
-          <ul className="props">
-            <li className="prop"><i className="mk" />{d.prop1}</li>
-            <li className="prop"><i className="mk" />{d.prop2}</li>
-            <li className="prop"><i className="mk" />{d.prop3}</li>
-          </ul>
-
-          {/* Полоса чисел. Показывается, только когда числа есть: «0
-              объектов» крупным шрифтом — худшая реклама из возможных. */}
-          {stats.objects > 0 ? (
-            <div className="stats">
-              <div className="stat">
-                <b className="num">{stats.objects}</b>
-                <span>{d.statObjects}</span>
-              </div>
-              <div className="stat">
-                <b className="num">{stats.fresh}</b>
-                <span>{d.statFresh}</span>
-              </div>
-              <div className="stat">
-                <b className="num">{stats.zones}</b>
-                <span>{d.statZones}</span>
-              </div>
-            </div>
-          ) : null}
         </div>
       </section>
 

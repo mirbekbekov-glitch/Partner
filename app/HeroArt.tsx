@@ -55,7 +55,9 @@ export function HeroArt() {
           </linearGradient>
         </defs>
         {/* Тёмная лесенка позади — она даёт глубину, а не второй цвет. */}
-        <path d={stairs(150, 14)} fill="#12161C" />
+        {/* Цвет задан в стилях: в тёмной теме чернильная ступень
+            должна светлеть, иначе сливается с фоном страницы. */}
+        <path className="stair-ink" d={stairs(150, 14)} />
         <path d={stairs(300, 14)} fill="url(#stair-red)" />
       </svg>
     </div>

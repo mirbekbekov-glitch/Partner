@@ -33,9 +33,7 @@ type Dict = {
   forAgents: string; forAgentsShort: string; agency: string; city: string; phones: string; sections: string;
   agencyLine: string; cabinetLine: string;
   // Герой
-  heroTitle: string; heroEm: string; heroLede: string;
-  statObjects: string; statFresh: string; statZones: string;
-  prop1: string; prop2: string; prop3: string;
+  heroTitle: string; heroEm: string;
   // Поиск
   address: string; addressHint: string; deal: string; anyDeal: string;
   tabBuy: string; tabRent: string; tabAll: string;
@@ -91,10 +89,6 @@ const ru: Dict = {
   sections: 'Разделы', agencyLine: 'Агентство недвижимости, Бишкек',
   cabinetLine: 'Кабинет и CRM — по входу для агентов.',
   heroTitle: 'Найди своё пространство для комфортной', heroEm: 'работы и жилья',
-  heroLede: 'Каждое объявление ведёт агент Liberterra: цену и доступность он подтверждает лично, а дата на карточке показывает, когда это было в последний раз.',
-  prop1: 'Цену подтверждают, а не копируют',
-  prop2: 'Один объект — один ответственный агент',
-  prop3: 'Телефон собственника закрыт',
   address: 'Адрес или район', addressHint: 'Чүй, Асанбай, Джал…',
   deal: 'Сделка', anyDeal: 'Любая', sale: 'Продажа', rent: 'Аренда',
   kind: 'Тип', anyKind: 'Любой', rooms: 'Комнат', anyRooms: 'Любое',
@@ -158,7 +152,6 @@ const ru: Dict = {
   reqWhy1: 'Отвечаем в течение часа',
   reqWhy2: 'Покажем то, чего нет в открытом каталоге',
   reqWhy3: 'Телефон увидит один агент, а не весь рынок',
-  statObjects: 'объектов в каталоге', statFresh: 'подтверждено за сутки', statZones: 'районов города',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
            land: 'участок', commercial: 'коммерческая', garage: 'гараж' },
 };
@@ -168,10 +161,6 @@ const ky: Dict = {
   sections: 'Бөлүмдөр', agencyLine: 'Кыймылсыз мүлк агенттиги, Бишкек',
   cabinetLine: 'Кабинет жана CRM — агенттер үчүн кирүү аркылуу.',
   heroTitle: 'Ыңгайлуу жашоо жана жумуш үчүн', heroEm: 'өз мейкиндигиңди тап',
-  heroLede: 'Ар бир жарнаманы Liberterra агенти жүргүзөт: бааны жана жеткиликтүүлүктү өзү ырастайт, картадагы күн акыркы ырастоо качан болгонун көрсөтөт.',
-  prop1: 'Баа көчүрүлбөйт, ырасталат',
-  prop2: 'Бир объект — бир жооптуу агент',
-  prop3: 'Ээсинин телефону жабык',
   address: 'Дарек же район', addressHint: 'Чүй, Асанбай, Жал…',
   deal: 'Бүтүм', anyDeal: 'Баары', sale: 'Сатуу', rent: 'Ижара',
   kind: 'Түрү', anyKind: 'Баары', rooms: 'Бөлмө', anyRooms: 'Баары',
@@ -235,7 +224,6 @@ const ky: Dict = {
   reqWhy1: 'Бир сааттын ичинде жооп беребиз',
   reqWhy2: 'Ачык каталогдо жоктурун көрсөтөбүз',
   reqWhy3: 'Телефонуңузду бир агент гана көрөт',
-  statObjects: 'каталогдогу объект', statFresh: 'бир сутканын ичинде ырасталган', statZones: 'шаар району',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
            land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж' },
 };
@@ -245,10 +233,6 @@ const en: Dict = {
   sections: 'Sections', agencyLine: 'Real estate agency, Bishkek',
   cabinetLine: 'The agent cabinet and CRM are behind the agent login.',
   heroTitle: 'Find your space for comfortable', heroEm: 'living and work',
-  heroLede: 'Every listing is handled by a Liberterra agent who confirms the price and availability in person. The date on each card shows when that last happened.',
-  prop1: 'Prices are confirmed, not copied',
-  prop2: 'One property, one responsible agent',
-  prop3: "The owner's phone number stays private",
   address: 'Address or district', addressHint: 'Chuy, Asanbay, Jal…',
   deal: 'Deal', anyDeal: 'Any', sale: 'For sale', rent: 'For rent',
   kind: 'Type', anyKind: 'Any', rooms: 'Rooms', anyRooms: 'Any',
@@ -312,7 +296,6 @@ const en: Dict = {
   reqWhy1: 'We answer within the hour',
   reqWhy2: 'We show what is not publicly listed yet',
   reqWhy3: 'One agent sees your number, not the whole market',
-  statObjects: 'listings in the catalogue', statFresh: 'confirmed in 24 hours', statZones: 'districts covered',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
            land: 'land', commercial: 'commercial', garage: 'garage' },
 };
@@ -322,10 +305,6 @@ const zh: Dict = {
   sections: '栏目', agencyLine: '比什凯克房地产中介',
   cabinetLine: '经纪人工作台与 CRM 需登录后使用。',
   heroTitle: '找到适合您的', heroEm: '居住与工作空间',
-  heroLede: '每一条房源都由 Liberterra 的经纪人负责，价格与可售状态由本人确认。卡片上的日期显示最近一次确认的时间。',
-  prop1: '价格经过确认，不是照搬',
-  prop2: '一套房源，一位负责经纪人',
-  prop3: '业主电话不对外公开',
   address: '地址或区域', addressHint: '楚河、阿桑拜、扎尔…',
   deal: '交易', anyDeal: '不限', sale: '出售', rent: '出租',
   kind: '类型', anyKind: '不限', rooms: '房间数', anyRooms: '不限',
@@ -389,7 +368,6 @@ const zh: Dict = {
   reqWhy1: '一小时内回复',
   reqWhy2: '提供尚未公开的房源',
   reqWhy3: '只有一位经纪人能看到您的号码',
-  statObjects: '在售房源', statFresh: '24 小时内确认', statZones: '覆盖区域',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
            land: '地块', commercial: '商业用房', garage: '车库' },
 };
