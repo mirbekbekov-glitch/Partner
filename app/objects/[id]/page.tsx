@@ -2,9 +2,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
-import { allPhotos, KIND_RU } from '@/lib/catalog-params';
-import { money, day } from '@/lib/list-params';
+import { allPhotos, daysSince, freshWord, KIND_RU, publicMoney, kindTitle } from '@/lib/catalog-params';
+import { day } from '@/lib/list-params';
+import { AGENCY_PHONES } from '@/lib/agency';
 import { CatalogHeader } from '../../CatalogHeader';
+import { CatalogFooter } from '../../CatalogFooter';
+import { Facade } from '../../Facade';
 import { Photo } from '../../Photo';
 import { LeadForm } from '../../LeadForm';
 
@@ -29,8 +32,6 @@ type Row = {
 };
 
 async function load(id: string) {
-  // Тот же ключ anon и та же витрина, что и в списке: страница объекта не
-  // должна знать о нём больше, чем каталог.
   const supabase = await createClient();
   const { data } = await supabase
     .from('public_catalog_v')
@@ -48,7 +49,7 @@ export async function generateMetadata(
   if (!o) return { title: 'Объект не найден' };
   const what = `${KIND_RU[o.kind] ?? o.kind}${o.rooms ? `, ${o.rooms} комн.` : ''}`;
   return {
-    title: `${o.address} — ${money(o.price, o.currency)}`,
+    title: `${o.address} — ${publicMoney(o.price, o.currency)}`,
     description: `${o.deal_type === 'sale' ? 'Продажа' : 'Аренда'}: ${what}, ${o.address}.`,
   };
 }
@@ -66,57 +67,91 @@ export default async function PublicObject({
   if (!o) notFound();
 
   const photos = allPhotos(o.photos);
+  const days = daysSince(o.actual_at);
+  // В галерее три места. Фотографий может не быть вовсе или быть одна —
+  // остальные занимает рисунок, чтобы сетка не разъезжалась.
+  const slots = [0, 1, 2].map((i) => ({
+    photo: photos[i] ?? null,
+    facade: <Facade o={o} variant={i} />,
+  }));
+
+  const specs: [string, string][] = [
+    ...(o.rooms ? [['Комнат', String(o.rooms)] as [string, string]] : []),
+    ...(o.area ? [['Площадь', `${o.area} м²`] as [string, string]] : []),
+    ...(o.floor ? [['Этаж', `${o.floor}${o.floors_total ? ` из ${o.floors_total}` : ''}`] as [string, string]] : []),
+    ...(o.zone ? [['Район', o.zone] as [string, string]] : []),
+    ['Опубликован', day(o.published_at)],
+  ];
 
   return (
     <>
       <CatalogHeader />
-      <p className="key"><Link href="/">← ко всем объектам</Link></p>
+      <div className="pub-wrap">
+      <p className="key" style={{ marginTop: 16 }}><Link href="/">← Ко всем объектам</Link></p>
 
-      <h1>{o.address}</h1>
-      <p className="sub">
-        {o.deal_type === 'sale' ? 'Продажа' : 'Аренда'} · {KIND_RU[o.kind] ?? o.kind}
-        {o.zone ? ` · ${o.zone}` : ''}
-      </p>
+      <div className="pub-detail">
+        <div>
+          <div className="gal">
+            <div className="shot">
+              {slots[0].photo ? <Photo src={slots[0].photo} fallback={slots[0].facade} /> : slots[0].facade}
+            </div>
+            <div className="side">
+              {slots.slice(1).map((s, i) => (
+                <div className="shot" key={i}>
+                  {s.photo ? <Photo src={s.photo} fallback={s.facade} /> : s.facade}
+                </div>
+              ))}
+            </div>
+          </div>
 
-      <p className="pub-price-big">{money(o.price, o.currency)}</p>
+          <div className="pub-dhead">
+            <h1>{o.address}</h1>
+            <p className="sub">
+              {o.deal_type === 'sale' ? 'Продажа' : 'Аренда'} · {KIND_RU[o.kind] ?? o.kind}
+              {o.zone ? ` · ${o.zone}` : ''}
+            </p>
+            <p className="pub-price-big">
+              {publicMoney(o.price, o.currency)}
+              {o.deal_type === 'rent' ? <span className="per"> / мес.</span> : null}
+            </p>
+          </div>
 
-      {photos.length > 0 ? (
-        <div className="pub-gallery">
-          {photos.map((src) => (
-            <Photo key={src} src={src} />
-          ))}
-        </div>
-      ) : null}
+          <dl className="specs">
+            {specs.map(([k, v]) => (
+              <div className="spec" key={k}><dt>{k}</dt><dd>{v}</dd></div>
+            ))}
+          </dl>
 
-      <div className="card">
-        <div className="row">
-          {o.rooms ? (<><span className="key">комнат</span><span>{o.rooms}</span></>) : null}
-          {o.area ? (<><span className="key">площадь</span><span>{o.area} м²</span></>) : null}
-          {o.floor ? (
-            <>
-              <span className="key">этаж</span>
-              <span>{o.floor}{o.floors_total ? ` из ${o.floors_total}` : ''}</span>
-            </>
+          {o.description ? (
+            <div className="pub-desc">
+              <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 8px' }}>Об объекте</h2>
+              {o.description}
+            </div>
           ) : null}
-          {o.zone ? (<><span className="key">район</span><span>{o.zone}</span></>) : null}
+
+          <p className="fresh">Агент подтвердил цену и доступность {freshWord(days)}</p>
         </div>
-        <div className="row" style={{ marginTop: 6 }}>
-          <span className="key">опубликован</span>
-          <span>{day(o.published_at)}</span>
-          {/* Дата актуальности важнее даты публикации: по ней видно, что
-              объявление ведут, а не повесили и забыли. */}
-          <span className="key">актуально на</span>
-          <span>{day(o.actual_at)}</span>
+
+        <div className="aside">
+          <div className="panel-card">
+            <h2>Посмотреть объект</h2>
+            <p className="note">
+              Заявка уходит агенту, который ведёт этот объект. Телефон видит только он.
+            </p>
+            <LeadForm objectId={o.id} address={o.address} />
+          </div>
+          <div className="callout">
+            <b>Позвонить сейчас</b>
+            Отдел продаж Liberterra.<br />
+            {AGENCY_PHONES.map((p) => (
+              <span key={p.href}><a href={p.href}>{p.display}</a><br /></span>
+            ))}
+          </div>
         </div>
       </div>
+      </div>
 
-      {o.description ? <p className="pub-desc">{o.description}</p> : null}
-
-      <h2>Оставить заявку</h2>
-      <p className="key">
-        Заявка уходит агенту, который ведёт этот объект. Телефон видит только он.
-      </p>
-      <LeadForm objectId={o.id} address={o.address} />
+      <CatalogFooter />
     </>
   );
 }

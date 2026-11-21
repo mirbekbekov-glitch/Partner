@@ -17,7 +17,7 @@ export function LeadForm({ objectId, address }: { objectId: string; address: str
 
   if (state === 'sent') {
     return (
-      <div className="card">
+      <div>
         <strong>Заявка отправлена.</strong>
         <p className="key" style={{ marginTop: 6 }}>
           Агент, который ведёт «{address}», свяжется с вами по оставленному номеру.
@@ -40,7 +40,7 @@ export function LeadForm({ objectId, address }: { objectId: string; address: str
   }
 
   return (
-    <form className="card stack" onSubmit={onSubmit}>
+    <form className="stack" onSubmit={onSubmit}>
       <input type="hidden" name="object_id" value={objectId} />
 
       {/* Приманка для ботов: человек этого поля не видит и не заполнит.
@@ -70,7 +70,7 @@ export function LeadForm({ objectId, address }: { objectId: string; address: str
       </div>
 
       <div>
-        <button type="submit" disabled={state === 'sending'}>
+        <button type="submit" disabled={state === 'sending'} style={{ width: '100%', padding: 12 }}>
           {state === 'sending' ? 'Отправляем…' : 'Оставить заявку'}
         </button>
       </div>

@@ -10,6 +10,16 @@
  */
 export const CATALOG_PAGE_SIZE = 12;
 
+export type CatalogSort = 'fresh' | 'cheap' | 'big';
+
+export const SORTS: { key: CatalogSort; label: string; column: string; asc: boolean }[] = [
+  // «Свежие» — по дате подтверждения, а не по дате публикации: объявление,
+  // которое агент подтвердил вчера, полезнее того, что висит с лета.
+  { key: 'fresh', label: 'Сначала свежие', column: 'actual_at', asc: false },
+  { key: 'cheap', label: 'Дешевле', column: 'price', asc: true },
+  { key: 'big', label: 'Больше площади', column: 'area', asc: false },
+];
+
 export type CatalogFilters = {
   deal: 'rent' | 'sale' | null;
   kind: string | null;
@@ -18,6 +28,7 @@ export type CatalogFilters = {
   priceMin: number | null;
   priceMax: number | null;
   q: string | null;
+  sort: CatalogSort;
   page: number;
 };
 
@@ -64,8 +75,14 @@ export function parseCatalogFilters(
     priceMin: num(one('from')),
     priceMax: num(one('to')),
     q: one('q')?.trim() || null,
+    sort: (SORTS.some((s) => s.key === one('sort')) ? one('sort') : 'fresh') as CatalogSort,
     page: Number.isFinite(page) && page > 0 ? page : 1,
   };
+}
+
+/** Та же подборка с другой сортировкой. */
+export function sortHref(f: CatalogFilters, sort: CatalogSort) {
+  return catalogHref({ ...f, sort }, 1);
 }
 
 /** Та же подборка, другая страница. */
@@ -78,6 +95,7 @@ export function catalogHref(f: CatalogFilters, page: number) {
   if (f.priceMin != null) p.set('from', String(f.priceMin));
   if (f.priceMax != null) p.set('to', String(f.priceMax));
   if (f.q) p.set('q', f.q);
+  if (f.sort !== 'fresh') p.set('sort', f.sort);
   if (page > 1) p.set('page', String(page));
   const qs = p.toString();
   return qs ? `/?${qs}` : '/';
@@ -155,3 +173,49 @@ export function tokenFilter(token: string): string {
     .flatMap((v) => [`address.ilike.${quoted(v)}`, `zone.ilike.${quoted(v)}`])
     .join(',');
 }
+
+/**
+ * Сколько дней назад агент подтверждал объект. Инвариант 5 держит actual_at
+ * в актуальном состоянии, и это единственное, чем публичный каталог может
+ * доказать посетителю, что объявление живое.
+ */
+export function daysSince(iso: string): number {
+  const ms = Date.now() - new Date(iso).getTime();
+  return Math.max(0, Math.floor(ms / 86400000));
+}
+
+export function freshWord(days: number): string {
+  if (days === 0) return 'сегодня';
+  if (days === 1) return 'вчера';
+  const d = days % 10, h = days % 100;
+  const word = d === 1 && h !== 11 ? 'день' : d >= 2 && d <= 4 && (h < 10 || h >= 20) ? 'дня' : 'дней';
+  return `${days} ${word} назад`;
+}
+
+/** Склонение для счётчика найденного. */
+export function objectsWord(n: number): string {
+  const d = n % 10, h = n % 100;
+  if (d === 1 && h !== 11) return 'объект';
+  if (d >= 2 && d <= 4 && (h < 10 || h >= 20)) return 'объекта';
+  return 'объектов';
+}
+
+/**
+ * Цена для публичной части: «85 000 $», «38 000 сом».
+ *
+ * В кабинете цена подписана кодом валюты — там это точнее, а посетителю
+ * привычнее знак. Пробел между тысячами неразрывный, иначе число ломается
+ * по строкам. Правило из дизайн-системы: «1 500 000 сом».
+ */
+export function publicMoney(v: number, currency: string): string {
+  const n = new Intl.NumberFormat('ru-RU').format(v).replace(/\u00A0|\s/g, '\u00A0');
+  if (currency === 'USD') return `${n}\u00A0$`;
+  if (currency === 'KGS') return `${n}\u00A0сом`;
+  return `${n}\u00A0${currency}`;
+}
+
+/** Тип объекта с заглавной: в начале строки «Квартира · Центр». */
+export const kindTitle = (kind: string) => {
+  const ru = KIND_RU[kind] ?? kind;
+  return ru[0].toUpperCase() + ru.slice(1);
+};

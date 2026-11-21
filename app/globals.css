@@ -1,9 +1,23 @@
 :root {
-  --bg: #ffffff;
-  --fg: #16181d;
-  --muted: #646b7a;
-  --line: #e3e6ec;
-  --panel: #f7f8fa;
+  /* Поверхности из дизайн-системы Liberterra: тёплые нейтральные, а не
+     серо-синие. Страница лежит на surface-100, карточки белые поверх неё,
+     утопленные блоки (фильтры, характеристики) — на surface-200. */
+  --bg: #FAFAF7;
+  --fg: #1C1C1A;
+  --muted: #6B6B66;
+  --line: #D9D5CE;
+  --panel: #FFFFFF;
+  --sunk: #F0EDE8;
+  /* Материалы рисованного фасада: он заменяет фотографию, когда её нет. */
+  --sky-1: #DCE4E8; --sky-2: #EFE9E1;
+  --wall: #C9BFB2; --wall-2: #D6C7B4; --wall-3: #BCB3A8; --wall-dark: #A8998A;
+  --glass: #8FA3AD;
+  --ok-fg: #1B7A6B; --ok-bg: #E4F4F0;
+  --r-sm: 4px; --r-md: 8px; --r-lg: 12px; --r-full: 9999px;
+  --sh-sm: 0 1px 3px 0 rgba(0,0,0,.06);
+  --sh-md: 0 4px 12px -2px rgba(0,0,0,.08);
+  --sh-lg: 0 12px 32px -4px rgba(0,0,0,.12);
+  --font: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* Фирменный красный взят из знака (#BE2C28): на белом 5.87 : 1, годится
      для обычного текста. */
   --accent: #BE2C28;
@@ -21,11 +35,19 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #14161a;
-    --fg: #e8eaee;
-    --muted: #9aa2b1;
-    --line: #2a2e36;
-    --panel: #1b1e24;
+    --bg: #161614;
+    --fg: #EDEDEB;
+    --muted: #9C9C97;
+    --line: #3D3D3A;
+    --panel: #2A2A27;
+    --sunk: #222220;
+    --sky-1: #2E3639; --sky-2: #262320;
+    --wall: #4A443D; --wall-2: #534A40; --wall-3: #413C36; --wall-dark: #393430;
+    --glass: #4E5F68;
+    --ok-fg: #3DA88A; --ok-bg: #1A332D;
+    --sh-sm: 0 1px 3px 0 rgba(0,0,0,.4);
+    --sh-md: 0 4px 12px -2px rgba(0,0,0,.45);
+    --sh-lg: 0 12px 32px -4px rgba(0,0,0,.55);
     /* Фирменный на тёмном фоне даёт лишь 3.09 : 1 — мало. Тот же тон,
        светлее: 4.57 : 1. */
     --accent: #DA524E;
@@ -41,11 +63,19 @@
 }
 
 :root[data-theme='dark'] {
-  --bg: #14161a;
-  --fg: #e8eaee;
-  --muted: #9aa2b1;
-  --line: #2a2e36;
-  --panel: #1b1e24;
+  --bg: #161614;
+  --fg: #EDEDEB;
+  --muted: #9C9C97;
+  --line: #3D3D3A;
+  --panel: #2A2A27;
+  --sunk: #222220;
+  --sky-1: #2E3639; --sky-2: #262320;
+  --wall: #4A443D; --wall-2: #534A40; --wall-3: #413C36; --wall-dark: #393430;
+  --glass: #4E5F68;
+  --ok-fg: #3DA88A; --ok-bg: #1A332D;
+  --sh-sm: 0 1px 3px 0 rgba(0,0,0,.4);
+  --sh-md: 0 4px 12px -2px rgba(0,0,0,.45);
+  --sh-lg: 0 12px 32px -4px rgba(0,0,0,.55);
   --accent: #DA524E;
   --accent-fg: #14161a;
   --error-fg: #F3A6A2;
@@ -62,7 +92,8 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 15px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font: 15px/1.55 var(--font);
+  -webkit-font-smoothing: antialiased;
 }
 
 main { max-width: 900px; margin: 0 auto; padding: 24px 16px 64px; }
@@ -161,6 +192,9 @@ button:disabled { opacity: 0.55; cursor: default; }
 .topbar form { margin: 0; }
 
 input[type='email'],
+input[type='tel'],
+input[type='number'],
+input[type='search'],
 input[type='text'] {
   font: inherit;
   padding: 7px 10px;
@@ -300,80 +334,162 @@ textarea {
 .act-body { margin: 6px 0 0; white-space: pre-wrap; }
 .act .actions { margin-top: 6px; }
 
-/* --- Публичный каталог --------------------------------------------------- */
-/* Открытая часть: ширина больше кабинетной, потому что здесь сетка карточек
-   с фотографиями, а не плотные строки данных. */
-.pub-top {
-  display: flex; align-items: center; gap: 16px;
-  padding-bottom: 12px; margin-bottom: 20px;
-  border-bottom: 1px solid var(--line);
-}
+/* --- Публичный каталог ------------------------------------------------- */
+/* Кабинет живёт в колонке 900px — так плотные таблицы читаются лучше.
+   Каталогу нужна вся ширина под сетку карточек, поэтому на страницах с
+   публичной шапкой ограничение снимается, а ширину держат внутренние
+   обёртки каждой полосы. */
+main:has(.pub-top) { max-width: none; padding: 0; }
+.pub-wrap { max-width: 1140px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* Перенесено из прототипа: поиск в герое, сетка карточек с рисованным
+   фасадом, карточка объекта с прилипающей заявкой. */
+
+.pub-top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 21;
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+.pub-top-in { display: flex; align-items: center; gap: 16px; padding-block: 12px;
+  max-width: 1140px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .pub-brand { display: flex; align-items: center; margin-right: auto; }
-/* Высота задаётся, ширина считается сама: иначе знак исказится. */
 .pub-logo { height: 26px; width: auto; }
-@media (max-width: 560px) { .pub-logo { height: 22px; } }
+.pub-phones { display: flex; flex-wrap: wrap; gap: 2px 16px; }
+.pub-phone { font-weight: 600; font-size: 14px; text-decoration: none; white-space: nowrap;
+  letter-spacing: -.1px; color: var(--fg); }
+.pub-phone:hover { color: var(--accent); }
+.pub-agents { font-size: 13px; color: var(--muted); text-decoration: none; white-space: nowrap;
+  border-left: 1px solid var(--line); padding-left: 16px; }
+.pub-agents:hover { color: var(--accent); }
 
-.pub-grid {
-  display: grid; gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-}
-.pub-card {
-  display: flex; flex-direction: column;
-  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
-  color: inherit; text-decoration: none; background: var(--panel);
-}
-.pub-card:hover { border-color: var(--accent); }
-.pub-photo {
-  aspect-ratio: 4 / 3; background: var(--hidden-bg);
-  display: flex; align-items: center; justify-content: center;
-}
-.pub-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.pub-body { display: flex; flex-direction: column; gap: 4px; padding: 12px; }
-.pub-price { font-size: 1.1rem; }
-.pub-addr { font-weight: 500; }
+/* Герой во всю ширину: страница у нас в узком main, поэтому полосу
+   растягиваем отрицательными полями, а содержимое держим в центре. */
+.hero { background: var(--sunk); border-bottom: 1px solid var(--line); }
+.hero-in { max-width: 1140px; margin: 0 auto; padding-block: 32px 24px;
+  display: flex; flex-direction: column; gap: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.hero h1 { font-size: 34px; line-height: 38px; font-weight: 800; letter-spacing: -.7px;
+  max-width: 18ch; margin: 0; }
+.hero .lede { color: var(--muted); font-size: 15px; line-height: 22px; max-width: 58ch; margin: 0; }
 
-.pub-price-big { font-size: 1.6rem; font-weight: 600; margin: 4px 0 16px; }
-.pub-gallery {
-  display: grid; gap: 8px; margin-bottom: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-}
-.pub-gallery img {
-  width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
-  border-radius: 8px; display: block; background: var(--hidden-bg);
-}
-.pub-desc { white-space: pre-wrap; margin-top: 16px; }
+.search { display: grid; gap: 8px; grid-template-columns: 1.4fr 1fr 1fr .9fr .9fr auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 8px; box-shadow: var(--sh-md); margin-top: 8px; }
+.search .f { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px;
+  border-radius: var(--r-md); min-width: 0; }
+.search .f:focus-within { background: var(--sunk); }
+.search label { font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: .3px;
+  text-transform: uppercase; color: var(--muted); }
+.search input, .search select { border: 0; background: transparent; padding: 0; width: 100%;
+  font-size: 15px; font-weight: 500; min-width: 0; color: var(--fg); }
+.search input:focus, .search select:focus { outline: none; }
+.search input::placeholder { color: var(--muted); font-weight: 400; }
+.search button { border-radius: var(--r-md); font-weight: 700; padding: 0 24px; }
 
-@media (max-width: 480px) {
-  .pub-grid { grid-template-columns: 1fr; }
+.pub-bar { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  padding-block: 24px 16px; }
+.pub-bar h1 { font-size: 22px; line-height: 28px; font-weight: 700; margin: 0; }
+.pub-bar .count { color: var(--muted); font-size: 14px; }
+.sorts { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.sort { border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+  border-radius: var(--r-full); padding: 4px 12px; font-size: 13px; font-weight: 500;
+  text-decoration: none; }
+.sort[aria-current='true'] { background: var(--error-bg); border-color: var(--accent); color: var(--accent); }
+
+.pub-grid { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); padding-bottom: 48px; }
+.pub-card { display: flex; flex-direction: column; background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden;
+  box-shadow: var(--sh-md); color: inherit; text-decoration: none; min-width: 0;
+  transition: box-shadow .15s, transform .15s; }
+.pub-card:hover { box-shadow: var(--sh-lg); transform: translateY(-2px); }
+.shot { position: relative; aspect-ratio: 4 / 3; background: var(--sunk); }
+.shot svg, .shot img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.shot .tags { position: absolute; top: 12px; left: 12px; display: flex; gap: 4px; }
+.tag-sm { font-size: 11px; line-height: 14px; font-weight: 700; letter-spacing: .3px;
+  padding: 4px 8px; border-radius: var(--r-sm); background: var(--ok-bg); color: var(--ok-fg); }
+.pub-body { padding: 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pub-price { font-size: 20px; line-height: 24px; font-weight: 800; letter-spacing: -.3px;
+  font-variant-numeric: tabular-nums; }
+.pub-price .per, .pub-price-big .per { font-size: 13px; font-weight: 500; color: var(--muted);
+  letter-spacing: 0; }
+.pub-addr { font-size: 16px; line-height: 22px; font-weight: 600; }
+.pub-meta { font-size: 13px; line-height: 18px; color: var(--muted); }
+.pub-foot { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted);
+  border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px; }
+.dot { width: 5px; height: 5px; border-radius: var(--r-full); background: var(--ok-fg); flex: none; }
+
+/* --- карточка объекта --- */
+.pub-detail { display: grid; gap: 32px; grid-template-columns: 1.6fr 1fr; align-items: start;
+  padding-block: 8px 48px; }
+.gal { display: grid; gap: 8px; grid-template-columns: 2fr 1fr; }
+.gal .shot { border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--line); }
+.gal .side { display: grid; gap: 8px; }
+.gal .side .shot { aspect-ratio: 16 / 11; }
+.pub-dhead { display: flex; flex-direction: column; gap: 8px; margin: 24px 0 0; }
+.pub-dhead h1 { font-size: 28px; line-height: 34px; font-weight: 800; letter-spacing: -.5px; }
+.pub-price-big { font-size: 32px; line-height: 36px; font-weight: 800; letter-spacing: -.6px;
+  font-variant-numeric: tabular-nums; margin: 0; }
+.pub-dhead .sub { margin: 0; color: var(--muted); font-size: 15px; }
+.specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px;
+  margin-top: 24px; }
+.spec { background: var(--sunk); border-radius: var(--r-md); padding: 12px; min-width: 0; }
+.spec dt { font-size: 11px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase;
+  color: var(--muted); }
+.spec dd { margin: 2px 0 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pub-desc { margin-top: 24px; font-size: 15px; line-height: 24px; max-width: 62ch;
+  white-space: pre-wrap; }
+.fresh { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px;
+  background: var(--ok-bg); color: var(--ok-fg); border-radius: var(--r-full);
+  padding: 4px 12px; font-size: 13px; font-weight: 600; }
+
+.aside { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 76px);
+  display: flex; flex-direction: column; gap: 16px; }
+.panel-card { background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-lg); box-shadow: var(--sh-md); padding: 24px; }
+.panel-card h2 { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
+.panel-card input, .panel-card textarea { width: 100%; max-width: none; }
+.panel-card .field { gap: 4px; }
+.panel-card .note { font-size: 13px; line-height: 18px; color: var(--muted); margin: 0 0 16px; }
+.callout { background: var(--sunk); border-radius: var(--r-lg); padding: 16px;
+  font-size: 13px; line-height: 19px; color: var(--muted); }
+.callout b { color: var(--fg); display: block; margin-bottom: 4px; font-size: 14px; }
+.callout a { font-weight: 700; color: var(--fg); text-decoration: none; white-space: nowrap; }
+
+.honeypot { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+/* --- подвал --- */
+.pub-footer { background: var(--sunk); border-top: 1px solid var(--line); margin-top: 48px; }
+.pub-footer-in { max-width: 1140px; margin: 0 auto; padding-block: 32px 48px;
+  display: flex; flex-wrap: wrap; gap: 24px; justify-content: space-between;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.pub-footer .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pub-footer .col b { font-size: 13px; letter-spacing: .3px; text-transform: uppercase;
+  color: var(--muted); }
+.pub-footer .pub-phone { font-size: 16px; }
+.mini { font-size: 12px; color: var(--muted); }
+
+@media (max-width: 960px) {
+  .search { grid-template-columns: 1fr 1fr 1fr; }
+  .search button { grid-column: 1 / -1; padding: 12px; }
+  .pub-grid { grid-template-columns: repeat(2, 1fr); }
+  .pub-detail { grid-template-columns: 1fr; }
+  .aside { position: static; }
 }
-
-/* Место фотографии, когда ссылка не открылась: тот же размер, что у снимка,
-   иначе галерея схлопывается и верстка прыгает. */
-.pub-nophoto {
-  display: flex; align-items: center; justify-content: center;
-  background: var(--hidden-bg); border-radius: 8px;
-}
-.pub-gallery .pub-nophoto { width: 100%; aspect-ratio: 4 / 3; }
-.pub-photo .pub-nophoto { width: 100%; height: 100%; border-radius: 0; }
-
-/* Поле-приманка для ботов: из потока убрано, но в разметке есть. display:none
-   некоторые боты распознают, поэтому уводим за край экрана. */
-.honeypot {
-  position: absolute; left: -9999px; width: 1px; height: 1px;
-  overflow: hidden;
-}
-
-/* Телефоны в шапке. Шапка переносится по строкам: на телефоне три номера в
-   одну строку не встают, а прятать их за «показать» — терять звонки. */
-.pub-top { flex-wrap: wrap; row-gap: 8px; }
-.pub-phones { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-left: auto; }
-.pub-phone { white-space: nowrap; text-decoration: none; font-weight: 500; }
-.pub-phone:hover { text-decoration: underline; }
-.pub-agents { margin-left: 16px; }
-
 @media (max-width: 560px) {
-  /* На узком экране номера уходят на свою строку целиком, а служебная
-     ссылка — в конец, чтобы не тесниться между ними. */
-  .pub-phones { margin-left: 0; width: 100%; order: 3; }
-  .pub-agents { margin-left: auto; }
+  .hero h1 { font-size: 27px; line-height: 32px; }
+  .search { grid-template-columns: 1fr 1fr; }
+  .pub-grid { grid-template-columns: 1fr; }
+  .gal { grid-template-columns: 1fr; }
+  .gal .side { grid-template-columns: 1fr 1fr; }
+  .pub-top-in { flex-wrap: wrap; row-gap: 8px; }
+  .pub-phones { order: 3; width: 100%; }
+  .pub-agents { border-left: 0; padding-left: 0; margin-left: auto; }
+  .pub-price-big { font-size: 27px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pub-card { transition: none; }
+  .pub-card:hover { transform: none; }
 }
