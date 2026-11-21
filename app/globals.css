@@ -422,6 +422,9 @@ main:has(.nav) { max-width: none; padding: 0; }
                     linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: linear-gradient(to bottom, rgba(0,0,0,.9), transparent 78%); }
+.hero-art { position: absolute; right: 0; top: 0; height: 100%; width: 46%;
+  min-width: 320px; pointer-events: none; opacity: .92;
+  mask-image: linear-gradient(to left, #000 62%, transparent); }
 .hero-in { position: relative; z-index: 1; padding-block: 64px 124px;
   display: flex; flex-direction: column; gap: 18px; max-width: 780px; }
 .eyebrow { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 700;
@@ -444,8 +447,28 @@ main:has(.nav) { max-width: none; padding: 0; }
 /* --- Пульт поиска: наезжает на нижний край героя ------------------------ */
 .console { position: relative; z-index: 5; margin-top: -84px; background: var(--panel);
   border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-lg); }
+/* Вкладки сделки: подчёркивание красным у выбранной, а не заливка —
+   заливка спорила бы с кнопкой «Показать» в той же панели. */
+.tabs { display: flex; gap: 2px; padding: 8px 10px 0; border-bottom: 1px solid var(--line); }
+.tab { position: relative; padding: 12px 18px; font-weight: 700; font-size: 15px;
+  color: var(--muted); text-decoration: none; border-radius: var(--r-md) var(--r-md) 0 0;
+  transition: color .18s, background .18s; }
+.tab:hover { color: var(--fg); background: var(--sunk); }
+.tab[aria-current='true'] { color: var(--fg); }
+.tab[aria-current='true']::after { content: ''; position: absolute; left: 14px; right: 14px;
+  bottom: -1px; height: 2px; background: var(--accent); }
+
+.more { padding: 0 14px 14px; }
+.more summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--accent);
+  width: fit-content; list-style: none; }
+.more summary::-webkit-details-marker { display: none; }
+.more summary::after { content: ' ▾'; }
+.more[open] summary::after { content: ' ▴'; }
+.more[open] summary { margin-bottom: 10px; }
+.console .row.sub { padding: 0; grid-template-columns: 1fr 1fr 2fr; }
+
 .console .row { display: grid; gap: 10px; padding: 14px;
-  grid-template-columns: 1.4fr 1fr 1fr .8fr 1fr auto; }
+  grid-template-columns: 1.5fr 1fr .8fr 1fr auto; }
 .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cell label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
@@ -625,6 +648,8 @@ main:has(.nav) { max-width: none; padding: 0; }
 /* --- Узкие экраны ------------------------------------------------------- */
 @media (max-width: 1040px) {
   .console .row { grid-template-columns: 1fr 1fr 1fr; }
+  .console .row.sub { grid-template-columns: 1fr 1fr; }
+  .hero-art { width: 54%; opacity: .8; }
   .go { grid-column: 1 / -1; padding: 13px; }
   .grid { grid-template-columns: repeat(2, 1fr); }
   .detail { grid-template-columns: 1fr; }
@@ -632,7 +657,9 @@ main:has(.nav) { max-width: none; padding: 0; }
 }
 @media (max-width: 680px) {
   .hero-in { padding-block: 44px 108px; }
-  .console .row { grid-template-columns: 1fr 1fr; }
+  .console .row, .console .row.sub { grid-template-columns: 1fr 1fr; }
+  .tab { padding: 11px 13px; font-size: 14px; }
+  .hero-art { display: none; }
   .grid { grid-template-columns: 1fr; }
   .gal { grid-template-columns: 1fr; }
   .gal .side { grid-template-columns: 1fr 1fr; }

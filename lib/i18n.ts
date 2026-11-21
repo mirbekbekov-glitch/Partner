@@ -37,6 +37,8 @@ type Dict = {
   prop1: string; prop2: string; prop3: string;
   // Поиск
   address: string; addressHint: string; deal: string; anyDeal: string;
+  tabBuy: string; tabRent: string; tabAll: string;
+  moreFilters: string; priceFrom: string;
   sale: string; rent: string; kind: string; anyKind: string;
   rooms: string; anyRooms: string; priceTo: string; search: string; reset: string;
   // Выдача
@@ -125,6 +127,8 @@ const ru: Dict = {
   drawingAlt: 'Рисунок вместо фотографии',
   forAgentsShort: 'Вход',
   city: 'Бишкек',
+  tabBuy: 'Купить', tabRent: 'Снять', tabAll: 'Всё сразу',
+  moreFilters: 'Дополнительные фильтры', priceFrom: 'Цена от',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
            land: 'участок', commercial: 'коммерческая', garage: 'гараж' },
 };
@@ -180,6 +184,8 @@ const ky: Dict = {
   drawingAlt: 'Сүрөттүн ордуна тартылган сүрөт',
   forAgentsShort: 'Кирүү',
   city: 'Бишкек',
+  tabBuy: 'Сатып алуу', tabRent: 'Ижарага алуу', tabAll: 'Баары',
+  moreFilters: 'Кошумча чыпкалар', priceFrom: 'Баасы',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
            land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж' },
 };
@@ -235,6 +241,8 @@ const en: Dict = {
   drawingAlt: 'Drawing shown instead of a photo',
   forAgentsShort: 'Log in',
   city: 'Bishkek',
+  tabBuy: 'Buy', tabRent: 'Rent', tabAll: 'Everything',
+  moreFilters: 'More filters', priceFrom: 'Price from',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
            land: 'land', commercial: 'commercial', garage: 'garage' },
 };
@@ -290,6 +298,8 @@ const zh: Dict = {
   drawingAlt: '以插图代替照片',
   forAgentsShort: '登录',
   city: '比什凯克',
+  tabBuy: '购买', tabRent: '租赁', tabAll: '全部',
+  moreFilters: '更多筛选', priceFrom: '价格下限',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
            land: '地块', commercial: '商业用房', garage: '车库' },
 };

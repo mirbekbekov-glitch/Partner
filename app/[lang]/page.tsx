@@ -50,48 +50,78 @@ type Row = {
 function Search({ lang, f }: { lang: Lang; f: CatalogFilters }) {
   const d = t(lang);
   const up = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
+  const tabs: [CatalogFilters['deal'], string][] = [
+    ['sale', d.tabBuy], ['rent', d.tabRent], [null, d.tabAll],
+  ];
   return (
-    <form className="console" method="get">
-      {/* Сортировка живёт в ссылках, но при новом поиске её надо сохранить. */}
-      {f.sort !== 'fresh' ? <input type="hidden" name="sort" value={f.sort} /> : null}
-      <div className="row">
-        <div className="cell">
-          <label htmlFor="q">{d.address}</label>
-          <input id="q" name="q" type="search" placeholder={d.addressHint}
-                 defaultValue={f.q ?? ''} autoComplete="off" />
-        </div>
-        <div className="cell">
-          <label htmlFor="deal">{d.deal}</label>
-          <select id="deal" name="deal" defaultValue={f.deal ?? ''}>
-            <option value="">{d.anyDeal}</option>
-            <option value="sale">{d.sale}</option>
-            <option value="rent">{d.rent}</option>
-          </select>
-        </div>
-        <div className="cell">
-          <label htmlFor="kind">{d.kind}</label>
-          <select id="kind" name="kind" defaultValue={f.kind ?? ''}>
-            <option value="">{d.anyKind}</option>
-            {Object.entries(d.kinds).map(([k, name]) => (
-              <option key={k} value={k}>{up(name)}</option>
-            ))}
-          </select>
-        </div>
-        <div className="cell">
-          <label htmlFor="rooms">{d.rooms}</label>
-          <select id="rooms" name="rooms" defaultValue={f.rooms ?? ''}>
-            <option value="">{d.anyRooms}</option>
-            {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </div>
-        <div className="cell">
-          <label htmlFor="to">{d.priceTo}</label>
-          <input id="to" name="to" type="number" min={0} step={1000} placeholder={d.priceHint}
-                 inputMode="numeric" defaultValue={f.priceMax ?? ''} />
-        </div>
-        <button className="go" type="submit">{d.search}</button>
+    <div className="console">
+      {/* Вкладки вместо выпадающего списка «Сделка»: купить и снять — это
+          два разных похода человека, а не значение поля. Ссылками, а не
+          кнопками: выбранная вкладка должна быть в адресе, чтобы ссылкой
+          на «аренду в Асанбае» можно было поделиться. */}
+      <div className="tabs">
+        {tabs.map(([v, label]) => (
+          <Link key={label} href={catalogHref(lang, { ...f, deal: v }, 1)}
+                className="tab" aria-current={f.deal === v ? 'true' : undefined}>
+            {label}
+          </Link>
+        ))}
       </div>
-    </form>
+
+      <form method="get">
+        {/* Сортировка и вкладка живут в ссылках, но при новом поиске их
+            надо сохранить. */}
+        {f.sort !== 'fresh' ? <input type="hidden" name="sort" value={f.sort} /> : null}
+        {f.deal ? <input type="hidden" name="deal" value={f.deal} /> : null}
+        <div className="row">
+          <div className="cell">
+            <label htmlFor="q">{d.address}</label>
+            <input id="q" name="q" type="search" placeholder={d.addressHint}
+                   defaultValue={f.q ?? ''} autoComplete="off" />
+          </div>
+          <div className="cell">
+            <label htmlFor="kind">{d.kind}</label>
+            <select id="kind" name="kind" defaultValue={f.kind ?? ''}>
+              <option value="">{d.anyKind}</option>
+              {Object.entries(d.kinds).map(([k, name]) => (
+                <option key={k} value={k}>{up(name)}</option>
+              ))}
+            </select>
+          </div>
+          <div className="cell">
+            <label htmlFor="rooms">{d.rooms}</label>
+            <select id="rooms" name="rooms" defaultValue={f.rooms ?? ''}>
+              <option value="">{d.anyRooms}</option>
+              {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <div className="cell">
+            <label htmlFor="to">{d.priceTo}</label>
+            <input id="to" name="to" type="number" min={0} step={1000} placeholder={d.priceHint}
+                   inputMode="numeric" defaultValue={f.priceMax ?? ''} />
+          </div>
+          <button className="go" type="submit">{d.search}</button>
+        </div>
+
+        {/* Район и нижняя граница цены нужны меньшинству, но нужны всерьёз.
+            Складкой, а не шестым полем: пульт из шести полей пугает. */}
+        <details className="more" open={Boolean(f.zone || f.priceMin != null)}>
+          <summary>{d.moreFilters}</summary>
+          <div className="row sub">
+            <div className="cell">
+              <label htmlFor="zone">{d.zoneLabel}</label>
+              <input id="zone" name="zone" type="text" defaultValue={f.zone ?? ''}
+                     placeholder={d.addressHint} autoComplete="off" />
+            </div>
+            <div className="cell">
+              <label htmlFor="from">{d.priceFrom}</label>
+              <input id="from" name="from" type="number" min={0} step={1000}
+                     inputMode="numeric" defaultValue={f.priceMin ?? ''} />
+            </div>
+          </div>
+        </details>
+      </form>
+    </div>
   );
 }
 
@@ -143,6 +173,21 @@ export default async function Catalog({
       <CatalogHeader lang={lang} />
 
       <section className="hero">
+        {/* Фирменная диагональ: две полосы под наклоном, чёрная и красная.
+            Знак агентства — ступенька под углом, и этот же угол держит
+            герой. Рисунком, а не фотографией: фотография города у всех
+            одна и та же, а это только наше. */}
+        <svg className="hero-art" viewBox="0 0 600 600" preserveAspectRatio="xMaxYMid slice"
+             aria-hidden="true">
+          <path d="M300 -60 L420 -60 L190 660 L70 660 Z" fill="#12161C" />
+          <path d="M430 -60 L700 -60 L700 660 L200 660 Z" fill="url(#g)" />
+          <defs>
+            <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor="#E0453F" />
+              <stop offset="1" stopColor="#8E1F1C" />
+            </linearGradient>
+          </defs>
+        </svg>
         <div className="hero-in wrap">
           <span className="eyebrow">Liberterra · {d.city}</span>
           <h1>{d.heroTitle} <em>{d.heroEm}</em></h1>
