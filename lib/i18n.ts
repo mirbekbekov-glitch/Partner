@@ -34,6 +34,7 @@ type Dict = {
   agencyLine: string; cabinetLine: string;
   // Герой
   heroTitle: string; heroEm: string; heroLede: string;
+  statObjects: string; statFresh: string; statZones: string;
   prop1: string; prop2: string; prop3: string;
   // Поиск
   address: string; addressHint: string; deal: string; anyDeal: string;
@@ -89,7 +90,7 @@ const ru: Dict = {
   forAgents: 'Вход для агентов', agency: 'Liberterra', phones: 'Телефоны',
   sections: 'Разделы', agencyLine: 'Агентство недвижимости, Бишкек',
   cabinetLine: 'Кабинет и CRM — по входу для агентов.',
-  heroTitle: 'Квартиры, дома и участки', heroEm: 'в Бишкеке',
+  heroTitle: 'Найди своё пространство для комфортной', heroEm: 'работы и жилья',
   heroLede: 'Каждое объявление ведёт агент Liberterra: цену и доступность он подтверждает лично, а дата на карточке показывает, когда это было в последний раз.',
   prop1: 'Цену подтверждают, а не копируют',
   prop2: 'Один объект — один ответственный агент',
@@ -157,6 +158,7 @@ const ru: Dict = {
   reqWhy1: 'Отвечаем в течение часа',
   reqWhy2: 'Покажем то, чего нет в открытом каталоге',
   reqWhy3: 'Телефон увидит один агент, а не весь рынок',
+  statObjects: 'объектов в каталоге', statFresh: 'подтверждено за сутки', statZones: 'районов города',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
            land: 'участок', commercial: 'коммерческая', garage: 'гараж' },
 };
@@ -165,7 +167,7 @@ const ky: Dict = {
   forAgents: 'Агенттер үчүн кирүү', agency: 'Liberterra', phones: 'Телефондор',
   sections: 'Бөлүмдөр', agencyLine: 'Кыймылсыз мүлк агенттиги, Бишкек',
   cabinetLine: 'Кабинет жана CRM — агенттер үчүн кирүү аркылуу.',
-  heroTitle: 'Батирлер, үйлөр жана жер тилкелери', heroEm: 'Бишкекте',
+  heroTitle: 'Ыңгайлуу жашоо жана жумуш үчүн', heroEm: 'өз мейкиндигиңди тап',
   heroLede: 'Ар бир жарнаманы Liberterra агенти жүргүзөт: бааны жана жеткиликтүүлүктү өзү ырастайт, картадагы күн акыркы ырастоо качан болгонун көрсөтөт.',
   prop1: 'Баа көчүрүлбөйт, ырасталат',
   prop2: 'Бир объект — бир жооптуу агент',
@@ -233,6 +235,7 @@ const ky: Dict = {
   reqWhy1: 'Бир сааттын ичинде жооп беребиз',
   reqWhy2: 'Ачык каталогдо жоктурун көрсөтөбүз',
   reqWhy3: 'Телефонуңузду бир агент гана көрөт',
+  statObjects: 'каталогдогу объект', statFresh: 'бир сутканын ичинде ырасталган', statZones: 'шаар району',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
            land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж' },
 };
@@ -241,7 +244,7 @@ const en: Dict = {
   forAgents: 'Agent login', agency: 'Liberterra', phones: 'Phones',
   sections: 'Sections', agencyLine: 'Real estate agency, Bishkek',
   cabinetLine: 'The agent cabinet and CRM are behind the agent login.',
-  heroTitle: 'Flats, houses and land', heroEm: 'in Bishkek',
+  heroTitle: 'Find your space for comfortable', heroEm: 'living and work',
   heroLede: 'Every listing is handled by a Liberterra agent who confirms the price and availability in person. The date on each card shows when that last happened.',
   prop1: 'Prices are confirmed, not copied',
   prop2: 'One property, one responsible agent',
@@ -309,6 +312,7 @@ const en: Dict = {
   reqWhy1: 'We answer within the hour',
   reqWhy2: 'We show what is not publicly listed yet',
   reqWhy3: 'One agent sees your number, not the whole market',
+  statObjects: 'listings in the catalogue', statFresh: 'confirmed in 24 hours', statZones: 'districts covered',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
            land: 'land', commercial: 'commercial', garage: 'garage' },
 };
@@ -317,7 +321,7 @@ const zh: Dict = {
   forAgents: '经纪人登录', agency: 'Liberterra', phones: '电话',
   sections: '栏目', agencyLine: '比什凯克房地产中介',
   cabinetLine: '经纪人工作台与 CRM 需登录后使用。',
-  heroTitle: '比什凯克的', heroEm: '公寓、住宅与地块',
+  heroTitle: '找到适合您的', heroEm: '居住与工作空间',
   heroLede: '每一条房源都由 Liberterra 的经纪人负责，价格与可售状态由本人确认。卡片上的日期显示最近一次确认的时间。',
   prop1: '价格经过确认，不是照搬',
   prop2: '一套房源，一位负责经纪人',
@@ -385,6 +389,7 @@ const zh: Dict = {
   reqWhy1: '一小时内回复',
   reqWhy2: '提供尚未公开的房源',
   reqWhy3: '只有一位经纪人能看到您的号码',
+  statObjects: '在售房源', statFresh: '24 小时内确认', statZones: '覆盖区域',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
            land: '地块', commercial: '商业用房', garage: '车库' },
 };

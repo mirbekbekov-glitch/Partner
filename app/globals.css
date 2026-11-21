@@ -430,19 +430,29 @@ main:has(.nav) { max-width: none; padding: 0; }
 /* Фон: мягкое красное свечение из-за левого плеча заголовка и сетка
    тонких линий. Ни то ни другое не отвлекает — оно лишь не даёт большому
    тёмному полю выглядеть пустым. */
-.hero::before { content: ""; position: absolute; width: 760px; height: 760px;
-  left: -220px; top: -340px; pointer-events: none;
-  background: radial-gradient(closest-side, rgba(224,69,63,.22), rgba(224,69,63,0)); }
+/* Зерно поверх тёмного: ровная заливка на большом поле читается как
+   дыра, а едва заметный шум даёт ей поверхность. */
+.hero, .foot, .callout { position: relative; }
+.hero::before, .foot::before, .callout::before { content: ""; position: absolute; inset: 0;
+  pointer-events: none; opacity: .5; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E"); }
 .hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
   background-image: linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
                     linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: linear-gradient(to bottom, rgba(0,0,0,.9), transparent 78%); }
-.hero-art { position: absolute; right: 0; top: 0; height: 100%; width: 46%;
-  min-width: 320px; pointer-events: none; opacity: .92;
-  mask-image: linear-gradient(to left, #000 62%, transparent); }
-.hero-in { position: relative; z-index: 1; padding-block: 64px 124px;
-  display: flex; flex-direction: column; gap: 18px; max-width: 780px; }
+.hero-art { position: absolute; inset: 0; pointer-events: none; }
+.hero-art svg { position: absolute; right: 0; top: 0; height: 100%; width: 48%;
+  min-width: 320px; opacity: .95;
+  mask-image: linear-gradient(to left, #000 64%, transparent); }
+/* Свет идёт за курсором. Координаты ставит HeroArt; пока их нет —
+   пятно стоит там же, где раньше стояло статичное свечение. */
+.hero-glow { position: absolute; inset: 0;
+  background: radial-gradient(420px circle at var(--mx, 22%) var(--my, 24%),
+              rgba(224,69,63,.20), transparent 70%);
+  transition: background-position .2s; }
+.hero-in { position: relative; z-index: 1; padding-block: 52px 116px;
+  display: flex; flex-direction: column; gap: 16px; max-width: 800px; }
 .eyebrow { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 700;
   letter-spacing: .18em; text-transform: uppercase; color: var(--on-ink-faint); }
 .eyebrow::after { content: ""; height: 1px; width: 64px; background: rgba(255,255,255,.18); }
@@ -464,6 +474,22 @@ main:has(.nav) { max-width: none; padding: 0; }
    герой отодвинул бы первое поле за сгиб. */
 .hero-slim .hero-in { padding-block: 48px 104px; }
 .hero-slim h1 { font-size: clamp(30px, 4vw, 44px); }
+
+/* Числа под заголовком. Крупные моноширинные цифры — это и есть
+   «современно»: страница показывает состояние дела, а не обещания.
+   Разделитель — ступенька из знака, тот же мотив, что в фоне. */
+.stats { display: flex; flex-wrap: wrap; gap: 24px 40px; margin-top: 20px;
+  padding-top: 18px; border-top: 1px solid rgba(255,255,255,.1); }
+.stat { display: flex; flex-direction: column; gap: 2px; position: relative; }
+.stat + .stat::before { content: ""; position: absolute; left: -22px; top: 6px;
+  width: 8px; height: 12px;
+  background: linear-gradient(rgba(255,255,255,.22) 0 0) 0 8px / 3px 4px no-repeat,
+              linear-gradient(rgba(255,255,255,.22) 0 0) 3px 4px / 3px 8px no-repeat,
+              linear-gradient(rgba(255,255,255,.22) 0 0) 6px 0 / 3px 12px no-repeat; }
+.stat b { font-size: 34px; font-weight: 800; letter-spacing: -.04em; line-height: 1;
+  color: var(--on-ink); }
+.stat span { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--on-ink-faint); }
 
 /* --- Пульт поиска: наезжает на нижний край героя ------------------------ */
 .console { position: relative; z-index: 5; margin-top: -84px; background: var(--panel);
@@ -541,6 +567,20 @@ main:has(.nav) { max-width: none; padding: 0; }
 .sent-plate { background: var(--ok-bg); border-radius: var(--r-lg); padding: 24px; }
 .sent-plate strong { display: block; font-size: 19px; color: var(--ok-fg); margin-bottom: 6px; }
 .sent-plate p { margin: 0; color: var(--fg); font-size: 15px; line-height: 1.5; }
+
+/* --- Районы строкой ------------------------------------------------------ */
+/* Появляются волной слева направо — тем же движением, что карточки:
+   одно правило на всю страницу, а не отдельный эффект в каждом месте. */
+.zonerow { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 26px; }
+.zone { border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+  border-radius: var(--r-full); padding: 8px 16px; font-size: 13px; font-weight: 600;
+  text-decoration: none; white-space: nowrap;
+  transition: color .18s, border-color .18s, transform .18s;
+  animation: rise .4s cubic-bezier(.2,.7,.3,1) backwards;
+  animation-delay: calc(var(--i, 0) * 35ms); }
+.zone:hover { color: var(--fg); border-color: var(--accent); transform: translateY(-2px); }
+.zone[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.zone-off { border-style: dashed; }
 
 /* --- Полоса результатов ------------------------------------------------- */
 .strip { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-block: 30px 16px; }
@@ -707,7 +747,7 @@ main:has(.nav) { max-width: none; padding: 0; }
 @media (max-width: 1040px) {
   .console .row { grid-template-columns: 1fr 1fr 1fr; }
   .console .row.sub { grid-template-columns: 1fr 1fr; }
-  .hero-art { width: 54%; opacity: .8; }
+  .hero-art svg { width: 56%; opacity: .8; }
   .go { grid-column: 1 / -1; padding: 13px; }
   .grid { grid-template-columns: repeat(2, 1fr); }
   .detail { grid-template-columns: 1fr; }
@@ -715,11 +755,18 @@ main:has(.nav) { max-width: none; padding: 0; }
 }
 @media (max-width: 680px) {
   .hero-in { padding-block: 44px 108px; }
+  /* Три колонки сеткой, а не потоком: подписи разной длины рвали строку
+     и числа стояли вразнобой. Подпись переносится — колонки держатся. */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+    margin-top: 18px; padding-top: 16px; }
+  .stat b { font-size: 24px; }
+  .stat span { font-size: 10px; letter-spacing: .06em; }
+  .stat + .stat::before { display: none; }
   .console .row, .console .row.sub { grid-template-columns: 1fr 1fr; }
   .reqconsole { padding: 16px; }
   .reqform .go { align-self: stretch; }
   .tab { padding: 11px 13px; font-size: 14px; }
-  .hero-art { display: none; }
+  .hero-art svg { display: none; }
   .grid { grid-template-columns: 1fr; }
   .gal { grid-template-columns: 1fr; }
   .gal .side { grid-template-columns: 1fr 1fr; }
@@ -733,7 +780,8 @@ main:has(.nav) { max-width: none; padding: 0; }
 }
 /* Движение — украшение, и оно выключается, если человек просил без него. */
 @media (prefers-reduced-motion: reduce) {
-  .item, .pic img, .lang-menu, .enter, .go, .back { animation: none !important; transition: none !important; }
+  .item, .pic img, .lang-menu, .enter, .go, .back, .zone { animation: none !important; transition: none !important; }
+  .hero-glow { display: none; }
   .item:hover { transform: none; }
   .item:hover .pic img { transform: none; }
 }

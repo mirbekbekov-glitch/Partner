@@ -8,6 +8,7 @@ import {
 } from '@/lib/catalog-params';
 import { t, kindName, freshWordIn, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { CatalogHeader } from '../CatalogHeader';
+import { HeroArt } from '../HeroArt';
 import { CatalogFooter } from '../CatalogFooter';
 import { Facade } from '../Facade';
 import { Photo } from '../Photo';
@@ -160,10 +161,32 @@ export default async function Catalog({
   if (f.priceMax != null) query = query.lte('price', f.priceMax);
   if (f.q) for (const token of searchTokens(f.q)) query = query.or(tokenFilter(token));
 
+  // Числа для полосы под заголовком. Отдельным запросом и без фильтров:
+  // это состояние каталога целиком, а не текущей подборки.
+  const { data: all } = await supabase
+    .from('public_catalog_v')
+    .select('zone, actual_at')
+    .limit(1000);
+  const dayAgo = Date.now() - 86400000;
+  const stats = {
+    objects: all?.length ?? 0,
+    fresh: (all ?? []).filter((r) => new Date(r.actual_at as string).getTime() > dayAgo).length,
+    zones: new Set((all ?? []).map((r) => r.zone).filter(Boolean)).size,
+  };
+
   const { data, count, error } = await query;
   const rows = (data ?? []) as Row[];
   const total = count ?? 0;
   const pages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
+  // Районы, в которых реально есть объекты, по убыванию числа объектов:
+  // показывать пустой район — обманывать нажатие.
+  const byZone = new Map<string, number>();
+  for (const r of all ?? []) {
+    const z = r.zone as string | null;
+    if (z) byZone.set(z, (byZone.get(z) ?? 0) + 1);
+  }
+  const zones = [...byZone.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([z]) => z);
+
   const sortLabel: Record<string, string> = {
     fresh: d.sortFresh, cheap: d.sortCheap, big: d.sortBig,
   };
@@ -173,21 +196,7 @@ export default async function Catalog({
       <CatalogHeader lang={lang} />
 
       <section className="hero">
-        {/* Фирменная диагональ: две полосы под наклоном, чёрная и красная.
-            Знак агентства — ступенька под углом, и этот же угол держит
-            герой. Рисунком, а не фотографией: фотография города у всех
-            одна и та же, а это только наше. */}
-        <svg className="hero-art" viewBox="0 0 600 600" preserveAspectRatio="xMaxYMid slice"
-             aria-hidden="true">
-          <path d="M300 -60 L420 -60 L190 660 L70 660 Z" fill="#12161C" />
-          <path d="M430 -60 L700 -60 L700 660 L200 660 Z" fill="url(#g)" />
-          <defs>
-            <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stopColor="#E0453F" />
-              <stop offset="1" stopColor="#8E1F1C" />
-            </linearGradient>
-          </defs>
-        </svg>
+        <HeroArt />
         <div className="hero-in wrap">
           <span className="eyebrow">Liberterra · {d.city}</span>
           <h1>{d.heroTitle} <em>{d.heroEm}</em></h1>
@@ -197,11 +206,49 @@ export default async function Catalog({
             <li className="prop"><i className="mk" />{d.prop2}</li>
             <li className="prop"><i className="mk" />{d.prop3}</li>
           </ul>
+
+          {/* Полоса чисел. Показывается, только когда числа есть: «0
+              объектов» крупным шрифтом — худшая реклама из возможных. */}
+          {stats.objects > 0 ? (
+            <div className="stats">
+              <div className="stat">
+                <b className="num">{stats.objects}</b>
+                <span>{d.statObjects}</span>
+              </div>
+              <div className="stat">
+                <b className="num">{stats.fresh}</b>
+                <span>{d.statFresh}</span>
+              </div>
+              <div className="stat">
+                <b className="num">{stats.zones}</b>
+                <span>{d.statZones}</span>
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
 
       <div className="wrap">
         <Search lang={lang} f={f} />
+
+        {/* Районы строкой: самый частый первый шаг — «покажите, что есть
+            в Асанбае». Это ссылки, а не украшение. */}
+        {zones.length > 0 ? (
+          <div className="zonerow">
+            {zones.map((z, i) => (
+              <Link key={z} href={catalogHref(lang, { ...f, zone: z }, 1)}
+                    className="zone" style={{ '--i': i } as React.CSSProperties}
+                    aria-current={f.zone === z ? 'true' : undefined}>
+                {z}
+              </Link>
+            ))}
+            {f.zone ? (
+              <Link href={catalogHref(lang, { ...f, zone: null }, 1)} className="zone zone-off">
+                {d.reset}
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="strip">
           <h2>
