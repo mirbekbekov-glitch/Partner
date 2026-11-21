@@ -58,3 +58,35 @@ select test.eq(
       and p.proname in ('write_audit', 'can_see_contact', 'guard_agent_privileges',
                         'jsonb_diff', 'touch_updated_at')),
   0, 'внутренние функции в public не просочились');
+
+-- ===========================================================================
+-- Публичная витрина не раскрывает, чей это объект
+-- ===========================================================================
+-- Решение владельца: искать объекты по агенту и агентству можно в CRM, а
+-- каталогом пользуются не только агенты — внутреннее устройство агентства
+-- их не касается. Правило закрепляем проверкой состава витрины, а не
+-- памятью: стоит однажды добавить колонку «ведёт», и оно тихо отменится.
+
+select test.eq(
+  (select count(*)::int from information_schema.columns
+    where table_schema = 'public' and table_name = 'public_catalog_v'
+      and (column_name like '%agent%' or column_name like '%org%'
+           or column_name like '%owner%' or column_name like '%commission%')),
+  0, 'в публичной витрине нет ни агента, ни агентства, ни собственника, ни комиссии');
+
+-- А в кабинете эти сведения есть — иначе фильтр источника не на чем
+-- построить.
+select test.eq(
+  (select count(*)::int from information_schema.columns
+    where table_schema = 'public' and table_name = 'object_list_v'
+      and column_name in ('responsible_agent_id', 'responsible_org_id')),
+  2, 'в списке объектов кабинета источник доступен');
+
+-- И самой витрины анониму хватает ровно на объявления.
+reset request.jwt.claims;
+set role anon;
+select test.throws(
+  $$select count(*) from object_list_v$$,
+  'permission denied for view object_list_v',
+  'список объектов кабинета анониму не выдан');
+reset role;

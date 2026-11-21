@@ -24,6 +24,10 @@ type Row = {
   owners: string | null;
   matches_count: number;
   commission_total: number | null;
+  responsible_agent_id: string | null;
+  responsible_name: string | null;
+  responsible_org_id: string | null;
+  responsible_org_name: string | null;
 };
 
 const STATE_RU: Record<string, string> = {
@@ -40,6 +44,22 @@ export default async function ObjectsList({
   const f = parseFilters(await searchParams);
   const supabase = await createClient();
 
+  // Кто я и в каком агентстве — нужно для «моих» и «моей организации».
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: me } = await supabase
+    .from('agents')
+    .select('id, organization_id')
+    .eq('auth_user_id', user?.id ?? '')
+    .maybeSingle();
+
+  // Список коллег для выбора конкретного агента. Политика agents_read
+  // отдаёт их любому одобренному агенту, поэтому отдельной проверки нет.
+  const { data: colleagues } = await supabase
+    .from('agents')
+    .select('id, full_name, organization_id')
+    .eq('status', 'approved')
+    .order('full_name');
+
   let query = supabase
     .from('object_list_v')
     .select('*', { count: 'exact' })
@@ -52,6 +72,25 @@ export default async function ObjectsList({
   // Поиск по адресу. ilike, а не полнотекст: адреса короткие и пишутся
   // по-разному, подстрока здесь полезнее стеммера.
   if (f.q) query = query.ilike('address', `%${f.q}%`);
+
+  // Источник. «Другие» — это не «все, кроме меня»: объект коллеги по моему
+  // же агентству остаётся своим.
+  if (f.src === 'me' && me) {
+    query = query.eq('responsible_agent_id', me.id);
+  } else if (f.src === 'org' && me?.organization_id) {
+    query = query.eq('responsible_org_id', me.organization_id);
+  } else if (f.src === 'other' && me) {
+    query = query.not('responsible_agent_id', 'eq', me.id);
+    if (me.organization_id) {
+      query = query.or(
+        `responsible_org_id.is.null,responsible_org_id.neq.${me.organization_id}`,
+      );
+    }
+  } else if (f.src && f.src.includes('-')) {
+    // Конкретный агент: идентификатор приходит из формы, но доверять ему не
+    // нужно — фильтр ничего не открывает, видимость решают политики.
+    query = query.eq('responsible_agent_id', f.src);
+  }
 
   const { data, count, error } = await query;
 
@@ -88,8 +127,19 @@ export default async function ObjectsList({
           <option value="withdrawn">снят</option>
         </select>
         <input name="zone" type="text" placeholder="зона" defaultValue={f.zone ?? ''} />
+        <select name="src" defaultValue={f.src ?? ''}>
+          <option value="">источник: любой</option>
+          <option value="me">мои объекты</option>
+          {me?.organization_id ? <option value="org">моего агентства</option> : null}
+          <option value="other">других агентств</option>
+          {(colleagues ?? [])
+            .filter((c) => c.id !== me?.id)
+            .map((c) => (
+              <option key={c.id} value={c.id}>{c.full_name}</option>
+            ))}
+        </select>
         <button type="submit">Фильтр</button>
-        {f.deal || f.state || f.zone || f.q ? (
+        {f.deal || f.state || f.zone || f.q || f.src ? (
           <Link href="/cabinet/objects" className="key">сбросить</Link>
         ) : null}
       </form>
@@ -128,6 +178,11 @@ export default async function ObjectsList({
               ) : (
                 <span className="hidden-contact">скрыт</span>
               )}
+              <span className="key">ведёт</span>
+              <span>
+                {o.responsible_name ?? '—'}
+                {o.responsible_org_name ? ` · ${o.responsible_org_name}` : ' · частный агент'}
+              </span>
               <span className="key">подборов</span>
               <span>{o.matches_count}</span>
               <span className="key">комиссия</span>

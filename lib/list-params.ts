@@ -6,8 +6,21 @@
  */
 export const PAGE_SIZE = 20;
 
+/**
+ * Источник объекта в кабинете: чьи объекты показывать.
+ *
+ * Живёт только в CRM. В публичном каталоге такой возможности нет и быть не
+ * должно: каталогом пользуются не только агенты, и внутреннее устройство
+ * агентства их не касается.
+ *
+ * «Свои» — где ответственный я. Ответственный — listing-агент активного
+ * мандата, а у черновика без мандата — тот, кто его завёл.
+ */
+export type Source = 'me' | 'org' | 'other' | string | null;
+
 export type Filters = {
   deal: 'rent' | 'sale' | null;
+  src: Source;
   zone: string | null;
   state: string | null;
   status: string | null;
@@ -35,6 +48,7 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
     state: pick(one('state'), STATES),
     status: pick(one('status'), REQ_STATUSES),
     q: one('q')?.trim() || null,
+    src: one('src')?.trim() || null,
     page: Number.isFinite(page) && page > 0 ? page : 1,
   };
 }
@@ -47,6 +61,7 @@ export function pageHref(base: string, f: Filters, page: number) {
   if (f.state) p.set('state', f.state);
   if (f.status) p.set('status', f.status);
   if (f.q) p.set('q', f.q);
+  if (f.src) p.set('src', f.src);
   if (page > 1) p.set('page', String(page));
   const qs = p.toString();
   return qs ? `${base}?${qs}` : base;
