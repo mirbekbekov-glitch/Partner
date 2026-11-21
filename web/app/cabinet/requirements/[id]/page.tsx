@@ -313,6 +313,21 @@ function Candidates({
               {c.photos_count === 0 ? " · без фотографий" : ` · ${c.photos_count} фото`}
               {c.is_mine ? " · ваш объект" : c.listing_agent ? ` · ведёт ${c.listing_agent}` : ""}
             </p>
+            {/* Инвариант 37. Чужое агентство называется по имени, и рядом —
+                его договор. Везти клиента на объект, по которому у коллег
+                только слово собственника, агент вправе; не знать об этом
+                заранее — не вправе. */}
+            {c.source === "other" && (
+              <p className="faint sm">
+                {c.agency_name ?? "другая организация"}
+                {c.mandate_kind
+                  ? ` · ${c.mandate_kind === "exclusive" ? "эксклюзив" : "альтернатива"}`
+                  : ""}
+                {c.contract_confirmed === false && (
+                  <span className="chip danger">договор не подтверждён</span>
+                )}
+              </p>
+            )}
           </div>
 
           <div className="row-state">

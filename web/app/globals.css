@@ -134,6 +134,11 @@ a {
   width: 110px;
 }
 
+/* Поле поиска по адресу шире остальных: в него вводят текст, а не выбирают
+   из списка. И строка кнопок, которая не должна выглядеть полем. */
+.field.wide input { width: 15rem; max-width: 100%; }
+.field.actions { flex-direction: row; gap: 0.5rem; align-items: center; }
+
 .filters button {
   font: inherit;
   font-size: 0.9rem;
@@ -1296,7 +1301,8 @@ h2.alarm { color: var(--cab-alarm); }
   background: #fff;
 }
 .switch a:hover { background: #f9fafb; }
-.switch a.on { background: #101828; border-color: #101828; color: #fff; font-weight: 600; }
+.switch a.on,
+.switch a[aria-current="page"] { background: #101828; border-color: #101828; color: #fff; font-weight: 600; }
 
 /* Договор одной строкой. Это главное, что агент из другого агентства должен
    узнать о чужом объекте, поэтому цвет здесь несёт смысл, а не украшает:

@@ -178,3 +178,85 @@ select 'отчёт собственнику: /report/aaaaaaaabbbbccccddddeeeefff
 -- напоминание, что без него карточки будут без фотографий.
 
 select 'фотографии: node web/scripts/make-dev-photos.mjs' as дальше;
+
+-- ---------------------------------------------------------------------------
+-- Второе агентство (инвариант 37)
+-- ---------------------------------------------------------------------------
+-- Без него мультилистинг в кабинете не видно: все объекты свои, фильтр
+-- источника показывает два значения из трёх, а «чужой объект с подписанным
+-- договором» — главный ответ платформы на вопрос «получу ли я комиссию» —
+-- на экране не встречается ни разу. Экран, который разработчик видел только
+-- в одном агентстве, в первый же день мультилистинга ведёт себя неожиданно.
+
+do $$
+declare
+  v_alfa_agency uuid := '00000000-0000-0000-0000-00000000aa02';
+  v_nurlan uuid := '00000000-0000-0000-0000-0000000000f1';
+  v_owner  uuid;
+  r        record;
+  v_obj    uuid;
+begin
+  insert into agencies (id, name) values (v_alfa_agency, 'Альфа Недвижимость')
+  on conflict (id) do nothing;
+
+  insert into agents (id, email, phone, auth_user_id, full_name, role, status,
+                      agency_id, directions)
+  values (v_nurlan, 'nurlan@alfa.kg', '+996700900011',
+          '00000000-0000-0000-0000-0000000000e1', 'Нурлан Абдиев',
+          'agent', 'approved', v_alfa_agency, '{sale,rent}')
+  on conflict (id) do nothing;
+
+  -- Собственники Альфы — её контакты. Айбек их имён не увидит: инвариант 4
+  -- границу агентства не отменяет, а усиливает.
+  insert into contacts (id, kind, name, owner_agent_id, roles, source) values
+    ('00000000-0000-0000-0000-00000000c0a1', 'person', 'Орунбаев Данияр',
+     v_nurlan, '{owner}', 'своя база Альфы'),
+    ('00000000-0000-0000-0000-00000000c0a2', 'person', 'Мамытова Венера',
+     v_nurlan, '{owner,landlord}', 'своя база Альфы')
+  on conflict (id) do nothing;
+
+  insert into contact_phones (contact_id, phone, is_primary) values
+    ('00000000-0000-0000-0000-00000000c0a1', '+996700555201', true),
+    ('00000000-0000-0000-0000-00000000c0a2', '+996700555202', true)
+  on conflict do nothing;
+
+  for r in
+    select * from (values
+      -- адрес,                   тип,    сделка, район,   комн, площадь, этаж, этажей, цена,  договор,          подписан, публиковать, собственник
+      ('Жибек Жолу 100, кв. 3',  'flat', 'sale', 'Центр',  3, 72.0,  4, 9, 99000,  'exclusive',     true,  true,  '00000000-0000-0000-0000-00000000c0a1'),
+      ('Ибраимова 42, кв. 18',   'flat', 'sale', 'Центр',  2, 56.0,  7, 12, 78000, 'non_exclusive', true,  true,  '00000000-0000-0000-0000-00000000c0a2'),
+      ('Турусбекова 9, кв. 4',   'flat', 'rent', 'Запад',  1, 34.0,  2, 5, 320,    'non_exclusive', false, true,  '00000000-0000-0000-0000-00000000c0a2'),
+      -- Объект Альфы вообще без договора: в подбор он не идёт, и это видно.
+      ('Панфилова 170, кв. 11',  'flat', 'sale', 'Юг',     2, 61.0,  3, 9, 82000,  null,            null,  false, '00000000-0000-0000-0000-00000000c0a1')
+    ) as t(address, kind, deal, zone, rooms, area, floor, floors, price, mkind, confirmed, publish, owner)
+  loop
+    select id into v_obj from objects where address = r.address;
+    if v_obj is null then
+      insert into objects (kind, deal_type, address, zone, rooms, area, floor,
+                           floors_total, price, currency, description,
+                           created_by_agent_id, actual_at)
+      values (r.kind::object_kind, r.deal::deal_type, r.address, r.zone,
+              r.rooms::smallint, r.area, r.floor::smallint, r.floors::smallint,
+              r.price, 'USD', 'Объект другого агентства: так выглядит мультилистинг.',
+              v_nurlan, now() - interval '3 days')
+      returning id into v_obj;
+
+      insert into object_ownerships (object_id, contact_id, role, share)
+      values (v_obj, r.owner::uuid, 'owner', 1);
+
+      if r.mkind is not null then
+        insert into mandates (object_id, kind, valid_from, valid_to, start_price,
+                              listing_agent_id, contract_confirmed, status)
+        values (v_obj, r.mkind::mandate_kind, current_date - 20, current_date + 70,
+                r.price * 1.05, v_nurlan, r.confirmed, 'active');
+      end if;
+
+      if r.publish then
+        update objects set publication_state = 'published', published_at = now()
+         where id = v_obj;
+      end if;
+    end if;
+  end loop;
+end $$;
+
+select 'второе агентство: Альфа Недвижимость, 4 объекта' as мультилистинг;

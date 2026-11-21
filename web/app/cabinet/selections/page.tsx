@@ -132,6 +132,9 @@ export default async function SelectionsPage({
                 {o.rooms ? ` · ${o.rooms} комн.` : ""}
                 {o.fit !== "в бюджет" && <span className="chip warn">{o.fit}</span>}
                 {o.already_proposed && <span className="chip">уже предлагали</span>}
+                {o.source === "other" && (
+                  <span className="chip">{o.agency_name ?? "другая организация"}</span>
+                )}
               </label>
             ))}
             <label>

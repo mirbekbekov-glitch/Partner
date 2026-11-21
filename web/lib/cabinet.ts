@@ -627,6 +627,12 @@ export type MatchCandidate = {
   is_mine: boolean;
   fit: string;
   already_proposed: boolean;
+  // Инвариант 37. По чужому объекту агент обязан знать, с кем имеет дело и
+  // на чём держится его комиссия, — ещё до того, как повезёт туда клиента.
+  source: "mine" | "agency" | "other";
+  agency_name: string | null;
+  mandate_kind: string | null;
+  contract_confirmed: boolean | null;
 };
 
 export type ProposedMatch = {
@@ -692,7 +698,8 @@ export async function requirementDetail(id: string): Promise<RequirementDetail |
         `select object_id, address, kind::text, zone, rooms, area::text, floor,
                 floors_total, price::text, currency, actual_at,
                 publication_state::text, photos_count, listing_agent, is_mine,
-                fit, already_proposed
+                fit, already_proposed, source, agency_name,
+                mandate_kind::text, contract_confirmed
            from app.matching_objects($1)`,
         [id],
       ),
@@ -1437,7 +1444,8 @@ export async function selectionItems(id: string): Promise<SelectionItem[]> {
 export async function selectable(requirementId: string): Promise<
   { object_id: string; address: string; price: string; currency: string;
     rooms: number | null; zone: string | null; fit: string;
-    already_proposed: boolean }[]
+    already_proposed: boolean; source: "mine" | "agency" | "other";
+    agency_name: string | null }[]
 > {
   const session = await readSession();
   if (!session) return [];
@@ -1445,10 +1453,117 @@ export async function selectable(requirementId: string): Promise<
   return asAgent(session, "read only", async (db) => {
     const { rows } = await db.query(
       `select object_id, address, price::text, currency, rooms, zone,
-              fit, already_proposed
+              fit, already_proposed, source, agency_name
          from app.matching_objects($1) order by fit, price`,
       [requirementId],
     );
     return rows as never;
+  });
+}
+
+/* ---------------------------------------------------------------------------
+ * Поиск по объектам платформы (инвариант 37)
+ * -------------------------------------------------------------------------*/
+
+export type ObjectSource = "mine" | "agency" | "other";
+
+export const SOURCE_LABEL: Record<ObjectSource, string> = {
+  mine: "Мои",
+  agency: "Моей организации",
+  other: "Другой организации",
+};
+
+export type ObjectSearch = {
+  source?: string;
+  deal?: string;
+  kind?: string;
+  zone?: string;
+  rooms?: string;
+  priceMin?: string;
+  priceMax?: string;
+  published?: string;
+  text?: string;
+};
+
+export type FoundObject = {
+  object_id: string;
+  address: string;
+  kind: string;
+  deal_type: string;
+  zone: string | null;
+  rooms: number | null;
+  area: string | null;
+  floor: number | null;
+  floors_total: number | null;
+  price: string;
+  currency: string;
+  actual_at: Date | string;
+  publication_state: string;
+  photos_count: number;
+  source: ObjectSource;
+  agency_name: string | null;
+  holder_agent_name: string | null;
+  has_mandate: boolean;
+  mandate_kind: string | null;
+  contract_confirmed: boolean | null;
+  valid_to: Date | string | null;
+};
+
+/**
+ * Поиск по объектам. Пустое поле — это «любой», а не «никакой»: страница
+ * передаёт null, и отбор по нему не применяется. Правила отбора живут в
+ * app.search_objects(), а не здесь: фильтр, собранный в вебе, пришлось бы
+ * повторять в каждом следующем клиенте.
+ */
+export async function searchObjects(q: ObjectSearch): Promise<FoundObject[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  const clean = (v: string | undefined) => {
+    const s = (v ?? "").trim();
+    return s === "" ? null : s;
+  };
+  const num = (v: string | undefined) => {
+    const s = clean(v);
+    if (s === null) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+  const rooms = (clean(q.rooms) ?? "")
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0);
+
+  const source = ["mine", "agency", "other"].includes(clean(q.source) ?? "")
+    ? clean(q.source)
+    : null;
+  const published =
+    q.published === "yes" ? true : q.published === "no" ? false : null;
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<FoundObject>(
+      `select object_id, address, kind::text, deal_type::text, zone, rooms,
+              area::text, floor, floors_total, price::text, currency,
+              actual_at, publication_state::text, photos_count,
+              source, agency_name, holder_agent_name,
+              has_mandate, mandate_kind::text, contract_confirmed, valid_to
+         from app.search_objects($1, $2::deal_type, $3::object_kind, $4,
+                                 $5::smallint[], $6, $7, $8, $9)`,
+      [source, clean(q.deal), clean(q.kind), clean(q.zone), rooms,
+       num(q.priceMin), num(q.priceMax), published, clean(q.text)],
+    );
+    return rows;
+  });
+}
+
+/** Районы, которые действительно есть в базе. Справочник разошёлся бы с ней. */
+export async function objectZones(): Promise<{ zone: string; objects: number }[]> {
+  const session = await readSession();
+  if (!session) return [];
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<{ zone: string; objects: number }>(
+      "select zone, objects from app.object_zones()",
+    );
+    return rows;
   });
 }
