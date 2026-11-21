@@ -61,7 +61,7 @@ export default async function DealsPage({
       {note && <p className="ok-banner">{note}</p>}
 
       {stuck.length > 0 && (
-        <p className="warn">
+        <p className="warn-banner">
           {stuck.length === 1 ? "Одна сделка стоит" : `${stuck.length} сделки стоят`} на
           этапе дольше срока:{" "}
           {stuck.map((d) => d.address).join(", ")}. Молчание на этапе не значит,

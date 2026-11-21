@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requirements } from "../../../lib/cabinet";
-import { formatPhone, formatDate, plural } from "../../../lib/format";
+import { formatPhone, formatDate, formatBudget, plural } from "../../../lib/format";
 import { gate } from "../Gate";
 
 export const metadata: Metadata = {
@@ -16,14 +16,6 @@ const STATUS: Record<string, string> = {
   closed: "закрыта",
   lost: "потеряна",
 };
-
-function budget(min: string | null, max: string | null, currency = "$"): string {
-  const money = (v: string) => Number(v).toLocaleString("ru-RU");
-  if (min && max) return `${money(min)} – ${money(max)} ${currency}`;
-  if (max) return `до ${money(max)} ${currency}`;
-  if (min) return `от ${money(min)} ${currency}`;
-  return "бюджет не назван";
-}
 
 export default async function RequirementsPage({
   searchParams,
@@ -102,7 +94,7 @@ function RequirementRows({
             )}
             <p className="row-meta">
               {r.deal_type === "sale" ? "покупка" : "аренда"} ·{" "}
-              {budget(r.budget_min, r.budget_max)}
+              {formatBudget(r.budget_min, r.budget_max)}
               {r.zones.length > 0 ? ` · ${r.zones.join(", ")}` : ""}
               {r.rooms.length > 0 ? ` · ${r.rooms.join(" или ")} комн.` : ""}
             </p>

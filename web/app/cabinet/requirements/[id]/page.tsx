@@ -91,7 +91,7 @@ export default async function RequirementPage({
       {r.requirements_text && <p className="note">{r.requirements_text}</p>}
 
       {!r.is_mine && (
-        <p className="warn">
+        <p className="warn-banner">
           Этого клиента ведёт {r.agent_name ?? "другой агент"}. Подбор по чужой
           потребности база не даст: доля агента покупателя считается по тому,
           кто её ведёт.

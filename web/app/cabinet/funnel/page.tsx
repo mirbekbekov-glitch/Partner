@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { FUNNEL_STAGES, funnel, type FunnelCard } from "../../../lib/cabinet";
-import { formatDateTime, plural } from "../../../lib/format";
+import { formatDateTime, formatBudget, plural } from "../../../lib/format";
 import { gate } from "../Gate";
 import { ActionForm } from "../ActionForm";
 import { createTask, loseRequirement, qualifyRequirement } from "../actions";
@@ -9,14 +9,6 @@ export const metadata: Metadata = {
   title: "Воронка",
   robots: { index: false, follow: false },
 };
-
-function budget(min: string | null, max: string | null): string {
-  const money = (v: string) => Number(v).toLocaleString("ru-RU");
-  if (min && max) return `${money(min)} – ${money(max)} $`;
-  if (max) return `до ${money(max)} $`;
-  if (min) return `от ${money(min)} $`;
-  return "бюджет не назван";
-}
 
 /** Завтра в 10 утра по Бишкеку — значение по умолчанию для напоминания. */
 function tomorrowMorning(): string {
@@ -37,7 +29,7 @@ function Card({ card, due }: { card: FunnelCard; due: string }) {
           контактов (инвариант 4). Но сама карточка видна: иначе колонка
           показывала бы ноль там, где работа идёт. */}
       <h3>{card.contact_name ?? (card.is_mine ? "без имени" : "клиент агентства")}</h3>
-      <p className="muted">{budget(card.budget_min, card.budget_max)}</p>
+      <p className="muted">{formatBudget(card.budget_min, card.budget_max)}</p>
       <p className="muted">
         {card.zones.length > 0 ? card.zones.join(", ") : "район не назван"}
         {card.rooms.length > 0 && ` · ${card.rooms.join("/")} комн.`}
@@ -156,7 +148,7 @@ export default async function FunnelPage({
       {note && <p className="ok-banner">{note}</p>}
 
       {stuck > 0 && (
-        <p className="warn">
+        <p className="warn-banner">
           {stuck} {plural(stuck, "карточка стоит", "карточки стоят", "карточек стоят")}{" "}
           в своей колонке дольше, чем ей отведено. Они первыми в каждой
           колонке.

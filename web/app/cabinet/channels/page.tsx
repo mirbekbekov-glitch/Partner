@@ -48,7 +48,7 @@ export default async function ChannelsPage({
 
       {note && <p className="ok-banner">{note}</p>}
 
-      <p className="warn">
+      <p className="warn-banner">
         Схема фида — настройка канала, а не выдумка в коде. Для Лалафо и
         House.kg выбрана схема Яндекс.Недвижимости: в СНГ её принимают чаще
         прочих. Это <strong>предположение</strong> — спецификацию площадки
@@ -56,7 +56,7 @@ export default async function ChannelsPage({
         валидатор площадки перед первым включением.
       </p>
 
-      <p className="warn">
+      <p className="warn-banner">
         Чего здесь нет и быть не может: строчки «размещено». Площадка не
         сообщает нам, что она разместила объект, и утверждать это за неё
         значит врать собственнику в отчёте. Мы знаем своё: что отдаём и когда

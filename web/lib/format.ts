@@ -201,3 +201,18 @@ export const SHOWING_LABEL: Record<string, string> = {
   // развёл эти два случая, и подпись обязана их различать.
   no_show: "клиент не пришёл",
 };
+
+/**
+ * Бюджет потребности словами. Валюта у потребности не хранится: бюджеты в
+ * Бишкеке называют в долларах, и выдумывать поле ради одного значения
+ * незачем — когда появится вторая валюта, появится и поле.
+ *
+ * Жил в трёх экранах тремя копиями; третья копия и стала поводом вынести.
+ */
+export function formatBudget(min: string | null, max: string | null): string {
+  const money = (v: string) => Number(v).toLocaleString("ru-RU");
+  if (min && max) return `${money(min)} – ${money(max)} $`;
+  if (max) return `до ${money(max)} $`;
+  if (min) return `от ${money(min)} $`;
+  return "бюджет не назван";
+}

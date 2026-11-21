@@ -219,7 +219,7 @@ export default async function ListingsPage({
       )}
 
       {stuck > 0 && (
-        <p className="warn">
+        <p className="warn-banner">
           {stuck} {plural(stuck, "объект стоит", "объекта стоят", "объектов стоят")} в своей
           колонке дольше, чем ей отведено. Они первыми.
         </p>

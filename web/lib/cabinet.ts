@@ -1362,3 +1362,93 @@ export async function workload(): Promise<Workload[]> {
     return rows;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Подборки (инвариант 36)
+// ---------------------------------------------------------------------------
+
+export type Selection = {
+  id: string;
+  requirement_id: string;
+  client_name: string | null;
+  agent_id: string;
+  agent_name: string;
+  token: string;
+  note: string | null;
+  sent_at: Date | string | null;
+  expires_at: Date | string | null;
+  revoked_at: Date | string | null;
+  first_opened_at: Date | string | null;
+  last_viewed_at: Date | string | null;
+  view_count: number;
+  created_at: Date | string;
+  state: string;
+  objects: number;
+  liked: number;
+  disliked: number;
+};
+
+export async function selections(): Promise<Selection[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<Selection>(
+      `select * from my_selections_v order by created_at desc`,
+    );
+    return rows;
+  });
+}
+
+export type SelectionItem = {
+  object_id: string;
+  address: string;
+  kind: ObjectKind;
+  deal_type: DealType;
+  price: string;
+  currency: string;
+  rooms: number | null;
+  zone: string | null;
+  position: number;
+  reaction: string | null;
+  note: string | null;
+};
+
+export async function selectionItems(id: string): Promise<SelectionItem[]> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<SelectionItem>(
+      `select si.object_id, o.address, o.kind::text, o.deal_type::text,
+              o.price::text, o.currency, o.rooms, o.zone,
+              si.position, si.reaction, si.note
+         from selection_items si
+         join objects o on o.id = si.object_id
+        where si.selection_id = $1
+        order by si.position`,
+      [id],
+    );
+    return rows;
+  });
+}
+
+/** Что можно положить в подборку этому клиенту: подбор уже посчитан в базе. */
+export async function selectable(requirementId: string): Promise<
+  { object_id: string; address: string; price: string; currency: string;
+    rooms: number | null; zone: string | null; fit: string;
+    already_proposed: boolean }[]
+> {
+  const session = await readSession();
+  if (!session) return [];
+
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query(
+      `select object_id, address, price::text, currency, rooms, zone,
+              fit, already_proposed
+         from app.matching_objects($1) order by fit, price`,
+      [requirementId],
+    );
+    return rows as never;
+  });
+}

@@ -186,7 +186,7 @@ export default async function DealPage({
       )}
 
       {!mine && (
-        <p className="warn">
+        <p className="warn-banner">
           Это сделка других агентов. Видна для прозрачности внутри агентства,
           но трогать её база не даст: сделку ведут её участники.
         </p>

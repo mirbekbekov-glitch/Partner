@@ -758,7 +758,12 @@ button.link {
   padding: 1.25rem;
   color: #667085;
 }
-.warn {
+/* Полоса-предупреждение. Называется -banner, как и .ok-banner, потому что
+   коротким именем .warn уже помечают плашку состояния (.chip.warn): у
+   полосы есть border-left, у плашки — нет, и правило полосы приклеивалось
+   к плашке оранжевым полумесяцем слева от слова. Одно имя на блок и на
+   модификатор — та же ошибка, что .tag на витрине и в кабинете. */
+.warn-banner {
   border-left: 3px solid var(--cab-warn);
   background: #fffaeb;
   padding: 0.75rem 1rem;
@@ -1300,3 +1305,22 @@ h2.alarm { color: var(--cab-alarm); }
 .risk.none { color: var(--cab-alarm); }
 .ok-line { font-size: 0.82rem; color: var(--cab-ok); }
 .alarm-text { color: var(--cab-alarm); }
+
+
+/* --- подборки (инвариант 36) ----------------------------------------------- */
+/* Страница клиента: крупная цена и фотографии, потому что он смотрит именно
+   их, а не параметры. */
+.price-line { font-size: 1.25rem; font-weight: 600; margin: 0.4rem 0 0.6rem; }
+.shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+         gap: 0.5rem; margin: 0.6rem 0 0.8rem; }
+.shots img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 9px; }
+
+/* Чекбоксы вариантов: строка целиком кликается, иначе в списке из двадцати
+   объектов попасть в квадратик — отдельная работа. */
+.act label.check {
+  display: flex; align-items: center; gap: 0.5rem; flex-direction: row;
+  padding: 0.3rem 0; cursor: pointer; font-size: 0.92rem; color: #101828;
+}
+.act label.check input { width: auto; margin: 0; }
+code { background: #f2f4f7; padding: 0.1rem 0.35rem; border-radius: 5px;
+       font-size: 0.85em; overflow-wrap: anywhere; }

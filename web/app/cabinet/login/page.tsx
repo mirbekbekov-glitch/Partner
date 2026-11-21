@@ -84,7 +84,7 @@ export default async function LoginPage() {
       </section>
 
       {showsCodeOnScreen() && (
-        <p className="warn">
+        <p className="warn-banner">
           Режим разработки. Почтовый провайдер ещё не выбран — это открытое
           решение, — поэтому код не отправляется, а показывается здесь же и
           пишется в журнал сервера. В бою <code>OTP_TRANSPORT=smtp</code>, и
@@ -92,7 +92,7 @@ export default async function LoginPage() {
         </p>
       )}
       {transport() === "whatsapp" && (
-        <p className="warn">
+        <p className="warn-banner">
           Выбран режим WhatsApp, но провайдер Business API не подключён:
           отправка кода завершится ошибкой. Смотрите <code>web/lib/otp.ts</code>.
         </p>

@@ -433,6 +433,76 @@ select 'показов: ' || count(*) from showings
 union all
 select 'кабинет собственника: /owner/ccccccccddddeeeeffff000011112222';
 
+-- ---------------------------------------------------------------------------
+-- Подборки (инвариант 36)
+-- ---------------------------------------------------------------------------
+-- Три состояния, которые на пустом экране не видны: черновик, отправленная и
+-- неоткрытая, открытая с реакцией клиента. Именно различие между вторым и
+-- третьим и есть смысл этой сущности.
+
+do $$
+declare
+  v_bakyt uuid := (select id from agents where full_name = 'Бакыт');
+  v_req   uuid;
+  v_objs  uuid[];
+  v_sel   uuid;
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', (select auth_user_id from agents where id = v_bakyt),
+                      'role', 'authenticated')::text, true);
+
+  -- Клиент не называется по имени: взять того, под кого подбор реально
+  -- что-то находит. Имя в сеялке устаревает молча — объекты меняются, и
+  -- демонстрация «подборки» вырождается в подборку из одного варианта.
+  select r.id into v_req
+    from requirements r
+   where r.agent_id = v_bakyt
+     and r.status not in ('closed', 'lost')
+   order by (select count(*) from app.matching_objects(r.id)) desc,
+            r.created_at
+   limit 1;
+
+  if v_req is not null then
+    select array_agg(object_id) into v_objs
+      from (select object_id from app.matching_objects(v_req) limit 3) t;
+
+    if coalesce(array_length(v_objs, 1), 0) > 0 then
+      -- Черновик: состав ещё можно менять.
+      -- Тексты не называют число вариантов: подбор мог дать и один объект,
+      -- и тогда «собрал три варианта» рядом с «1 объект» читается как
+      -- поломка экрана, хотя поломки нет.
+      select id into v_sel from create_selection(v_req, v_objs,
+        'Собрал то, что сейчас есть, посмотрите');
+
+      -- Отправленная и открытая, с реакцией.
+      select id into v_sel from create_selection(v_req, v_objs[1:2],
+        'В центре, смотреть можно завтра');
+      perform send_selection(v_sel);
+      -- Реакции ставятся по фактическому составу подборки, а не по индексам
+      -- исходного массива: подбор мог дать меньше объектов, чем ожидалось,
+      -- и сеяние падало с «в подборке нет такого объекта».
+      perform set_selection_reaction(v_sel, si.object_id,
+                 case si.position when 1 then 'liked' else 'disliked' end,
+                 case si.position when 1 then 'нравится, хочу посмотреть'
+                                  else 'слишком высокий этаж' end)
+         from selection_items si where si.selection_id = v_sel;
+      perform set_config('request.jwt.claims', '{}', true);
+      perform app.selection_page((select token from selections where id = v_sel));
+
+      perform set_config('request.jwt.claims',
+        json_build_object('sub', (select auth_user_id from agents where id = v_bakyt),
+                          'role', 'authenticated')::text, true);
+
+      -- Отправленная и НЕ открытая: главное состояние этого экрана.
+      select id into v_sel from create_selection(v_req, v_objs[1:1],
+        'Ещё один вариант, появился сегодня');
+      perform send_selection(v_sel);
+    end if;
+  end if;
+
+  perform set_config('request.jwt.claims', '{}', true);
+end $$;
+
 -- Айбек — руководитель агентства: иначе экран «У кого сколько» в разработке
 -- нечем открыть, а он и есть главное, что просил руководитель.
 do $$

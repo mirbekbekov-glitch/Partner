@@ -128,10 +128,10 @@ export function Photos({
         </div>
       )}
 
-      {!canEdit && whyNot && <p className="warn">{whyNot}</p>}
+      {!canEdit && whyNot && <p className="warn-banner">{whyNot}</p>}
 
       {canEdit && left <= 0 && (
-        <p className="warn">
+        <p className="warn-banner">
           Больше {limit} фотографий на объект не бывает. Удалите лишние, если
           нужно добавить новые.
         </p>

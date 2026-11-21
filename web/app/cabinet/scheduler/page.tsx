@@ -30,7 +30,7 @@ export default async function SchedulerPage() {
       {broken.length === 0 ? (
         <p className="ok-banner">Все работы идут по расписанию.</p>
       ) : (
-        <p className="warn">
+        <p className="warn-banner">
           Не в норме: {broken.length}. Если это «ни разу не запускалась» —
           планировщик не включён: <code>db/install_schedule.sql</code>.
         </p>

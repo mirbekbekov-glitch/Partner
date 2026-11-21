@@ -104,7 +104,7 @@ export default async function OwnerCabinetPage({ params }: Props) {
                 телефона клиента здесь нет и не будет. */}
             <h3>Когда придут</h3>
             {o.paused ? (
-              <p className="warn">
+              <p className="warn-banner">
                 Показы приостановлены{o.paused_by === "owner" ? " вами" : " агентством"}
                 {o.pause_reason ? `: ${o.pause_reason}` : ""}. Новые не назначат,
                 пока приостановка стоит.

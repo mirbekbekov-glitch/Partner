@@ -1071,3 +1071,49 @@ export async function confirmMandate(_prev: unknown, form: FormData): Promise<Re
     return "Договор подписан. Объект взят в работу.";
   }, path);
 }
+
+// ---------------------------------------------------------------------------
+// Подборки (инвариант 36)
+// ---------------------------------------------------------------------------
+
+export async function createSelection(_prev: unknown, form: FormData): Promise<Result> {
+  const requirement = String(form.get("requirement_id"));
+  const note = String(form.get("note") ?? "").trim();
+  const ids = form.getAll("object_id").map(String).filter(Boolean);
+  if (ids.length === 0) {
+    return { ok: false, error: "Отметьте хотя бы один объект: пустая подборка ничего не говорит клиенту." };
+  }
+  return actThenNotice(async (db) => {
+    await db.query("select create_selection($1, $2::uuid[], $3)",
+                   [requirement, ids, note || null]);
+    return "Подборка собрана. Пока она черновик — состав ещё можно менять.";
+  }, "/cabinet/selections");
+}
+
+export async function sendSelection(_prev: unknown, form: FormData): Promise<Result> {
+  const id = String(form.get("selection_id"));
+  return actThenNotice(async (db) => {
+    await db.query("select send_selection($1)", [id]);
+    return "Отправлено. С этого момента состав подборки неизменен.";
+  }, "/cabinet/selections");
+}
+
+export async function revokeSelection(_prev: unknown, form: FormData): Promise<Result> {
+  const id = String(form.get("selection_id"));
+  return actThenNotice(async (db) => {
+    await db.query("select revoke_selection($1)", [id]);
+    return "Ссылка отозвана: клиент больше её не откроет.";
+  }, "/cabinet/selections");
+}
+
+export async function setSelectionReaction(_prev: unknown, form: FormData): Promise<Result> {
+  const id = String(form.get("selection_id"));
+  const object = String(form.get("object_id"));
+  const reaction = String(form.get("reaction"));
+  const note = String(form.get("note") ?? "").trim();
+  return actThenNotice(async (db) => {
+    await db.query("select set_selection_reaction($1, $2, $3, $4)",
+                   [id, object, reaction, note || null]);
+    return "Записано.";
+  }, "/cabinet/selections");
+}

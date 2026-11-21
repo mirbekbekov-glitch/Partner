@@ -26,6 +26,7 @@ export default async function CabinetLayout({
         { href: "/cabinet/inquiries", label: "Обращения",
           count: a?.inquiries_new, hint: "новых, ещё не разобрали" },
         { href: "/cabinet/requirements", label: "Клиенты" },
+        { href: "/cabinet/selections", label: "Подборки" },
         { href: "/cabinet/funnel", label: "Воронка",
           count: a?.funnel_stuck, hint: "стоят в колонке дольше положенного" },
         { href: "/cabinet/tasks", label: "Задачи",
