@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { channels, feedUrl, me } from "../../../lib/cabinet";
-import { formatDateTime, plural } from "../../../lib/format";
+import { formatDateTime, formatPhone, plural } from "../../../lib/format";
+import { FORMAT_LABEL } from "../../../lib/feeds";
 import { gate } from "../Gate";
 import { ActionForm } from "../ActionForm";
-import { rotateFeedToken } from "../actions";
+import { rotateFeedToken, setFeedFormat } from "../actions";
 
 export const metadata: Metadata = {
   title: "Площадки",
@@ -48,6 +49,14 @@ export default async function ChannelsPage({
       {note && <p className="ok-banner">{note}</p>}
 
       <p className="warn">
+        Схема фида — настройка канала, а не выдумка в коде. Для Лалафо и
+        House.kg выбрана схема Яндекс.Недвижимости: в СНГ её принимают чаще
+        прочих. Это <strong>предположение</strong> — спецификацию площадки
+        выдают вместе с тарифом, и пока она не на руках, фид обязан пройти
+        валидатор площадки перед первым включением.
+      </p>
+
+      <p className="warn">
         Чего здесь нет и быть не может: строчки «размещено». Площадка не
         сообщает нам, что она разместила объект, и утверждать это за неё
         значит врать собственнику в отчёте. Мы знаем своё: что отдаём и когда
@@ -82,6 +91,25 @@ export default async function ChannelsPage({
               </div>
 
               <div className="row-state">
+                <span className={`chip ${c.ready ? "ok" : "danger"}`}>
+                  {c.ready ? "готов отдавать" : "не настроен"}
+                </span>
+                <p className="muted">
+                  схема: {FORMAT_LABEL[c.format] ?? c.format}
+                  {/* Подтверждать нечего, когда схема наша собственная: её не
+                      принимает площадка, её отдают интегратору. Красная
+                      приписка там означала бы несуществующую проблему. */}
+                  {c.format !== "partner" && !c.format_confirmed && (
+                    <span className="act-err"> — не подтверждена площадкой</span>
+                  )}
+                </p>
+                {c.contact_phone ? (
+                  <p className="muted">контакт: {formatPhone(c.contact_phone)}</p>
+                ) : c.ready ? (
+                  <p className="muted">контакт этой схеме не нужен</p>
+                ) : (
+                  <p className="act-err">контакт для объявлений не задан</p>
+                )}
                 <span className={`chip ${c.last_fetched_at ? "ok" : "warn"}`}>
                   {c.last_fetched_at ? "фид забирают" : "за фидом не приходили"}
                 </span>
@@ -100,6 +128,38 @@ export default async function ChannelsPage({
 
               {agent?.is_admin && (
                 <div className="row-acts">
+                  <details className="fold">
+                    <summary>Схема и контакт</summary>
+                    <ActionForm action={setFeedFormat} label="Сохранить">
+                      <input type="hidden" name="channel" value={c.channel} />
+                      <label>
+                        Схема фида
+                        <select name="format" defaultValue={c.format}>
+                          <option value="partner">наша схема</option>
+                          <option value="yandex_realty">Яндекс.Недвижимость</option>
+                          <option value="cian">ЦИАН</option>
+                        </select>
+                      </label>
+                      <label>
+                        Телефон для объявлений
+                        <input
+                          name="contact"
+                          type="tel"
+                          defaultValue={c.contact_phone ?? ""}
+                          placeholder="0312 900 900"
+                        />
+                      </label>
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          name="confirmed"
+                          value="1"
+                          defaultChecked={c.format_confirmed}
+                        />{" "}
+                        схему подтвердила площадка
+                      </label>
+                    </ActionForm>
+                  </details>
                   <details className="fold">
                     <summary>Заменить ссылку</summary>
                     <ActionForm

@@ -1008,6 +1008,12 @@ export async function notifications(): Promise<Notification[]> {
 export type Channel = {
   channel: string;
   enabled: boolean;
+  format: string;
+  /** Схему подтвердила площадка. Пока нет — экран обязан сказать это словами. */
+  format_confirmed: boolean;
+  contact_phone: string | null;
+  ready: boolean;
+  note: string | null;
   objects_in_feed: number;
   last_fetched_at: Date | string | null;
   fetches_week: number;
@@ -1030,7 +1036,8 @@ export async function channels(): Promise<Channel[]> {
 
   return asAgent(session, "read only", async (db) => {
     const { rows } = await db.query<Channel>(
-      `select channel::text, enabled, objects_in_feed, last_fetched_at,
+      `select channel::text, enabled, format::text, format_confirmed,
+              contact_phone, ready, note, objects_in_feed, last_fetched_at,
               fetches_week, rotated_at
          from channel_feeds_v
         order by channel`,

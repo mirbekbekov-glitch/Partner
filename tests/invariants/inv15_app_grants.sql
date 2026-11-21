@@ -73,7 +73,7 @@ select test.eq(
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'app'
       and has_function_privilege('anon', p.oid, 'execute')),
-  array['channel_by_token', 'channel_feed', 'current_agent_id',
+  array['channel_feed', 'current_agent_id', 'feed_settings',
         'owner_report', 'record_channel_fetch'],
   'анониму открыты ровно пять функций схемы app и ни одной больше');
 

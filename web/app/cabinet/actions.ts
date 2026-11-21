@@ -915,3 +915,25 @@ export async function rotateFeedToken(_prev: unknown, form: FormData): Promise<R
     return "Ссылка заменена. Старая больше не работает — выдайте площадке новую.";
   }, "/cabinet/channels");
 }
+
+/**
+ * Схема фида канала и контакт для неё.
+ *
+ * Подтверждение схемы ставится руками и означает ровно одно: её видел
+ * человек — в спецификации площадки или в её ответе на пробный фид. Пока
+ * галочки нет, кабинет честно пишет, что схема выбрана предположительно.
+ */
+export async function setFeedFormat(_prev: unknown, form: FormData): Promise<Result> {
+  const channel = String(form.get("channel"));
+  const format = String(form.get("format"));
+  const confirmed = String(form.get("confirmed")) === "1";
+  const contact = String(form.get("contact") ?? "").trim();
+
+  return actThenNotice(async (db) => {
+    await db.query(
+      "select set_feed_format($1::publication_channel, $2::feed_format, $3, $4)",
+      [channel, format, confirmed, contact || null],
+    );
+    return "Настройки канала сохранены.";
+  }, "/cabinet/channels");
+}

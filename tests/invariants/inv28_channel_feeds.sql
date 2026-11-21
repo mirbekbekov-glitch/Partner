@@ -268,3 +268,89 @@ select test.ok(
                where table_name = 'channel_fetches'
                  and column_name in ('published', 'placed', 'status')),
   'в журнале обращений нет поля, которым можно было бы соврать о размещении');
+
+-- ===========================================================================
+-- 28е. У фида есть формат, и он назван
+-- ===========================================================================
+-- Спецификации фида Лалафо у нас нет: сайт закрыт защитой от роботов, в
+-- открытом доступе документации нет, партнёрскую выдают вместе с тарифом.
+-- Поэтому формат — настройка канала, а не выдумка в коде, и «не подтверждён
+-- площадкой» обязано быть видно, иначе агентство решит, что выгрузка
+-- настроена.
+
+set role authenticated;
+set request.jwt.claims = :'claims_admin';
+
+select test.eq(
+  (select format from channel_feeds_v where channel = 'lalafo'),
+  'yandex_realty'::feed_format,
+  'для Лалафо выбрана схема Яндекс.Недвижимости');
+
+select test.ok(
+  not (select format_confirmed from channel_feeds_v where channel = 'lalafo'),
+  'и она НЕ подтверждена: это догадка, пока площадка не прислала спецификацию');
+
+-- Схеме Яндекса нужен телефон для связи, и без него канал не готов. Молча
+-- отдать площадке объявления, по которым нельзя позвонить, хуже, чем не
+-- отдать ничего.
+select test.ok(
+  app.format_needs_contact('yandex_realty'),
+  'схеме Яндекса нужен контакт');
+select test.ok(
+  not app.format_needs_contact('partner'),
+  'нашей собственной схеме — нет: её отдают интегратору, а не публикуют');
+
+select test.ok(
+  not (select ready from channel_feeds_v where channel = 'lalafo'),
+  'без телефона канал не готов отдавать фид');
+
+select set_feed_format('lalafo', 'yandex_realty', false, '0312 900 900') is not null as cfg \gset
+select test.eq(
+  (select contact_phone from channel_feeds_v where channel = 'lalafo'),
+  '+996312900900',
+  'телефон канала нормализован так же, как везде');
+select test.ok(
+  (select ready from channel_feeds_v where channel = 'lalafo'),
+  'с телефоном канал готов');
+
+-- Это телефон АГЕНТСТВА, а не собственника: телефонов собственников в фиде
+-- нет и быть не может, их нет в публичном каталоге (инвариант 4).
+select test.ok(
+  not exists (
+    select 1 from contact_phones cp
+     where cp.phone = (select contact_phone from channel_feeds_v where channel = 'lalafo')),
+  'контакт канала не совпадает ни с одним телефоном контакта из базы');
+
+select test.throws(
+  $$select set_feed_format('lalafo', 'yandex_realty', false, 'не телефон')$$,
+  'не похоже на номер телефона',
+  'мусор вместо телефона канала отклонён');
+
+-- Настройка формата — дело администратора: от неё зависит, что увидит
+-- площадка и по какому номеру к ней придут.
+set request.jwt.claims = :'claims_aibek';
+select test.throws(
+  $$select set_feed_format('lalafo', 'partner', true)$$,
+  'INVARIANT_28',
+  'агент формат фида не настраивает');
+
+-- Настройки отдаются по токену одним запросом: отдающему фид нужно знать не
+-- только канал, но и готов ли он.
+set role postgres;
+set request.jwt.claims = '{}';
+select token as ftok from channel_feeds where channel = 'lalafo' \gset
+select test.eq(
+  (select format from app.feed_settings(:'ftok')),
+  'yandex_realty'::feed_format,
+  'настройки канала находятся по токену');
+select test.ok(
+  (select ready from app.feed_settings(:'ftok')),
+  'и говорят, что канал готов');
+
+update channel_feeds set contact_phone = null where channel = 'lalafo';
+select test.ok(
+  not (select ready from app.feed_settings(:'ftok')),
+  'без контакта настройки говорят, что канал НЕ готов');
+select test.ok(
+  (select not_ready_reason from app.feed_settings(:'ftok')) like '%телефон%',
+  'и говорят, чего не хватает, словами');

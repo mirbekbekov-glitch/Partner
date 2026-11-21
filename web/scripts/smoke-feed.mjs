@@ -26,12 +26,45 @@ const ok = (cond, label) => {
 
 const q = async (sql, params = []) => (await pool.query(sql, params)).rows;
 
+/** Объявление в любой из схем: у нас <object>, у Яндекса <offer>. */
 function countObjects(xml) {
-  return (xml.match(/<object /g) ?? []).length;
+  return (xml.match(/<object |<offer /g) ?? []).length;
 }
 
 try {
   const [{ token }] = await q("select token from channel_feeds where channel = 'lalafo'");
+
+  // --- схема канала ---------------------------------------------------------
+  // Ненастроенный канал обязан отказать, а не отдать половинчатый фид:
+  // объявления, по которым нельзя позвонить, площадке бесполезны, а
+  // агентству вредны — оно решит, что выгрузка работает.
+  await q("update channel_feeds set contact_phone = null where channel = 'lalafo'");
+  const unready = await fetch(`${BASE}/feed/${token}.xml`);
+  ok(unready.status === 503, `канал без контакта отказывает (${unready.status})`);
+  ok(
+    (await unready.text()).includes("телефон"),
+    "и говорит, чего не хватает, словами",
+  );
+
+  await q(
+    "update channel_feeds set contact_phone = '0312 900 900' where channel = 'lalafo'",
+  );
+  const yandex = await fetch(`${BASE}/feed/${token}.xml`).then((r) => r.text());
+  ok(
+    yandex.includes('<realty-feed xmlns="http://webmaster.yandex.ru/schemas/feed/realty/2010-06">'),
+    "канал отдаётся в схеме, которая у него настроена",
+  );
+  ok(yandex.includes("<phone>+996312900900</phone>"), "контакт агентства в фиде есть");
+  ok(
+    !yandex.includes("<partner-feed"),
+    "и это не наша собственная схема: формат берётся из настройки канала",
+  );
+
+  // Наша схема остаётся доступной: её отдают интегратору площадки.
+  await q("update channel_feeds set format = 'partner' where channel = 'lalafo'");
+  const partner = await fetch(`${BASE}/feed/${token}.xml`).then((r) => r.text());
+  ok(partner.includes("<partner-feed"), "смена схемы в данных меняет и фид");
+  await q("update channel_feeds set format = 'yandex_realty' where channel = 'lalafo'");
   const [{ n: inFeed }] = await q(
     "select count(*)::int as n from app.channel_feed('lalafo')",
   );
@@ -45,7 +78,10 @@ try {
 
   const xml = await response.text();
   ok(countObjects(xml) === inFeed, `в фиде ${countObjects(xml)} объектов, в базе ${inFeed}`);
-  ok(xml.includes('<partner-feed version="1"'), "схема названа своим именем");
+  ok(
+    xml.includes("<realty-feed") || xml.includes('<partner-feed version="1"'),
+    "схема названа своим именем",
+  );
 
   // Телефонов в фиде нет не потому, что мы их вырезаем, а потому, что их нет
   // в публичном каталоге. Проверяется по живому фиду, а не по намерению.
