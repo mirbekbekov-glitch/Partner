@@ -214,8 +214,23 @@ begin
   values (v_match, v_aibek, v_at + interval '30 minutes', 'scheduled', v_aibek);
 end $$;
 
+-- Кабинет собственника: одна ссылка на все его объекты (инвариант 29).
+-- Без неё экран собственника в разработке нечем открыть.
+do $$
+declare
+  v_aibek uuid := (select id from agents where full_name = 'Айбек');
+  v_owner uuid := '00000000-0000-0000-0000-00000000c001';
+begin
+  insert into owner_access (object_id, contact_id, token, issued_by_agent_id, expires_at)
+  values (null, v_owner, 'ccccccccddddeeeeffff000011112222', v_aibek,
+          now() + interval '365 days')
+  on conflict (token) do nothing;
+end $$;
+
 select 'обращений: ' || count(*) from inquiries
 union all
 select 'кандидатов: ' || count(*) from listing_candidates
 union all
-select 'показов: ' || count(*) from showings;
+select 'показов: ' || count(*) from showings
+union all
+select 'кабинет собственника: /owner/ccccccccddddeeeeffff000011112222';

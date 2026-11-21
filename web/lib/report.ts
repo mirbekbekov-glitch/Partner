@@ -26,8 +26,10 @@ export type OwnerReport = {
   };
   channels: Array<{
     channel: string;
-    status: string;
-    last_sync_at: string | null;
+    /** Отдаём ли мы объект в этот канал прямо сейчас (инвариант 28). */
+    in_feed: boolean;
+    /** Когда по ссылке канала последний раз приходили за фидом. */
+    fetched_at: string | null;
     has_error: boolean;
   }>;
   showings: {
@@ -76,11 +78,15 @@ export const CHANNEL_LABEL: Record<string, string> = {
   house_kg: "House.kg",
 };
 
-export const CHANNEL_STATUS_LABEL: Record<string, string> = {
-  exported: "размещено",
-  updated: "обновлено",
-  error: "ошибка размещения",
-  withdrawn: "снято",
+/**
+ * Инвариант 28 убрал из отчёта слова «размещено» и «обновлено»: площадка не
+ * сообщает нам, что она разместила объект, и говорить за неё значит врать
+ * собственнику. Остались две вещи, которые мы знаем: отдаём ли мы объект
+ * туда и приходили ли оттуда за фидом.
+ */
+export const IN_FEED_LABEL: Record<string, string> = {
+  yes: "отдаём на площадку",
+  no: "не отдаём",
 };
 
 export const STATE_LABEL: Record<string, string> = {
@@ -88,3 +94,64 @@ export const STATE_LABEL: Record<string, string> = {
   published: "в каталоге",
   withdrawn: "снят с публикации",
 };
+
+// ---------------------------------------------------------------------------
+// Кабинет собственника
+// ---------------------------------------------------------------------------
+
+/** Документ, который отдаёт `app.owner_cabinet()`. Собирается целиком в базе. */
+export type OwnerCabinet = {
+  owner: { name: string; generated_at: string };
+  objects: Array<{
+    id: string;
+    address: string;
+    kind: ObjectKind;
+    deal_type: DealType;
+    price: string;
+    currency: string;
+    rooms: number | null;
+    area: string | null;
+    publication_state: "draft" | "published" | "withdrawn";
+    actual_at: string | null;
+    paused: boolean;
+    pause_reason: string | null;
+    paused_by: "owner" | "agent" | "admin" | null;
+    showings_done: number;
+    /** Время ближайших показов. Ни имён, ни телефонов: инвариант 4. */
+    showings_ahead: string[];
+    channels: Array<{ channel: string; in_feed: boolean }>;
+  }>;
+};
+
+export async function fetchOwnerCabinet(
+  token: string,
+): Promise<OwnerCabinet | null> {
+  return asReportRole(async (client) => {
+    const { rows } = await client.query<{ cabinet: OwnerCabinet | null }>(
+      "select app.owner_cabinet($1) as cabinet",
+      [token],
+    );
+    return rows[0]?.cabinet ?? null;
+  });
+}
+
+/**
+ * Приостановить или возобновить показы.
+ *
+ * Отказ приходит ответом, а не исключением: собственнику пятисотая страница
+ * не объясняет ничего, а «это не ваш объект» объясняет всё.
+ */
+export async function setOwnerPause(
+  token: string,
+  objectId: string,
+  paused: boolean,
+  reason: string | null,
+): Promise<{ ok: boolean; reason?: string }> {
+  return asReportRole(async (client) => {
+    const { rows } = await client.query<{ result: { ok: boolean; reason?: string } }>(
+      "select app.owner_pause($1, $2, $3, $4) as result",
+      [token, objectId, paused, reason],
+    );
+    return rows[0]?.result ?? { ok: false, reason: "не удалось выполнить" };
+  });
+}

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   CHANNEL_LABEL,
-  CHANNEL_STATUS_LABEL,
   OUTCOME_LABEL,
   STATE_LABEL,
   type ShowingOutcome,
@@ -46,7 +45,7 @@ export default async function OwnerReportPage({ params }: Props) {
 
   const { object, channels, showings, interest, price_changes } = report;
   const fresh = freshness(object.actual_at);
-  const live = channels.filter((c) => c.status !== "withdrawn");
+  const live = channels.filter((c) => c.in_feed);
   const outcomes = Object.entries(showings.outcomes) as Array<
     [ShowingOutcome, number]
   >;
@@ -110,10 +109,10 @@ export default async function OwnerReportPage({ params }: Props) {
       </div>
 
       <section className="report-block">
-        <h2>Где размещён объект</h2>
+        <h2>Куда отдаётся объект</h2>
         {live.length === 0 ? (
           <p className="muted">
-            Объект пока не размещён ни на одной площадке.
+            Объект пока не отдаётся ни на одну площадку.
           </p>
         ) : (
           <ul className="channels">
@@ -123,12 +122,12 @@ export default async function OwnerReportPage({ params }: Props) {
                   {CHANNEL_LABEL[c.channel] ?? c.channel}
                 </span>
                 <span className={c.has_error ? "fresh-stale" : "fresh-fresh"}>
-                  {c.has_error
-                    ? "ошибка размещения, агент разбирается"
-                    : (CHANNEL_STATUS_LABEL[c.status] ?? c.status)}
+                  {c.has_error ? "ошибка выгрузки, агент разбирается" : "отдаём"}
                 </span>
                 <span className="muted">
-                  {formatDate(c.last_sync_at) ?? "дата не записана"}
+                  {c.fetched_at
+                    ? `площадка забирала ${formatDate(c.fetched_at)}`
+                    : "площадка за выгрузкой ещё не приходила"}
                 </span>
               </li>
             ))}

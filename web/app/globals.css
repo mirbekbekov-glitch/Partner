@@ -1047,3 +1047,24 @@ h2.alarm { color: var(--cab-alarm); }
 .slot.past   { opacity: 0.6; }
 .slot.clash  { background: #fffbfa; border-left-color: var(--cab-alarm); }
 .slot:hover  { outline: 1px solid #98a2b3; }
+
+/* --- кабинет собственника -------------------------------------------------- */
+/* Приостановленный объект отличается рамкой, а не только словами: собственник
+   открывает страницу, чтобы понять состояние, а не вчитываться. */
+.report-block.paused { border-left: 3px solid var(--cab-alarm, #b42318); }
+
+.ahead { list-style: none; padding: 0; margin: 0.5rem 0 1rem; }
+.ahead li {
+  padding: 0.4rem 0.7rem;
+  background: #eff8ff;
+  border-radius: 6px;
+  margin-bottom: 0.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.owner-act { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; }
+.owner-act label { display: flex; flex-direction: column; gap: 0.25rem; width: 100%; max-width: 28rem; }
+.owner-act input[type="text"], .owner-act input:not([type]) {
+  padding: 0.5rem 0.7rem; border: 1px solid #d0d5dd; border-radius: 8px; font: inherit;
+}
+.owner-act .hint { color: #667085; font-size: 0.85rem; }
