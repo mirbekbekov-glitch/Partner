@@ -3,17 +3,20 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * Фон героя: ступенчатая диагональ и свет, идущий за курсором.
+ * Фон героя: объёмная лестница и свет, идущий за курсором.
  *
- * Ступенька — не произвольная фигура, а мотив из знака агентства: в нём
- * квадраты сложены лесенкой. Обычная косая полоса есть у всех; лесенка
- * есть только здесь, и она повторяется в метке на карточке и в маркерах
- * списка. Это и даёт странице лицо: один мотив, проведённый через всё.
+ * Лестница — мотив из знака агентства, где квадраты сложены ступенями.
+ * Здесь она построена в изометрии: у каждой ступени видны проступь,
+ * подступёнок и боковина, и они окрашены по-разному — как если бы свет
+ * падал сверху слева. Именно разные грани, а не контур, дают объём.
  *
- * Свет за курсором — не украшение ради украшения: он делает большое
- * тёмное поле отзывчивым, и страница перестаёт выглядеть картинкой. На
- * телефоне указателя нет, и там его нет тоже; при включённом «меньше
- * движения» он выключается.
+ * Собрана вектором, а не картинкой: режется на любом экране без мыла,
+ * весит килобайты и перекрашивается вместе с темой. Трёхмерный рендер
+ * пришлось бы грузить отдельным файлом и готовить под каждую плотность.
+ *
+ * Лестница чуть смещается за курсором — на несколько пикселей, в
+ * противоход. Этого хватает, чтобы фон перестал быть наклейкой. На
+ * телефоне указателя нет, при «меньше движения» смещение выключено.
  */
 export function HeroArt() {
   const box = useRef<HTMLDivElement>(null);
@@ -26,14 +29,18 @@ export function HeroArt() {
 
     let raf = 0;
     const onMove = (e: PointerEvent) => {
-      // Координаты пишем в переменные CSS и только в кадре отрисовки:
-      // pointermove приходит чаще, чем экран успевает обновиться.
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
         const r = el.getBoundingClientRect();
-        el.style.setProperty('--mx', `${e.clientX - r.left}px`);
-        el.style.setProperty('--my', `${e.clientY - r.top}px`);
+        const x = e.clientX - r.left;
+        const y = e.clientY - r.top;
+        el.style.setProperty('--mx', `${x}px`);
+        el.style.setProperty('--my', `${y}px`);
+        // Сдвиг в противоход курсору и в десять раз слабее: предмет
+        // отзывается, но не убегает.
+        el.style.setProperty('--px', `${(0.5 - x / r.width) * 18}px`);
+        el.style.setProperty('--py', `${(0.5 - y / r.height) * 12}px`);
       });
     };
     const parent = el.parentElement ?? el;
@@ -47,38 +54,78 @@ export function HeroArt() {
   return (
     <div className="hero-art" ref={box} aria-hidden="true">
       <div className="hero-glow" />
-      <svg viewBox="0 0 600 620" preserveAspectRatio="xMaxYMid slice">
+      <svg viewBox="0 0 470 470" preserveAspectRatio="xMidYMid meet">
         <defs>
-          <linearGradient id="stair-red" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#E0453F" />
-            <stop offset="1" stopColor="#7E1B19" />
+          {/* Три грани — три заливки. Проступь светлее всех: на неё падает
+              свет. Подступёнок в тени, боковина между ними. */}
+          <linearGradient id="tread" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#F4645E" /><stop offset="1" stopColor="#D83B35" />
+          </linearGradient>
+          <linearGradient id="riser" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#B82722" /><stop offset="1" stopColor="#8E1B17" />
+          </linearGradient>
+          <linearGradient id="side" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stopColor="#6E1512" /><stop offset="1" stopColor="#4C0E0C" />
+          </linearGradient>
+          <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="var(--art-ink)" stopOpacity=".18" />
+            <stop offset="1" stopColor="var(--art-ink)" stopOpacity="0" />
           </linearGradient>
         </defs>
-        {/* Тёмная лесенка позади — она даёт глубину, а не второй цвет. */}
-        {/* Цвет задан в стилях: в тёмной теме чернильная ступень
-            должна светлеть, иначе сливается с фоном страницы. */}
-        <path className="stair-ink" d={stairs(150, 14)} />
-        <path d={stairs(300, 14)} fill="url(#stair-red)" />
+        {/* Тень на полу рисуется до лестницы: иначе ложится поверх плиты. */}
+        <ellipse cx="230" cy="404" rx="200" ry="20" fill="url(#shade)" />
+        <Stairs />
       </svg>
     </div>
   );
 }
 
-/**
- * Лесенка: фигура, у которой левый край идёт ступенями сверху вниз, а
- * правый уходит за кадр. `x` — где начинается верхняя ступень,
- * `n` — сколько ступеней.
- */
-function stairs(x: number, n: number): string {
-  const W = 700;
-  const H = 620;
-  const step = H / n;
-  const run = 26;
-  const p: string[] = [`M ${W} -20`, `L ${x} -20`];
-  for (let i = 0; i < n; i++) {
-    p.push(`L ${x + i * run} ${-20 + (i + 1) * step}`);
-    p.push(`L ${x + (i + 1) * run} ${-20 + (i + 1) * step}`);
+/* Изометрия: лестница ПОДНИМАЕТСЯ слева направо. Направление не
+   декоративное: подъём читается как движение вверх, спуск — как вниз, и
+   на первом экране агентства недвижимости нужен первый.
+   d = (DX, DY) — вектор глубины: он уводит в правый верхний угол, поэтому
+   видны проступи сверху и правая боковина. */
+const RUN = 58;
+const RISE = 46;
+const DX = 56;
+const DY = -32;
+const N = 5;
+const X0 = 52;
+const Y0 = 396;   // уровень пола
+
+const pt = (x: number, y: number) => `${x.toFixed(1)},${y.toFixed(1)}`;
+
+function Stairs() {
+  const right = X0 + N * RUN;
+  const top = Y0 - N * RISE;
+
+  // Ступенчатый силуэт передней стенки: от пола вверх уступами и вниз по
+  // правому краю обратно к полу.
+  const front: string[] = [pt(X0, Y0)];
+  for (let i = 0; i < N; i++) {
+    front.push(pt(X0 + i * RUN, Y0 - (i + 1) * RISE));
+    front.push(pt(X0 + (i + 1) * RUN, Y0 - (i + 1) * RISE));
   }
-  p.push(`L ${W} ${H}`, 'Z');
-  return p.join(' ');
+  front.push(pt(right, Y0));
+
+  // Проступи — площадки, по которым идут. Светлее всего: на них падает свет.
+  const treads = Array.from({ length: N }, (_, i) => {
+    const y = Y0 - (i + 1) * RISE;
+    const x = X0 + i * RUN;
+    return (
+      <polygon key={i} fill="url(#tread)"
+        points={[pt(x, y), pt(x + RUN, y), pt(x + RUN + DX, y + DY), pt(x + DX, y + DY)].join(' ')} />
+    );
+  });
+
+  return (
+    <>
+      {/* Правая боковина уходит в глубину — она темнее всех. */}
+      <polygon fill="url(#side)"
+        points={[pt(right, top), pt(right + DX, top + DY),
+                 pt(right + DX, Y0 + DY), pt(right, Y0)].join(' ')} />
+      {treads}
+      <polygon fill="url(#riser)" points={front.join(' ')} />
+    </>
+  );
 }

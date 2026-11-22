@@ -33,6 +33,9 @@
   --steel: #8A95A3;
   --art-ink: #12161C;
   --chip-fg: #4B4B46;
+  /* Свет за курсором: на светлом фоне он осветляет заметно, на тёмном
+     почти неразличим — там яркое пятно читается как клякса. */
+  --glow: rgba(255,255,255,.85);
   /* Красный ярче фирменного — для тёмного фона и наведения. */
   --accent-2: #E0453F;
   /* Цифры моноширинным: цена, площадь и этаж выстраиваются в колонку, и
@@ -75,6 +78,7 @@
     --steel: #6B7684;
     --art-ink: #343C46;
     --chip-fg: #ADADA8;
+    --glow: rgba(255,255,255,.055);
     --accent-2: #F06A64;
     /* И текст на кнопке здесь тёмный: белый на светло-красном — 2.6 : 1. */
     --accent-fg: #14161a;
@@ -110,6 +114,7 @@
   --steel: #6B7684;
   --art-ink: #343C46;
   --chip-fg: #ADADA8;
+  --glow: rgba(255,255,255,.055);
   --accent-2: #F06A64;
   --accent-fg: #14161a;
   --error-fg: #F3A6A2;
@@ -451,10 +456,14 @@ main:has(.nav) { max-width: none; padding: 0; }
   background-size: 64px 64px;
   mask-image: linear-gradient(to bottom, rgba(0,0,0,.9), transparent 78%); }
 .hero-art { position: absolute; inset: 0; pointer-events: none; }
-.stair-ink { fill: var(--art-ink); }
-.hero-art svg { position: absolute; right: 0; top: 0; height: 100%; width: 48%;
-  min-width: 320px; opacity: .95;
-  mask-image: linear-gradient(to left, #000 64%, transparent); }
+.hero-art svg { position: absolute; right: 0; top: 0; width: 42%; min-width: 280px;
+  /* Не на всю высоту героя: нижние сто пикселей закрыты пультом поиска,
+     и основание лестницы пряталось бы за ним. */
+  height: calc(100% - 96px);
+  /* Смещение за курсором ставит HeroArt. Переход мягкий, чтобы предмет
+     догонял руку, а не дёргался следом. */
+  transform: translate3d(var(--px, 0), var(--py, 0), 0);
+  transition: transform .4s cubic-bezier(.2,.7,.3,1); }
 /* Свет идёт за курсором. Координаты ставит HeroArt; пока их нет —
    пятно стоит там же, где раньше стояло статичное свечение. */
 /* Свет за курсором — БЕЗ цвета. Разбавленный красный на тёплом белом
@@ -463,7 +472,7 @@ main:has(.nav) { max-width: none; padding: 0; }
    в него не подмешивается. */
 .hero-glow { position: absolute; inset: 0;
   background: radial-gradient(520px circle at var(--mx, 26%) var(--my, 32%),
-              rgba(255,255,255,.85), transparent 65%); }
+              var(--glow), transparent 65%); }
 .hero-in { position: relative; z-index: 1; padding-block: 64px 112px;
   display: flex; flex-direction: column; gap: 16px; max-width: 800px; }
 .eyebrow { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 700;
