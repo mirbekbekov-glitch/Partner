@@ -12,19 +12,24 @@
  * входа. Так кабинет можно разрабатывать и показывать целиком, не делая вид,
  * что почта уже подключена, и не пряча заглушку в середине обработчика формы.
  *
- * Подключение настоящего провайдера — это ветка в `send()` и строка
- * `OTP_TRANSPORT=smtp` в окружении. Ни база, ни экраны не меняются.
+ * Подключение настоящего провайдера — это строка `OTP_TRANSPORT=email` в
+ * окружении. Ни база, ни экраны не меняются.
+ *
+ * Значение называется `email`, а не `smtp`, и это не косметика: отправка идёт
+ * через HTTP API провайдера, потому что исходящего SMTP в воркере нет вовсе.
+ * Звать такой вызов «smtp» значило бы соврать в имени настройки — а потом
+ * кто-то стал бы искать, почему не работает порт 587.
  */
 
-export type OtpTransport = "dev" | "smtp" | "whatsapp";
+export type OtpTransport = "dev" | "email" | "whatsapp";
 
 /** Канал, которым код уходит. Совпадает с `login_channel` в базе. */
 export type LoginChannel = "email" | "whatsapp";
 
 export function transport(): OtpTransport {
   const value = process.env.OTP_TRANSPORT ?? "dev";
-  if (value !== "dev" && value !== "smtp" && value !== "whatsapp") {
-    throw new Error(`OTP_TRANSPORT должен быть dev, smtp или whatsapp, получено: ${value}`);
+  if (value !== "dev" && value !== "email" && value !== "whatsapp") {
+    throw new Error(`OTP_TRANSPORT должен быть dev, email или whatsapp, получено: ${value}`);
   }
   return value;
 }
@@ -61,7 +66,7 @@ export async function sendLoginCode(address: string, code: string): Promise<void
       console.info(`[вход] код для ${address}: ${code}`);
       return;
 
-    case "smtp": {
+    case "email": {
       const { sendMail } = await import("./mail");
       await sendMail({
         to: address,
@@ -77,7 +82,7 @@ export async function sendLoginCode(address: string, code: string): Promise<void
 
     case "whatsapp":
       throw new Error(
-        "Провайдер WhatsApp Business API не подключён. Выбор провайдера — открытое решение, см. docs/market/platform-spec.md, раздел 7. До подключения используйте OTP_TRANSPORT=dev или smtp.",
+        "Провайдер WhatsApp Business API не подключён. Выбор провайдера — открытое решение, см. docs/market/platform-spec.md, раздел 7. До подключения используйте OTP_TRANSPORT=dev или email.",
       );
   }
 }

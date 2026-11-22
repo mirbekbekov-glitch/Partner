@@ -61,9 +61,15 @@ export default defineConfig({
       // задаётся, а не угадывается из запроса.
       SITE_URL: bindings.secret(),
 
-      // Доставка кодов входа и уведомлений: `dev` печатает в журнал.
+      // Доставка кодов входа и уведомлений. ВНИМАНИЕ: `dev` показывает код
+      // прямо на странице входа — в публичном вебе это открытая дверь.
       OTP_TRANSPORT: bindings.secret(),
       NOTIFY_TRANSPORT: bindings.secret(),
+
+      // Почта. Провайдер с HTTP API: исходящего SMTP в воркере нет.
+      MAIL_PROVIDER: bindings.secret(),
+      MAIL_FROM: bindings.secret(),
+      MAIL_API_KEY: bindings.secret(),
 
       // Хранилище фотографий. PHOTO_DIR здесь нет намеренно: драйвер диска
       // в воркере не работает и работать не должен, поэтому требовать от
