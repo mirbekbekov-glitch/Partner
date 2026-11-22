@@ -55,8 +55,9 @@ export function HeroArt() {
     <div className="hero-art" ref={box} aria-hidden="true">
       <div className="hero-glow" />
       {/* Поле шире высоты: призрак следующего марша уходит вправо-вверх,
-            и в квадрате он обрезался. */}
-      <svg viewBox="0 0 560 470" preserveAspectRatio="xMidYMid meet">
+            и в квадрате он обрезался. Начало поля сдвинуто влево: от этого
+            сам рисунок уезжает правее, подальше от заголовка. */}
+      <svg viewBox="-54 0 560 470" preserveAspectRatio="xMidYMid meet">
         <defs>
           {/* Три грани — три заливки. Проступь светлее всех: на неё падает
               свет. Подступёнок в тени, боковина между ними. */}
