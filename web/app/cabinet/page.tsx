@@ -95,6 +95,18 @@ export default async function CabinetHome() {
         <Tile value={s.candidates_mine} one="объявление в работе"
               few="объявления в работе" many="объявлений в работе"
               href="/cabinet/candidates" />
+        {/* Подборки разделом в меню не стоят: собирают их с карточки
+            клиента. Межклиентского в них одно — «отправил, а он не открыл»,
+            и это здесь. */}
+        <Tile
+          value={s.selections_unopened}
+          one="подборка не открыта"
+          few="подборки не открыты"
+          many="подборок не открыто"
+          href="/cabinet/selections"
+          hint="отправили, а клиент ещё не смотрел"
+          alarm
+        />
         <Tile value={s.requirements_mine} one="клиент в работе" few="клиента в работе"
               many="клиентов в работе" href="/cabinet/requirements" />
         <Tile value={s.showings_upcoming} one="показ впереди" few="показа впереди"

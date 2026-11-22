@@ -297,6 +297,7 @@ export type Summary = {
   tasks_overdue: number;
   tasks_today: number;
   funnel_stuck: number;
+  selections_unopened: number;
   agents_pending: number;
   scheduler_broken: number;
 };
@@ -325,6 +326,7 @@ export async function summary(): Promise<Summary | null> {
            where sh.status = 'scheduled' and sh.scheduled_at > now())::int as showings_upcoming,
          (select a.showings_overdue from my_alerts_v a)                as showings_overdue,
          (select a.notifications_stuck from my_alerts_v a)             as notifications_stuck,
+         (select a.selections_unopened from my_alerts_v a)             as selections_unopened,
          (select count(*) from requirements rq
            where rq.agent_id = app.current_agent_id()
              and rq.status in ('new', 'qualified', 'in_showings'))::int as requirements_mine,
@@ -1647,6 +1649,28 @@ export async function certificateQueue(): Promise<CertificateClaim[]> {
               certificate_issued_on, certificate_valid_to,
               certificate_confirmed_at, state, confirmed_by_name
          from certificate_queue_v`,
+    );
+    return rows;
+  });
+}
+
+/**
+ * Подборки одного клиента. Нужны на его карточке: подборка существует только
+ * при клиенте, и смотреть её из общего списка значит искать там того же
+ * человека второй раз.
+ */
+export async function selectionsFor(requirementId: string): Promise<Selection[]> {
+  const session = await readSession();
+  if (!session) return [];
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<Selection>(
+      `select id, requirement_id, client_name, agent_id, agent_name, token, note,
+              sent_at, expires_at, revoked_at, first_opened_at, last_viewed_at,
+              view_count, created_at, state, objects, liked, disliked
+         from my_selections_v
+        where requirement_id = $1
+        order by created_at desc`,
+      [requirementId],
     );
     return rows;
   });

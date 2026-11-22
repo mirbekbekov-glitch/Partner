@@ -63,6 +63,24 @@ async function actThenNotice(
   redirect(`${path}${sep}note=${encodeURIComponent(result.message ?? "Готово.")}`);
 }
 
+/**
+ * Куда вернуться после действия.
+ *
+ * Одно и то же действие вызывается с разных экранов: подборку собирают и со
+ * списка подборок, и с карточки клиента. Жёсткий путь в действии выбрасывал
+ * агента с карточки в список — ровно та беготня, ради избавления от которой
+ * работу и перенесли на карточку.
+ *
+ * Адрес берётся из формы, поэтому проверяется: только внутренний путь
+ * кабинета, без схемы и без второго слэша в начале. Открытый перенаправитель
+ * получается ровно из такой мелочи.
+ */
+function backTo(form: FormData, fallback: string): string {
+  const raw = String(form.get("return_to") ?? "");
+  if (/^\/cabinet(\/[^/]|$|\?)/.test(raw)) return raw;
+  return fallback;
+}
+
 async function act(
   fn: (db: PoolClient) => Promise<string | void>,
   path = "/cabinet",
@@ -1290,7 +1308,7 @@ export async function createSelection(_prev: unknown, form: FormData): Promise<R
     await db.query("select create_selection($1, $2::uuid[], $3)",
                    [requirement, ids, note || null]);
     return "Подборка собрана. Пока она черновик — состав ещё можно менять.";
-  }, "/cabinet/selections");
+  }, backTo(form, "/cabinet/selections"));
 }
 
 export async function sendSelection(_prev: unknown, form: FormData): Promise<Result> {
@@ -1298,7 +1316,7 @@ export async function sendSelection(_prev: unknown, form: FormData): Promise<Res
   return actThenNotice(async (db) => {
     await db.query("select send_selection($1)", [id]);
     return "Отправлено. С этого момента состав подборки неизменен.";
-  }, "/cabinet/selections");
+  }, backTo(form, "/cabinet/selections"));
 }
 
 export async function revokeSelection(_prev: unknown, form: FormData): Promise<Result> {
@@ -1306,7 +1324,7 @@ export async function revokeSelection(_prev: unknown, form: FormData): Promise<R
   return actThenNotice(async (db) => {
     await db.query("select revoke_selection($1)", [id]);
     return "Ссылка отозвана: клиент больше её не откроет.";
-  }, "/cabinet/selections");
+  }, backTo(form, "/cabinet/selections"));
 }
 
 export async function setSelectionReaction(_prev: unknown, form: FormData): Promise<Result> {

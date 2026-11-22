@@ -26,7 +26,9 @@ export default async function CabinetLayout({
         { href: "/cabinet/inquiries", label: "Обращения",
           count: a?.inquiries_new, hint: "новых, ещё не разобрали" },
         { href: "/cabinet/requirements", label: "Клиенты" },
-        { href: "/cabinet/selections", label: "Подборки" },
+        // «Подборки» разделом не стоят: подборка существует только при
+        // клиенте, и собирают её с его карточки. Межклиентского в ней одно —
+        // «отправил, а он не открыл», и это тревога на главной.
         { href: "/cabinet/funnel", label: "Воронка",
           count: a?.funnel_stuck, hint: "стоят в колонке дольше положенного" },
         { href: "/cabinet/tasks", label: "Задачи",

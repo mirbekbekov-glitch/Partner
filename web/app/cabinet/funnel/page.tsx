@@ -28,7 +28,15 @@ function Card({ card, due }: { card: FunnelCard; due: string }) {
       {/* Имени чужого клиента здесь нет и не будет — его прячет политика
           контактов (инвариант 4). Но сама карточка видна: иначе колонка
           показывала бы ноль там, где работа идёт. */}
-      <h3>{card.contact_name ?? (card.is_mine ? "без имени" : "клиент агентства")}</h3>
+      {/* Карточка — вход в работу, а не ярлык. До этой правки она никуда не
+          вела: чтобы собрать подборку или назначить показ по тому же
+          человеку, агент уходил в «Клиенты» и искал его заново. Воронка
+          показывала работу, но не давала её делать. */}
+      <h3>
+        <a href={`/cabinet/requirements/${card.requirement_id}`}>
+          {card.contact_name ?? (card.is_mine ? "без имени" : "клиент агентства")}
+        </a>
+      </h3>
       <p className="muted">{formatBudget(card.budget_min, card.budget_max)}</p>
       <p className="muted">
         {card.zones.length > 0 ? card.zones.join(", ") : "район не назван"}

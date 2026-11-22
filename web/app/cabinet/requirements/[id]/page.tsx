@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { requirementDetail } from "../../../../lib/cabinet";
+import { requirementDetail, selectionsFor } from "../../../../lib/cabinet";
 import {
   formatPrice, formatArea, formatDate, formatDateTime, formatPhone,
   freshness, KIND_LABEL, OUTCOME_LABEL, plural, PUBLICATION_LABEL, SHOWING_LABEL,
@@ -11,7 +11,8 @@ import { Transfer } from "../../Transfer";
 import { transferTargets } from "../../../../lib/cabinet";
 import { transferRequirement } from "../../actions";
 import {
-  cancelShowing, completeShowing, markNoShow, proposeObject, scheduleShowing, startDeal,
+  cancelShowing, completeShowing, createSelection, markNoShow, proposeObject,
+  revokeSelection, scheduleShowing, sendSelection, startDeal,
 } from "../../actions";
 
 export const metadata: Metadata = {
@@ -52,6 +53,8 @@ export default async function RequirementPage({
   if (!data) notFound();
 
   const targets = data.requirement.is_mine ? await transferTargets() : [];
+  // Подборки этого клиента: они живут при нём, а не отдельным разделом.
+  const selections = await selectionsFor(id);
 
   const r = data.requirement;
   const fresh = data.candidates.filter((c) => !c.already_proposed);
@@ -97,6 +100,108 @@ export default async function RequirementPage({
           кто её ведёт.
         </p>
       )}
+
+      {/* ---- подборки ------------------------------------------------- */}
+      {/* Подборка существует только при клиенте, поэтому собирают её здесь, а
+          не в отдельном разделе: там пришлось бы второй раз искать того же
+          человека. Отдельный экран со списком всех подборок остался — на него
+          ведёт плитка «не открыта» с главной. */}
+      <section>
+        <h2>Подборки <span className="muted">({selections.length})</span></h2>
+        <p className="muted">
+          Подборка — это то, что клиент получил. Пока она черновик, состав
+          меняется; после отправки — нет. «Отправлено» и «открыто» — разные
+          факты, и второй ставит клиент.
+        </p>
+
+        {selections.length > 0 && (
+          <div className="rows">
+            {selections.map((sel) => (
+              <article key={sel.id} className="row">
+                <div className="row-main">
+                  <p className="title">
+                    <span className={
+                      sel.revoked_at ? "chip"
+                        : !sel.sent_at ? "chip warn"
+                        : !sel.first_opened_at ? "chip warn"
+                        : "chip ok"
+                    }>{sel.state}</span>{" "}
+                    {sel.objects} {plural(sel.objects, "объект", "объекта", "объектов")}
+                    {sel.sent_at && ` · отправлена ${formatDateTime(sel.sent_at)}`}
+                    {sel.first_opened_at
+                      ? ` · открыта, просмотров ${sel.view_count}`
+                      : sel.sent_at && " · клиент её ещё не открывал"}
+                    {sel.liked > 0 && ` · понравилось ${sel.liked}`}
+                  </p>
+                  {sel.note && <p className="muted">«{sel.note}»</p>}
+                  {sel.sent_at && !sel.revoked_at && (
+                    <p className="faint sm">
+                      ссылка клиенту: <code>/selection/{sel.token}</code>
+                    </p>
+                  )}
+                </div>
+                <div className="row-acts">
+                  {!sel.sent_at && (
+                    <ActionForm action={sendSelection} label="Отправить">
+                      <input type="hidden" name="selection_id" value={sel.id} />
+                      <input type="hidden" name="return_to"
+                             value={`/cabinet/requirements/${r.id}`} />
+                    </ActionForm>
+                  )}
+                  <a className="btn inline" href={`/cabinet/selections?open=${sel.id}`}>
+                    Что внутри
+                  </a>
+                  {sel.sent_at && !sel.revoked_at && (
+                    <details className="fold">
+                      <summary>Отозвать</summary>
+                      <ActionForm action={revokeSelection} label="Отозвать" danger>
+                        <input type="hidden" name="selection_id" value={sel.id} />
+                        <input type="hidden" name="return_to"
+                               value={`/cabinet/requirements/${r.id}`} />
+                        <span className="hint">
+                          Клиент перестанет открывать ссылку. Запись о том, что
+                          он получил, остаётся.
+                        </span>
+                      </ActionForm>
+                    </details>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {r.is_mine && fresh.length > 0 && (
+          <details className="fold wide">
+            <summary>Собрать новую подборку</summary>
+            <ActionForm action={createSelection} label="Собрать" className="act">
+              <input type="hidden" name="requirement_id" value={r.id} />
+              <input type="hidden" name="return_to"
+                     value={`/cabinet/requirements/${r.id}`} />
+              <p className="muted sm">
+                Отметьте варианты. Это тот же подбор, что ниже: вручную сюда
+                ничего не вписать.
+              </p>
+              {fresh.slice(0, 20).map((c) => (
+                <label key={c.object_id} className="check">
+                  <input type="checkbox" name="object_id" value={c.object_id} />
+                  {c.address} · {formatPrice(c.price, c.currency, "sale" as never)}
+                  {c.rooms ? ` · ${c.rooms} комн.` : ""}
+                  {c.fit !== "подходит" && <span className="chip warn">{c.fit}</span>}
+                  {c.source === "other" && (
+                    <span className="chip">{c.agency_name ?? "другая организация"}</span>
+                  )}
+                </label>
+              ))}
+              <label>
+                Что написать клиенту
+                <input name="note" maxLength={200}
+                       placeholder="Три варианта в центре, смотреть можно завтра" />
+              </label>
+            </ActionForm>
+          </details>
+        )}
+      </section>
 
       {/* ---- предложенное ------------------------------------------------ */}
       <section>

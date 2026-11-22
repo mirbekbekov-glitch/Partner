@@ -1347,3 +1347,8 @@ code { background: #f2f4f7; padding: 0.1rem 0.35rem; border-radius: 5px;
 .avatar-row { display: flex; gap: 1.25rem; align-items: flex-start; flex-wrap: wrap; }
 .avatar-row .grow { flex: 1 1 14rem; min-width: 0; }
 .avatar-name { display: inline-flex; align-items: center; gap: 0.45rem; }
+
+/* Складка во всю ширину: форма сбора подборки — это не короткая кнопка,
+   а список вариантов, и ужимать его в колонку действий незачем. */
+details.fold.wide { width: 100%; margin-top: 0.75rem; }
+details.fold.wide > summary { font-weight: 600; }
