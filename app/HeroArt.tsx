@@ -69,6 +69,17 @@ export function HeroArt() {
           <linearGradient id="side" x1="0" y1="0" x2="1" y2="0">
             <stop offset="0" stopColor="#6E1512" /><stop offset="1" stopColor="#4C0E0C" />
           </linearGradient>
+          {/* Торец плиты: узкая грань, её видно снизу, и она темнее
+              проступи, но светлее боковины. */}
+          <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#C3302B" /><stop offset="1" stopColor="#9A211C" />
+          </linearGradient>
+          {/* Стекло ограждения: почти прозрачное, с лёгким холодным
+              оттенком — иначе читается как грязь, а не как стекло. */}
+          <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#9FB4C2" stopOpacity=".30" />
+            <stop offset="1" stopColor="#9FB4C2" stopOpacity=".12" />
+          </linearGradient>
           <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="var(--art-ink)" stopOpacity=".18" />
             <stop offset="1" stopColor="var(--art-ink)" stopOpacity="0" />
@@ -92,6 +103,8 @@ const RUN = 58;
 const RISE = 46;
 const DX = 56;
 const DY = -32;
+const TH = 12;    // толщина плиты
+const RAIL = 92;  // высота ограждения
 const N = 5;
 const X0 = 52;
 const Y0 = 396;   // уровень пола
@@ -99,36 +112,52 @@ const Y0 = 396;   // уровень пола
 const pt = (x: number, y: number) => `${x.toFixed(1)},${y.toFixed(1)}`;
 
 function Stairs() {
-  const right = X0 + N * RUN;
-  const top = Y0 - N * RISE;
+  const slabs: React.ReactElement[] = [];
 
-  // Ступенчатый силуэт передней стенки: от пола вверх уступами и вниз по
-  // правому краю обратно к полу.
-  const front: string[] = [pt(X0, Y0)];
-  for (let i = 0; i < N; i++) {
-    front.push(pt(X0 + i * RUN, Y0 - (i + 1) * RISE));
-    front.push(pt(X0 + (i + 1) * RUN, Y0 - (i + 1) * RISE));
-  }
-  front.push(pt(right, Y0));
-
-  // Проступи — площадки, по которым идут. Светлее всего: на них падает свет.
-  const treads = Array.from({ length: N }, (_, i) => {
-    const y = Y0 - (i + 1) * RISE;
+  // От дальней ступени к ближней: ближняя перекрывает дальнюю, и порядок
+  // отрисовки заменяет расчёт видимости.
+  for (let i = N - 1; i >= 0; i--) {
     const x = X0 + i * RUN;
-    return (
-      <polygon key={i} fill="url(#tread)"
-        points={[pt(x, y), pt(x + RUN, y), pt(x + RUN + DX, y + DY), pt(x + DX, y + DY)].join(' ')} />
+    const y = Y0 - i * RISE;
+
+    // Проступь: площадка, по которой идут. Светлее всех — на неё падает свет.
+    slabs.push(
+      <polygon key={`t${i}`} fill="url(#tread)"
+        points={[pt(x, y), pt(x + RUN, y), pt(x + RUN + DX, y + DY), pt(x + DX, y + DY)].join(' ')} />,
     );
-  });
+    // Торец — передняя кромка плиты. Её толщина и делает ступень плитой,
+    // а не плоским прямоугольником.
+    slabs.push(
+      <polygon key={`e${i}`} fill="url(#edge)"
+        points={[pt(x, y), pt(x + RUN, y), pt(x + RUN, y + TH), pt(x, y + TH)].join(' ')} />,
+    );
+    // Правая боковина уходит в глубину — самая тёмная грань.
+    slabs.push(
+      <polygon key={`s${i}`} fill="url(#side)"
+        points={[pt(x + RUN, y), pt(x + RUN + DX, y + DY),
+                 pt(x + RUN + DX, y + DY + TH), pt(x + RUN, y + TH)].join(' ')} />,
+    );
+  }
+
+  // Стекло ограждения по дальней стороне. Рисуется ДО ступеней: стекло
+  // стоит за ними, и ступени должны оставаться резкими.
+  const gx1 = X0 + DX;
+  const gy1 = Y0 + DY;
+  const gx2 = X0 + N * RUN + DX;
+  const gy2 = Y0 - (N - 1) * RISE + DY;
+  const glass = [
+    pt(gx1, gy1), pt(gx2, gy2),
+    pt(gx2, gy2 - RAIL), pt(gx1, gy1 - RAIL),
+  ].join(' ');
 
   return (
     <>
-      {/* Правая боковина уходит в глубину — она темнее всех. */}
-      <polygon fill="url(#side)"
-        points={[pt(right, top), pt(right + DX, top + DY),
-                 pt(right + DX, Y0 + DY), pt(right, Y0)].join(' ')} />
-      {treads}
-      <polygon fill="url(#riser)" points={front.join(' ')} />
+      <polygon fill="url(#glass)" points={glass} />
+      {/* Поручень: тонкая линия поверх стекла. Без неё стекло выглядит
+          случайным пятном, а не ограждением. */}
+      <line x1={gx1} y1={gy1 - RAIL} x2={gx2} y2={gy2 - RAIL}
+            stroke="var(--accent)" strokeWidth="4" strokeLinecap="round" />
+      {slabs}
     </>
   );
 }
