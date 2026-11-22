@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { read } from "@/lib/photos";
 import { asAgent } from "@/lib/db";
 import { readSession } from "@/lib/session";
@@ -43,9 +42,7 @@ export async function GET(
     return new Response("Не найдено", { status: 404 });
   }
 
-  const stream = Readable.toWeb(file.body) as unknown as ReadableStream;
-
-  return new Response(stream, {
+  return new Response(file.body, {
     headers: {
       // Тип берётся из базы: там он записан при загрузке нами.
       "content-type": row.content_type,

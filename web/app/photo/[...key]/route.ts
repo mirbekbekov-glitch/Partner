@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { read } from "@/lib/photos";
 import { asCatalogRole } from "@/lib/db";
 
@@ -43,9 +42,7 @@ export async function GET(
     return new Response("Не найдено", { status: 404 });
   }
 
-  const stream = Readable.toWeb(file.body) as unknown as ReadableStream;
-
-  return new Response(stream, {
+  return new Response(file.body, {
     headers: {
       // Тип берётся из базы, а не из хранилища: в базе он записан при
       // загрузке нами, и именно он — ответ на вопрос «что это за файл».

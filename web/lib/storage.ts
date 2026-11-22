@@ -1,15 +1,3 @@
-import { createReadStream } from "node:fs";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join, normalize } from "node:path";
-import { Readable } from "node:stream";
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  NoSuchKey,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
-
 /**
  * Хранилище файлов.
  *
@@ -31,197 +19,87 @@ import {
  * ВЫБОР ДРАЙВЕРА — переменная `PHOTO_STORAGE`:
  *
  *   disk (по умолчанию) — каталог `PHOTO_DIR`. Разработка и тесты;
- *   s3                  — любое S3-совместимое хранилище: Cloudflare R2,
- *                         Supabase Storage, MinIO, сам S3.
+ *   r2                  — привязка R2 (`env.R2`). Продакшн на Cloudflare;
+ *   s3                  — любое S3-совместимое: Supabase Storage, MinIO, сам
+ *                         S3, и R2 тоже, если приложение живёт не в воркере.
  *
- * Драйвер s3 один на всех, потому что протокол один. Менять провайдера —
- * это менять четыре переменные окружения, а не писать код.
+ * Почему r2 и s3 — разные драйверы, хотя R2 говорит и на S3. Привязка не
+ * ходит по сети наружу и ничего не подписывает: воркер обращается к бакету
+ * внутри платформы. Это не только быстрее — в продакшне не нужны ключи
+ * доступа к бакету, то есть их нечего терять. Драйвер s3 остаётся, потому что
+ * им проверяется слой в node и им же сделан перенос с диска.
+ *
+ * ПОЧЕМУ ИМПОРТ ОТЛОЖЕННЫЙ. Тот же урок, что с sharp: статический импорт
+ * вычисляется при загрузке модуля, и из-за одной такой строки падал весь
+ * кабинет. Отложенный импорт до своей ветки не доходит, поэтому в воркере
+ * не вычисляются ни `node:fs`, ни AWS SDK.
+ *
+ * Чего отложенный импорт НЕ делает: он не убирает код из сборки. Сборщик
+ * выносит каждую ветку отдельным куском (`storage.s3`, `images.sharp` — по
+ * 128 КБ), и они уезжают в воркер, просто никогда не загружаются. Весь код
+ * воркера — 2,9 МБ, предел далеко, поэтому это оставлено как есть; но
+ * написать «AWS SDK в продакшн не попадает» было бы неправдой.
  */
 
+/**
+ * Прочитанный файл.
+ *
+ * Тело — веб-поток, а не `Readable` из node. Раньше был `Readable`, и каждый
+ * маршрут отдачи переводил его в веб-поток руками. У R2 тело веб-поток уже, и
+ * общая валюта тут одна: перевод делает тот драйвер, которому он нужен, а
+ * маршруты отдают тело как есть.
+ */
 export type StoredObject = {
-  body: Readable;
+  body: ReadableStream;
   size: number | null;
   contentType: string;
 };
 
-export interface Storage {
+export interface Driver {
   /** Положить байты под ключом. Ключ выдаёт вызывающий, а не хранилище. */
   put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   /** Прочитать. `null` — файла нет; это не ошибка, а ответ. */
   read(key: string): Promise<StoredObject | null>;
   /** Убрать. Отсутствие файла ошибкой не считается: запись уже удалена. */
   remove(key: string): Promise<void>;
+}
+
+export interface Storage extends Driver {
   /** Как называть это в сообщениях об ошибках. */
   readonly name: string;
 }
 
-/* -------------------------------------------------------------------------
- * Диск
- * ---------------------------------------------------------------------- */
-
-function diskRoot(): string {
-  const dir = process.env.PHOTO_DIR;
-  if (!dir) {
-    throw new Error(
-      "PHOTO_DIR не задан: хранилищу фотографий негде лежать. Смотрите web/.env.example.",
-    );
-  }
-  return dir;
-}
-
 /**
- * Путь файла в каталоге. Ключ уже ограничен проверкой схемы в базе —
- * проверяется ещё раз: обход каталога не должен зависеть от одной проверки.
+ * Обёртка, которая подгружает драйвер при первом же действии.
+ *
+ * `storage()` остаётся обычной функцией, а не асинхронной: иначе каждое место
+ * вызова получило бы `await` ради того, чего там не решают.
  */
-function diskPath(key: string): string {
-  const base = normalize(diskRoot());
-  const path = join(base, normalize(key));
-  if (!path.startsWith(base)) {
-    throw new Error(`ключ ${key} выводит за пределы хранилища`);
-  }
-  return path;
+function deferred(name: string, load: () => Promise<Driver>): Storage {
+  return {
+    name,
+    async put(key, bytes, contentType) {
+      return (await load()).put(key, bytes, contentType);
+    },
+    async read(key) {
+      return (await load()).read(key);
+    },
+    async remove(key) {
+      return (await load()).remove(key);
+    },
+  };
 }
 
-const disk: Storage = {
-  name: "диск",
-
-  async put(key, bytes) {
-    const path = diskPath(key);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, bytes);
-  },
-
-  async read(key) {
-    let path: string;
-    try {
-      path = diskPath(key);
-    } catch {
-      return null;
-    }
-    try {
-      const info = await stat(path);
-      return {
-        body: createReadStream(path),
-        size: info.size,
-        contentType: "image/webp",
-      };
-    } catch {
-      return null;
-    }
-  },
-
-  async remove(key) {
-    try {
-      await rm(diskPath(key), { force: true });
-    } catch (error) {
-      console.error(`не удалось убрать файл ${key}: ${String(error)}`);
-    }
-  },
-};
-
-/* -------------------------------------------------------------------------
- * S3-совместимое
- * ---------------------------------------------------------------------- */
-
-declare global {
-  // Клиент переживает перезагрузку модулей в dev: иначе на каждую правку
-  // файла заводилось бы новое соединение.
-  var __photoS3: S3Client | undefined;
-}
-
-function s3Bucket(): string {
-  const bucket = process.env.PHOTO_S3_BUCKET;
-  if (!bucket) {
-    throw new Error(
-      "PHOTO_S3_BUCKET не задан, а PHOTO_STORAGE=s3. Смотрите web/.env.example.",
-    );
-  }
-  return bucket;
-}
-
-function s3Client(): S3Client {
-  if (!globalThis.__photoS3) {
-    const endpoint = process.env.PHOTO_S3_ENDPOINT;
-    const accessKeyId = process.env.PHOTO_S3_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.PHOTO_S3_SECRET_ACCESS_KEY;
-
-    if (!accessKeyId || !secretAccessKey) {
-      throw new Error(
-        "PHOTO_S3_ACCESS_KEY_ID и PHOTO_S3_SECRET_ACCESS_KEY не заданы, а PHOTO_STORAGE=s3.",
-      );
-    }
-
-    globalThis.__photoS3 = new S3Client({
-      // У R2 и прочих совместимых регион формальный, но библиотека его
-      // требует. «auto» — то, что просит R2.
-      region: process.env.PHOTO_S3_REGION ?? "auto",
-      endpoint,
-      // Путь вида endpoint/bucket/key вместо bucket.endpoint/key. R2, MinIO
-      // и Supabase Storage работают так; у самого S3 это тоже допустимо.
-      forcePathStyle: true,
-      credentials: { accessKeyId, secretAccessKey },
-    });
-  }
-  return globalThis.__photoS3;
-}
-
-const s3: Storage = {
-  name: "S3",
-
-  async put(key, bytes, contentType) {
-    await s3Client().send(
-      new PutObjectCommand({
-        Bucket: s3Bucket(),
-        Key: key,
-        Body: bytes,
-        ContentType: contentType,
-        // Приватно: ссылку на файл отдаёт приложение, а не хранилище.
-        CacheControl: "private, max-age=300",
-      }),
-    );
-  },
-
-  async read(key) {
-    try {
-      const out = await s3Client().send(
-        new GetObjectCommand({ Bucket: s3Bucket(), Key: key }),
-      );
-      if (!out.Body) return null;
-      return {
-        body: out.Body as Readable,
-        size: typeof out.ContentLength === "number" ? out.ContentLength : null,
-        contentType: out.ContentType ?? "image/webp",
-      };
-    } catch (error) {
-      // «Нет такого ключа» — это ответ, а не поломка: маршрут отдаст 404.
-      // Всё остальное — поломка, и молчать о ней нельзя.
-      if (error instanceof NoSuchKey) return null;
-      const code = (error as { name?: string; $metadata?: { httpStatusCode?: number } });
-      if (code.name === "NotFound" || code.$metadata?.httpStatusCode === 404) return null;
-      throw error;
-    }
-  },
-
-  async remove(key) {
-    try {
-      await s3Client().send(
-        new DeleteObjectCommand({ Bucket: s3Bucket(), Key: key }),
-      );
-    } catch (error) {
-      console.error(`не удалось убрать файл ${key}: ${String(error)}`);
-    }
-  },
-};
-
-/* -------------------------------------------------------------------------
- * Выбор
- * ---------------------------------------------------------------------- */
+const disk = deferred("диск", async () => (await import("./storage.disk.ts")).driver);
+const r2 = deferred("R2", async () => (await import("./storage.r2.ts")).driver);
+const s3 = deferred("S3", async () => (await import("./storage.s3.ts")).driver);
 
 export function storage(): Storage {
   const kind = process.env.PHOTO_STORAGE ?? "disk";
-  if (kind === "s3") return s3;
   if (kind === "disk") return disk;
+  if (kind === "r2") return r2;
+  if (kind === "s3") return s3;
   throw new Error(
-    `PHOTO_STORAGE=${kind} не поддерживается: ожидается disk или s3.`,
+    `PHOTO_STORAGE=${kind} не поддерживается: ожидается disk, r2 или s3.`,
   );
 }
