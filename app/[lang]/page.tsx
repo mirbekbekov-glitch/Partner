@@ -9,6 +9,7 @@ import {
 import { t, kindName, freshWordIn, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { CatalogHeader } from '../CatalogHeader';
 import { HeroArt } from '../HeroArt';
+import { FindButton } from '../FindButton';
 import { RequestPitch } from '../RequestPitch';
 import { CityMap } from '../CityMap';
 import { CatalogFooter } from '../CatalogFooter';
@@ -50,11 +51,16 @@ type Row = {
   actual_at: string;
 };
 
-function Search({ lang, f }: { lang: Lang; f: CatalogFilters }) {
+function Search({ lang, f, deal }: { lang: Lang; f: CatalogFilters; deal: 'sale' | 'rent' }) {
   const d = t(lang);
   const up = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
-  const tabs: [CatalogFilters['deal'], string][] = [
-    ['sale', d.tabBuy], ['rent', d.tabRent], [null, d.tabAll],
+  // Две вкладки, а не три. Поиск жилья бинарен: человек либо покупает,
+  // либо снимает, и «всё сразу» было ответом на вопрос, которого никто
+  // не задаёт. Отсутствие параметра означает покупку — так же, как на
+  // любой площадке, куда человек приходит по привычке.
+  const active: 'sale' | 'rent' = f.deal ?? 'sale';
+  const tabs: [CatalogFilters['deal'], 'sale' | 'rent', string][] = [
+    [null, 'sale', d.tabBuy], ['rent', 'rent', d.tabRent],
   ];
   return (
     <div className="console">
@@ -63,9 +69,9 @@ function Search({ lang, f }: { lang: Lang; f: CatalogFilters }) {
           кнопками: выбранная вкладка должна быть в адресе, чтобы ссылкой
           на «аренду в Асанбае» можно было поделиться. */}
       <div className="tabs">
-        {tabs.map(([v, label]) => (
+        {tabs.map(([v, key, label]) => (
           <Link key={label} href={catalogHref(lang, { ...f, deal: v }, 1)}
-                className="tab" aria-current={f.deal === v ? 'true' : undefined}>
+                className="tab" aria-current={active === key ? 'true' : undefined}>
             {label}
           </Link>
         ))}
@@ -103,7 +109,7 @@ function Search({ lang, f }: { lang: Lang; f: CatalogFilters }) {
             <input id="to" name="to" type="number" min={0} step={1000} placeholder={d.priceHint}
                    inputMode="numeric" defaultValue={f.priceMax ?? ''} />
           </div>
-          <button className="go" type="submit">{d.search}</button>
+          <FindButton lang={lang} deal={deal} />
         </div>
 
         {/* Район и нижняя граница цены нужны меньшинству, но нужны всерьёз.
@@ -128,6 +134,14 @@ function Search({ lang, f }: { lang: Lang; f: CatalogFilters }) {
   );
 }
 
+/** Галочка подтверждения. */
+const Check = () => (
+  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+    <path d="M2.5 7.5 L5.5 10.5 L11.5 3.5" stroke="currentColor" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 /** Ступенька из знака: шесть квадратов лесенкой. */
 const Stair = () => (
   <span className="stair" aria-hidden="true">
@@ -145,6 +159,8 @@ export default async function Catalog({
   const { lang } = await params;
   const d = t(lang);
   const f = parseCatalogFilters(await searchParams);
+  // Нет параметра — значит покупка: вкладок две, третьей («всё сразу») нет.
+  const deal: 'sale' | 'rent' = f.deal ?? 'sale';
   const supabase = await createClient();
   const order = SORTS.find((s) => s.key === f.sort) ?? SORTS[0];
 
@@ -155,7 +171,7 @@ export default async function Catalog({
     .order(order.column, { ascending: order.asc, nullsFirst: false })
     .range((f.page - 1) * CATALOG_PAGE_SIZE, f.page * CATALOG_PAGE_SIZE - 1);
 
-  if (f.deal) query = query.eq('deal_type', f.deal);
+  query = query.eq('deal_type', deal);
   if (f.kind) query = query.eq('kind', f.kind);
   if (f.zone) query = query.eq('zone', f.zone);
   if (f.rooms) query = query.eq('rooms', f.rooms);
@@ -167,7 +183,7 @@ export default async function Catalog({
   // пультом поиска. Без фильтров: это состояние каталога целиком.
   const { data: all } = await supabase
     .from('public_catalog_v')
-    .select('zone')
+    .select('zone, deal_type')
     .limit(1000);
   const { data, count, error } = await query;
   const rows = (data ?? []) as Row[];
@@ -177,6 +193,7 @@ export default async function Catalog({
   // показывать пустой район — обманывать нажатие.
   const byZone = new Map<string, number>();
   for (const r of all ?? []) {
+    if (r.deal_type !== deal) continue;
     const z = r.zone as string | null;
     if (z) byZone.set(z, (byZone.get(z) ?? 0) + 1);
   }
@@ -199,7 +216,7 @@ export default async function Catalog({
       </section>
 
       <div className="wrap">
-        <Search lang={lang} f={f} />
+        <Search lang={lang} f={f} deal={deal} />
 
         {/* Районы строкой: самый частый первый шаг — «покажите, что есть
             в Асанбае». Это ссылки, а не украшение. */}
@@ -222,7 +239,7 @@ export default async function Catalog({
 
         <div className="strip">
           <h2>
-            {f.deal === 'rent' ? d.forRent : f.deal === 'sale' ? d.forSale : d.forSaleAndRent}
+            {deal === 'rent' ? d.forRent : d.forSale}
           </h2>
           <span className="found">{error ? d.catalogDown : d.objectsCount(total)}</span>
           <div className="sorts">
@@ -253,23 +270,31 @@ export default async function Catalog({
                   <Stair />
                   <div className="pic">
                     {photo ? <Photo src={photo} fallback={facade} /> : facade}
+                    {/* На фотографии ровно один бейдж — тип сделки. Второй
+                        превращал пёструю фотографию в кашу, а свежесть всё
+                        равно повторялась строкой ниже. */}
                     <div className="flags">
-                      {/* Тип сделки — первое, что ищут в смешанном каталоге,
-                          а до этого он читался только по «/ мес.». */}
                       <span className="flag deal">
                         {o.deal_type === 'sale' ? d.sale : d.rent}
                       </span>
-                      {/* Метка свежести — единственная, за которой есть данные:
-                          её держит инвариант 5, а не маркетинг. */}
-                      {days <= 3 ? (
-                        <span className="flag"><i className="pulse" />{d.confirmed} {fresh}</span>
-                      ) : null}
                     </div>
                   </div>
                   <div className="info">
-                    <span className="price num">
-                      {publicMoney(lang, o.price, o.currency)}
-                      {o.deal_type === 'rent' ? <small>{d.perMonth}</small> : null}
+                    <span className="price-row">
+                      <span className="price num">
+                        {publicMoney(lang, o.price, o.currency)}
+                        {o.deal_type === 'rent' ? <small>{d.perMonth}</small> : null}
+                      </span>
+                      {/* Отметка подтверждения — единственная, за которой есть
+                          данные: её держит инвариант 5, а не маркетинг.
+                          Галочка, а не точка: «сегодня» рядом с точкой не
+                          говорит, что именно произошло сегодня. Полная
+                          фраза остаётся для экранного диктора. */}
+                      <span className="ok-mark" title={`${d.confirmedBy} ${fresh}`}>
+                        <Check />
+                        <span aria-hidden="true">{fresh}</span>
+                        <span className="sr">{d.confirmedBy} {fresh}</span>
+                      </span>
                     </span>
                     <span className="addr">{o.address}</span>
                     <div className="facts">
@@ -283,7 +308,6 @@ export default async function Catalog({
                         </span>
                       ) : null}
                     </div>
-                    <span className="conf"><i className="pulse" />{d.confirmedBy} {fresh}</span>
                   </div>
                 </Link>
               );

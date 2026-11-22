@@ -32,6 +32,7 @@
   --on-ink-faint: #8B929C;
   --steel: #8A95A3;
   --art-ink: #12161C;
+  --chip-fg: #4B4B46;
   /* Красный ярче фирменного — для тёмного фона и наведения. */
   --accent-2: #E0453F;
   /* Цифры моноширинным: цена, площадь и этаж выстраиваются в колонку, и
@@ -73,6 +74,7 @@
     --on-ink-faint: #8B929C;
     --steel: #6B7684;
     --art-ink: #343C46;
+    --chip-fg: #ADADA8;
     --accent-2: #F06A64;
     /* И текст на кнопке здесь тёмный: белый на светло-красном — 2.6 : 1. */
     --accent-fg: #14161a;
@@ -107,6 +109,7 @@
   --on-ink-faint: #8B929C;
   --steel: #6B7684;
   --art-ink: #343C46;
+  --chip-fg: #ADADA8;
   --accent-2: #F06A64;
   --accent-fg: #14161a;
   --error-fg: #F3A6A2;
@@ -651,12 +654,26 @@ main:has(.nav) { max-width: none; padding: 0; }
 .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--ok-fg); flex: none; }
 
 .info { padding: 16px; display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+/* Цена и отметка подтверждения в одной строке: доверие стоит рядом с
+   деньгами, а не в подвале карточки. Раньше одно и то же говорилось
+   дважды — бейджем на фотографии и строкой внизу. */
+.price-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .price { font-size: 24px; font-weight: 800; letter-spacing: -.03em; }
+.ok-mark { display: inline-flex; align-items: center; gap: 5px; margin-left: auto;
+  font-size: 12px; font-weight: 600; color: var(--ok-fg); white-space: nowrap; }
+.ok-mark .pulse { background: var(--ok-fg); }
+/* Текст только для экранного диктора: на карточке у отметки места на
+   полную фразу нет, а диктору «сегодня» без глагола ничего не говорит. */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap; }
 .price small { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
 .addr { font-size: 16px; font-weight: 700; letter-spacing: -.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px; }
-.fact { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--sunk);
+/* Цвет текста плашек отдельный от общего приглушённого: на светлой
+   подложке тот давал 4.59 : 1 — норму проходит, но впритык, и мелкий
+   текст читался бледно. Здесь 7.5 : 1. */
+.fact { font-size: 12px; font-weight: 600; color: var(--chip-fg); background: var(--sunk);
   border-radius: 6px; padding: 4px 8px; }
 .conf { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted);
   border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; }
@@ -824,9 +841,9 @@ main:has(.nav) { max-width: none; padding: 0; }
 .zone-cell[aria-current='true'] small { color: #fff; }
 /* Район без объектов не кликается и приглушён: нажатие, после которого
    ничего нет, — обман. */
-.zone-cell.off { background: transparent; border-style: dashed; color: var(--muted); }
-.zone-cell.off b { font-weight: 600; }
-.zone-cell.off small { color: var(--muted); font-weight: 500; font-size: 11px; }
+.zone-cell.off { background: transparent; border-color: transparent; color: var(--muted);
+  opacity: .55; cursor: default; }
+.zone-cell.off b { font-weight: 500; font-size: 13px; }
 
 .avenue { position: absolute; left: 14px; right: 14px; top: 50%; height: 1px;
   background: var(--accent); opacity: .35; pointer-events: none; z-index: 1; }

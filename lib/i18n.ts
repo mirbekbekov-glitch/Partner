@@ -36,18 +36,19 @@ type Dict = {
   heroTitle: string; heroEm: string;
   // Поиск
   address: string; addressHint: string; deal: string; anyDeal: string;
-  tabBuy: string; tabRent: string; tabAll: string;
+  tabBuy: string; tabRent: string;
   moreFilters: string; priceFrom: string;
   sale: string; rent: string; kind: string; anyKind: string;
-  rooms: string; anyRooms: string; priceTo: string; search: string; reset: string;
+  rooms: string; anyRooms: string; priceTo: string;
+  search: string; searchCount: (n: number) => string; reset: string;
   // Выдача
-  forSaleAndRent: string; forSale: string; forRent: string;
+  forSale: string; forRent: string;
   sortFresh: string; sortCheap: string; sortBig: string;
   nothingFound: string; nothingYet: string; catalogDown: string;
   pageOf: (cur: number, total: number) => string;
   back: string; forward: string;
   // Карточка
-  perMonth: string; confirmed: string; confirmedBy: string;
+  perMonth: string; confirmedBy: string;
   today: string; yesterday: string; daysAgo: (n: number) => string;
   objectsCount: (n: number) => string;
   // Страница объекта
@@ -98,14 +99,15 @@ const ru: Dict = {
   address: 'Адрес или район', addressHint: 'Чүй, Асанбай, Джал…',
   deal: 'Сделка', anyDeal: 'Любая', sale: 'Продажа', rent: 'Аренда',
   kind: 'Тип', anyKind: 'Любой', rooms: 'Комнат', anyRooms: 'Любое',
-  priceTo: 'Цена до', search: 'Показать', reset: 'сбросить',
-  forSaleAndRent: 'В продаже и аренде', forSale: 'В продаже', forRent: 'В аренде',
+  priceTo: 'Цена до', search: 'Показать', searchCount: (n) => `Найти ${n}`,
+  reset: 'сбросить',
+  forSale: 'В продаже', forRent: 'В аренде',
   sortFresh: 'Сначала свежие', sortCheap: 'Дешевле', sortBig: 'Больше площади',
   nothingFound: 'Под эти условия ничего не подошло. Попробуйте расширить поиск — например, убрать ограничение по цене.',
   nothingYet: 'Пока нет опубликованных объектов.',
   catalogDown: 'каталог временно недоступен',
   pageOf: (c, n) => `страница ${c} из ${n}`, back: '← назад', forward: 'вперёд →',
-  perMonth: ' / мес.', confirmed: 'Подтверждён', confirmedBy: 'Агент подтвердил',
+  perMonth: ' / мес.', confirmedBy: 'Агент подтвердил',
   today: 'сегодня', yesterday: 'вчера',
   daysAgo: (n) => `${n} ${plural(n, 'день', 'дня', 'дней')} назад`,
   objectsCount: (n) => `${n} ${plural(n, 'объект', 'объекта', 'объектов')}`,
@@ -137,7 +139,7 @@ const ru: Dict = {
   drawingAlt: 'Рисунок вместо фотографии',
   forAgentsShort: 'Вход',
   city: 'Бишкек',
-  tabBuy: 'Купить', tabRent: 'Снять', tabAll: 'Всё сразу',
+  tabBuy: 'Купить', tabRent: 'Снять',
   moreFilters: 'Дополнительные фильтры', priceFrom: 'Цена от',
   reqNav: 'Заявки',
   reqTitle: 'Что вы ищете?',
@@ -179,14 +181,15 @@ const ky: Dict = {
   address: 'Дарек же район', addressHint: 'Чүй, Асанбай, Жал…',
   deal: 'Бүтүм', anyDeal: 'Баары', sale: 'Сатуу', rent: 'Ижара',
   kind: 'Түрү', anyKind: 'Баары', rooms: 'Бөлмө', anyRooms: 'Баары',
-  priceTo: 'Баасы чейин', search: 'Көрсөтүү', reset: 'тазалоо',
-  forSaleAndRent: 'Сатууда жана ижарада', forSale: 'Сатууда', forRent: 'Ижарада',
+  priceTo: 'Баасы чейин', search: 'Көрсөтүү', searchCount: (n) => `${n} табуу`,
+  reset: 'тазалоо',
+  forSale: 'Сатууда', forRent: 'Ижарада',
   sortFresh: 'Жаңылары биринчи', sortCheap: 'Арзаныраак', sortBig: 'Аянты чоңураак',
   nothingFound: 'Бул шарттарга эч нерсе туура келген жок. Издөөнү кеңейтип көрүңүз — мисалы, баа чегин алып салыңыз.',
   nothingYet: 'Азырынча жарыяланган объекттер жок.',
   catalogDown: 'каталог убактылуу жеткиликсиз',
   pageOf: (c, n) => `${n} барактын ${c}-си`, back: '← артка', forward: 'алга →',
-  perMonth: ' / айына', confirmed: 'Ырасталган', confirmedBy: 'Агент ырастады',
+  perMonth: ' / айына', confirmedBy: 'Агент ырастады',
   today: 'бүгүн', yesterday: 'кечээ',
   daysAgo: (n) => `${n} күн мурун`,
   objectsCount: (n) => `${n} объект`,
@@ -218,7 +221,7 @@ const ky: Dict = {
   drawingAlt: 'Сүрөттүн ордуна тартылган сүрөт',
   forAgentsShort: 'Кирүү',
   city: 'Бишкек',
-  tabBuy: 'Сатып алуу', tabRent: 'Ижарага алуу', tabAll: 'Баары',
+  tabBuy: 'Сатып алуу', tabRent: 'Ижарага алуу',
   moreFilters: 'Кошумча чыпкалар', priceFrom: 'Баасы',
   reqNav: 'Арыздар',
   reqTitle: 'Эмне издеп жатасыз?',
@@ -260,14 +263,15 @@ const en: Dict = {
   address: 'Address or district', addressHint: 'Chuy, Asanbay, Jal…',
   deal: 'Deal', anyDeal: 'Any', sale: 'For sale', rent: 'For rent',
   kind: 'Type', anyKind: 'Any', rooms: 'Rooms', anyRooms: 'Any',
-  priceTo: 'Price up to', search: 'Show', reset: 'clear',
-  forSaleAndRent: 'For sale and rent', forSale: 'For sale', forRent: 'For rent',
+  priceTo: 'Price up to', search: 'Show', searchCount: (n) => `Show ${n}`,
+  reset: 'clear',
+  forSale: 'For sale', forRent: 'For rent',
   sortFresh: 'Recently confirmed', sortCheap: 'Lowest price', sortBig: 'Largest area',
   nothingFound: 'Nothing matched these filters. Try widening the search — for example, remove the price limit.',
   nothingYet: 'No published listings yet.',
   catalogDown: 'the catalogue is temporarily unavailable',
   pageOf: (c, n) => `page ${c} of ${n}`, back: '← back', forward: 'next →',
-  perMonth: ' / month', confirmed: 'Confirmed', confirmedBy: 'Agent confirmed',
+  perMonth: ' / month', confirmedBy: 'Agent confirmed',
   today: 'today', yesterday: 'yesterday',
   daysAgo: (n) => `${n} ${n === 1 ? 'day' : 'days'} ago`,
   objectsCount: (n) => `${n} ${n === 1 ? 'listing' : 'listings'}`,
@@ -299,7 +303,7 @@ const en: Dict = {
   drawingAlt: 'Drawing shown instead of a photo',
   forAgentsShort: 'Log in',
   city: 'Bishkek',
-  tabBuy: 'Buy', tabRent: 'Rent', tabAll: 'Everything',
+  tabBuy: 'Buy', tabRent: 'Rent',
   moreFilters: 'More filters', priceFrom: 'Price from',
   reqNav: 'Requests',
   reqTitle: 'What are you looking for?',
@@ -341,14 +345,15 @@ const zh: Dict = {
   address: '地址或区域', addressHint: '楚河、阿桑拜、扎尔…',
   deal: '交易', anyDeal: '不限', sale: '出售', rent: '出租',
   kind: '类型', anyKind: '不限', rooms: '房间数', anyRooms: '不限',
-  priceTo: '价格上限', search: '查找', reset: '清除',
-  forSaleAndRent: '出售与出租', forSale: '出售', forRent: '出租',
+  priceTo: '价格上限', search: '查找', searchCount: (n) => `查找 ${n} 套`,
+  reset: '清除',
+  forSale: '出售', forRent: '出租',
   sortFresh: '最近确认优先', sortCheap: '价格从低到高', sortBig: '面积从大到小',
   nothingFound: '没有符合条件的房源。可以放宽筛选，例如取消价格上限。',
   nothingYet: '暂无已发布的房源。',
   catalogDown: '目录暂时无法访问',
   pageOf: (c, n) => `第 ${c} 页 / 共 ${n} 页`, back: '← 上一页', forward: '下一页 →',
-  perMonth: ' / 月', confirmed: '已确认', confirmedBy: '经纪人确认于',
+  perMonth: ' / 月', confirmedBy: '经纪人确认于',
   today: '今天', yesterday: '昨天',
   daysAgo: (n) => `${n} 天前`,
   objectsCount: (n) => `${n} 套房源`,
@@ -380,7 +385,7 @@ const zh: Dict = {
   drawingAlt: '以插图代替照片',
   forAgentsShort: '登录',
   city: '比什凯克',
-  tabBuy: '购买', tabRent: '租赁', tabAll: '全部',
+  tabBuy: '购买', tabRent: '租赁',
   moreFilters: '更多筛选', priceFrom: '价格下限',
   reqNav: '需求登记',
   reqTitle: '您在找什么样的房子？',

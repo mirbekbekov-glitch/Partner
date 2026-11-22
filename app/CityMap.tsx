@@ -70,11 +70,14 @@ export function CityMap({
         {PLAN.map((c) => {
           const n = counts.get(c.name) ?? 0;
           const style = { gridColumn: c.col, gridRow: c.row } as React.CSSProperties;
+          // Район без объектов — часть плана города, а не пустая полка.
+          // Подпись «пока пусто» в каждой второй ячейке читалась как
+          // «площадка полупустая» и била по доверию сильнее, чем
+          // отсутствие самого района.
           if (n === 0) {
             return (
-              <span className="zone-cell off" style={style} key={c.name}>
+              <span className="zone-cell off" style={style} key={c.name} title={empty}>
                 <b>{c.name}</b>
-                <small>{empty}</small>
               </span>
             );
           }
