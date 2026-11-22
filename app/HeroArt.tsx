@@ -54,7 +54,9 @@ export function HeroArt() {
   return (
     <div className="hero-art" ref={box} aria-hidden="true">
       <div className="hero-glow" />
-      <svg viewBox="0 0 470 470" preserveAspectRatio="xMidYMid meet">
+      {/* Поле шире высоты: призрак следующего марша уходит вправо-вверх,
+            и в квадрате он обрезался. */}
+      <svg viewBox="0 0 560 470" preserveAspectRatio="xMidYMid meet">
         <defs>
           {/* Три грани — три заливки. Проступь светлее всех: на неё падает
               свет. Подступёнок в тени, боковина между ними. */}
@@ -72,6 +74,7 @@ export function HeroArt() {
             <stop offset="1" stopColor="var(--art-ink)" stopOpacity="0" />
           </linearGradient>
         </defs>
+        <Frame />
         {/* Тень на полу рисуется до лестницы: иначе ложится поверх плиты. */}
         <ellipse cx="230" cy="404" rx="200" ry="20" fill="url(#shade)" />
         <Stairs />
@@ -127,5 +130,64 @@ function Stairs() {
       {treads}
       <polygon fill="url(#riser)" points={front.join(' ')} />
     </>
+  );
+}
+
+/**
+ * Каркас: линии построения вокруг лестницы.
+ *
+ * Чертёж, а не украшение: изометрическая сетка пола, призрак следующего
+ * марша и выносные линии с засечками. Так рисуют конструкцию до того, как
+ * её построят, — и это ровно то, чем занимается агентство: показывает
+ * пространство, которого человек ещё не видел.
+ *
+ * Линии тонкие и серые, и они уходят ПОД красный объём: на чертеже
+ * готовая деталь перекрывает построение, а не наоборот.
+ */
+function Frame() {
+  const right = X0 + N * RUN;
+  const top = Y0 - N * RISE;
+  const lines: React.ReactElement[] = [];
+
+  // Сетка пола в изометрии: две семьи параллельных линий.
+  for (let i = 0; i <= 7; i++) {
+    const x = X0 - 40 + i * RUN;
+    lines.push(
+      <line key={`a${i}`} x1={x} y1={Y0} x2={x + DX * 2.2} y2={Y0 + DY * 2.2} />,
+    );
+  }
+  for (let j = 0; j <= 4; j++) {
+    const k = j / 4;
+    lines.push(
+      <line key={`b${j}`}
+        x1={X0 - 40 + DX * 2.2 * k} y1={Y0 + DY * 2.2 * k}
+        x2={X0 - 40 + 7 * RUN + DX * 2.2 * k} y2={Y0 + DY * 2.2 * k} />,
+    );
+  }
+
+  // Призрак следующего марша: лестница продолжается вверх-вправо.
+  const ghost: string[] = [pt(right, top)];
+  for (let i = 0; i < 2; i++) {
+    ghost.push(pt(right + i * RUN, top - (i + 1) * RISE));
+    ghost.push(pt(right + (i + 1) * RUN, top - (i + 1) * RISE));
+  }
+  lines.push(<polyline key="ghost" points={ghost.join(' ')} fill="none" />);
+  lines.push(
+    <polyline key="ghost-d" fill="none"
+      points={[pt(right + DX, top + DY),
+               pt(right + DX, top + DY - 2 * RISE),
+               pt(right + DX + 2 * RUN, top + DY - 2 * RISE)].join(' ')} />,
+  );
+
+  // Выносная линия с засечками — высота подъёма.
+  const hx = X0 - 26;
+  lines.push(<line key="dim" x1={hx} y1={Y0} x2={hx} y2={top} />);
+  lines.push(<line key="dim-a" x1={hx - 6} y1={Y0} x2={hx + 6} y2={Y0} />);
+  lines.push(<line key="dim-b" x1={hx - 6} y1={top} x2={hx + 6} y2={top} />);
+
+  return (
+    <g className="frame" strokeWidth="1" strokeLinecap="round">
+      {lines}
+    </g>
   );
 }

@@ -466,7 +466,10 @@ main:has(.nav) { max-width: none; padding: 0; }
   background-size: 64px 64px;
   mask-image: linear-gradient(to bottom, rgba(0,0,0,.9), transparent 78%); }
 .hero-art { position: absolute; inset: 0; pointer-events: none; }
-.hero-art svg { position: absolute; right: 0; top: 0; width: 42%; min-width: 280px;
+/* Линии построения: тонкие, серые и заметно тише объёма. На чертеже
+   конструкция читается, но не спорит с деталью. */
+.hero-art .frame { stroke: var(--steel); opacity: .62; fill: none; }
+.hero-art svg { position: absolute; right: 0; top: 0; width: 48%; min-width: 320px;
   /* Не на всю высоту героя: нижние сто пикселей закрыты пультом поиска,
      и основание лестницы пряталось бы за ним. */
   height: calc(100% - 96px);
