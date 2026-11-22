@@ -25,20 +25,33 @@
     "smoke:feed": "node scripts/smoke-feed.mjs",
     "notify": "node --experimental-strip-types --no-warnings scripts/send-notifications.mjs",
     "smoke:storage": "node --experimental-strip-types --no-warnings scripts/smoke-storage.mjs",
-    "photos:to-storage": "node --experimental-strip-types --no-warnings scripts/photos-to-storage.mjs"
+    "photos:to-storage": "node --experimental-strip-types --no-warnings scripts/photos-to-storage.mjs",
+    "dev:vinext": "vite dev --port 3001",
+    "build:vinext": "vite build",
+    "start:vinext": "vite preview",
+    "deploy:vinext": "vinext-cloudflare deploy"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.726.1",
+    "@aws-sdk/client-s3": "3.726.1",
+    "@vinext/cloudflare": "1.4.0",
     "next": "16.4.6",
     "pg": "8.13.1",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "sharp": "^0.35.5"
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
-    "@types/node": "22.10.5",
+    "@cloudflare/vite-plugin": "2.0.0-rc.3",
+    "@types/node": "22.20.5",
     "@types/pg": "8.11.10",
-    "@types/react": "19.2.2",
-    "typescript": "5.7.3"
-  }
+    "@types/react": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "@vitejs/plugin-rsc": "0.5.39",
+    "cf": "1.0.0-rc.2",
+    "react-server-dom-webpack": "19.3.1",
+    "typescript": "5.7.3",
+    "vinext": "1.4.6",
+    "vite": "8.3.0"
+  },
+  "type": "module"
 }

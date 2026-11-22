@@ -1,9 +1,8 @@
 "use server";
 
-import type { PoolClient } from "pg";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { asAgent, asAuthService } from "../../lib/db";
+import { asAgent, asAuthService, type Db } from "../../lib/db";
 import { clearSession, readSession, writeSession } from "../../lib/session";
 import { channel, sendLoginCode, showsCodeOnScreen } from "../../lib/otp";
 import {
@@ -50,7 +49,7 @@ function humanize(error: unknown): string {
  * имя) — ответ у кнопки, там он нагляднее.
  */
 async function actThenNotice(
-  fn: (db: PoolClient) => Promise<string>,
+  fn: (db: Db) => Promise<string>,
   path: string,
 ): Promise<Result> {
   const result = await act(fn, path);
@@ -82,7 +81,7 @@ function backTo(form: FormData, fallback: string): string {
 }
 
 async function act(
-  fn: (db: PoolClient) => Promise<string | void>,
+  fn: (db: Db) => Promise<string | void>,
   path = "/cabinet",
 ): Promise<Result> {
   const session = await readSession();
