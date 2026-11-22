@@ -66,6 +66,11 @@ app/CatalogHeader.tsx         шапка публичной части: знак
 public/liberterra.png         знак Liberterra
 app/icon.png                  иконка вкладки: квадратная часть знака
 lib/agency.ts                 название Liberterra, телефоны, заголовок каталога
+lib/site.ts                   собственный адрес сайта: один на все абсолютные ссылки
+app/sitemap.ts                карта сайта: четыре языка каждой страницы, hreflang
+app/robots.ts                 robots.txt: кабинет, вход и api закрыты от роботов
+app/opengraph-image.tsx       карточка превью каталога при пересылке (1200×630)
+lib/listing-schema.ts         разметка объявления для поисковика (schema.org)
 app/LeadForm.tsx              форма заявки под карточкой объекта
 app/lead-actions.ts           приём заявки: перевод отказов в человеческий вид
 app/Photo.tsx                 фото с запасным видом, если ссылка протухла

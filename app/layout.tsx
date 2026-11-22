@@ -1,11 +1,28 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { DEFAULT_LANG, isLang } from '@/lib/i18n';
+import { AGENCY_NAME } from '@/lib/agency';
+import { SITE_URL } from '@/lib/site';
 import './globals.css';
 
 export const metadata: Metadata = {
+  // Без metadataBase относительные canonical и og:image остаются
+  // относительными, а мессенджер по такому пути картинку не найдёт и
+  // покажет ссылку без превью.
+  metadataBase: new URL(SITE_URL),
   title: { default: 'Liberterra — недвижимость в Бишкеке', template: '%s — Liberterra' },
   description: 'Liberterra: квартиры, дома и коммерческая недвижимость в Бишкеке.',
+  // Превью при пересылке. Ссылками на объявления делятся в мессенджерах
+  // чаще, чем ищут в поиске, поэтому og важнее части метатегов.
+  // Картинку даёт app/opengraph-image.tsx; страницы объектов подменяют её
+  // собственной фотографией.
+  openGraph: {
+    type: 'website',
+    siteName: AGENCY_NAME,
+    title: 'Liberterra — недвижимость в Бишкеке',
+    description: 'Квартиры, дома и коммерческая недвижимость в Бишкеке.',
+  },
+  twitter: { card: 'summary_large_image' },
 };
 // robots здесь больше нет: общий noindex закрыл бы и публичный каталог.
 // Кабинет и вход закрывают себя сами — см. app/cabinet/layout.tsx и app/login.
