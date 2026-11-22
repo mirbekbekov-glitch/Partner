@@ -48,7 +48,12 @@ export function parseFilters(
   const sort = one("sort");
   const page = toInt(one("page"));
 
+  // Строка поиска обрезается и ограничивается: это не полнотекстовый поиск,
+  // а «найди по куску адреса», и сто символов ему не нужны.
+  const q = one("q")?.trim().slice(0, 60) || null;
+
   return {
+    q,
     deal: deal === "sale" || deal === "rent" ? (deal as DealType) : null,
     kind: KINDS.includes(kind as ObjectKind) ? (kind as ObjectKind) : null,
     zone: one("zone")?.trim() || null,
@@ -80,6 +85,31 @@ export async function fetchCatalog(f: CatalogFilters): Promise<CatalogPage> {
     where.push(`${column} ${op} $${args.length}`);
   };
 
+  // Адрес или район одним полем — так его ищет человек: «Джал» это район,
+  // «Чуй 120» это адрес, и разбирать, что именно он ввёл, незачем.
+  //
+  // Знаки процента и подчёркивания экранируются: без этого запрос «50%»
+  // означал бы «всё, где есть пятёрка и ноль», а одиночное подчёркивание —
+  // вообще всё. Подстановка здесь параметром, поэтому это не дыра, а
+  // неправильный ответ; но неправильный ответ на поиск хуже пустого.
+  // Кыргызские буквы приводятся к русским с обеих сторон сравнения. Найдено
+  // проходом в браузере: в базе улица называется «Чүй», человек набирает
+  // «Чуй», и поиск отвечал «ничего не найдено» — худший из возможных
+  // ответов, потому что объект есть и он на первой странице.
+  //
+  // translate, а не unaccent: расширения в базе нет, а три буквы прекрасно
+  // переводятся списком. ө→о, ү→у, ң→н, и то же для заглавных.
+  const KG = "'үөңҮӨҢ', 'уонУОН'";
+
+  if (f.q) {
+    const like = `%${f.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    args.push(like);
+    const n = args.length;
+    where.push(
+      `(translate(address, ${KG}) ilike translate($${n}, ${KG})` +
+        ` or translate(zone, ${KG}) ilike translate($${n}, ${KG}))`,
+    );
+  }
   if (f.deal) add("deal_type", "=", f.deal);
   if (f.kind) add("kind", "=", f.kind);
   if (f.zone) add("zone", "=", f.zone);

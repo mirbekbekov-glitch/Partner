@@ -61,8 +61,10 @@
   color-scheme: light;
 }
 
+/* Тёмная тема: по системе, пока человек не сказал иначе. Сказал — на
+   <html> стоит data-theme, и он сильнее системы в обе стороны. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0f1216;
     --bg-hero: #11151a;
     --panel: #171b20;
@@ -80,7 +82,29 @@
     --aging: #d3ad5a;
     --stale: #e0897a;
     color-scheme: dark;
+  
   }
+}
+
+:root[data-theme="dark"] {
+    --bg: #0f1216;
+    --bg-hero: #11151a;
+    --panel: #171b20;
+    --fg: #ececea;
+    --muted: #9aa1a7;
+    --faint: #6f767c;
+    --line: #272c33;
+    --chip: #222830;
+    --brand-soft: #2a1514;
+    --brand: #cf3a33;
+    --brand-bright: #e1483f;
+    --alarm: #e08a84;
+    --alarm-bg: #2a1514;
+    --fresh: #7fb05c;
+    --aging: #d3ad5a;
+    --stale: #e0897a;
+    color-scheme: dark;
+  
 }
 
 * {
@@ -146,18 +170,36 @@ a {
   letter-spacing: -0.01em;
 }
 
-.brand i {
+.brand-mark {
+  width: 1.65rem;
+  height: 1.65rem;
+  color: var(--brand);
+  flex: none;
+}
+
+.head-link {
+  color: var(--muted);
+  font-size: 0.92rem;
+  padding: 0.3rem 0;
+  border-bottom: 2px solid transparent;
+}
+.head-link:hover { color: var(--fg); border-bottom-color: var(--line); }
+
+/* Круглая кнопка-значок: тема, и когда-нибудь язык. */
+.icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.6rem;
-  height: 1.6rem;
-  border-radius: 7px;
-  background: linear-gradient(180deg, var(--brand), var(--brand-deep));
-  color: #fff;
-  font: 700 0.9rem/1 "Inter", system-ui, sans-serif;
-  font-style: normal;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
 }
+.icon-btn:hover { color: var(--fg); border-color: var(--muted); }
 
 .brand span {
   color: var(--muted);
@@ -260,25 +302,30 @@ a {
 
 /* --- переключатель сделки --- */
 
+/* Вкладки подчёркиванием. Таблетки рядом с таблетками районов читались как
+   один ряд фильтров, а это не фильтр: это выбор, зачем человек пришёл. */
 .deal-tabs {
   display: flex;
-  gap: 6px;
-  padding-block: 4px 0;
+  gap: 4px;
+  padding: 2px 2px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
 }
 
 .deal-tabs a {
-  font-size: 0.9rem;
-  padding: 7px 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
+  font-size: 0.95rem;
+  padding: 10px 14px;
   color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
 }
 
+.deal-tabs a:hover { color: var(--fg); }
+
 .deal-tabs a[aria-current="true"] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 500;
+  color: var(--fg);
+  font-weight: 600;
+  border-bottom-color: var(--brand);
 }
 
 /* --- счётчик --- */
@@ -1555,25 +1602,26 @@ details.fold.wide > summary { font-weight: 600; }
   border-bottom: 1px solid var(--line);
 }
 
+/* Герой по центру, рисунок — справа поверх него. На узком экране рисунок
+   уходит: он здесь настроение, а не содержание, и ужатый до спичечного
+   коробка становится мусором. */
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  gap: 24px;
-  align-items: center;
-  padding-block: 44px 72px;
+  position: relative;
+  text-align: center;
+  padding-block: 54px 84px;
 }
 
-.hero-text h1 {
-  margin: 0.4rem 0 0.9rem;
-  font-size: clamp(1.9rem, 4.2vw, 3rem);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+.hero h1 {
+  margin: 0.5rem 0 1rem;
+  font-size: clamp(1.9rem, 4.4vw, 3.1rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
   font-weight: 800;
 }
 
 /* Вторая строка заголовка — фирменным цветом. Ровно одно красное пятно на
    экран: если их станет два, не выделено будет ни одно. */
-.hero-text h1 em { color: var(--brand); font-style: normal; }
+.hero h1 em { color: var(--brand); font-style: normal; }
 
 .kicker {
   margin: 0;
@@ -1585,16 +1633,35 @@ details.fold.wide > summary { font-weight: 600; }
 .kicker.dark { color: var(--brand-bright); }
 
 .hero-lead {
-  margin: 0;
-  max-width: 34rem;
+  margin: 0 auto;
+  max-width: 36rem;
   color: var(--muted);
   font-size: 0.97rem;
 }
 
+.hero-art {
+  position: absolute;
+  right: 0;
+  top: 18px;
+  width: 27%;
+  max-width: 19rem;
+  pointer-events: none;
+}
 .hero-art svg { width: 100%; height: auto; display: block; }
 
-@media (max-width: 54rem) {
-  .hero { grid-template-columns: 1fr; padding-block: 28px 56px; }
+/* Еле заметная вертикальная сетка за героем — чертёжная бумага из макета. */
+.hero-band {
+  background:
+    repeating-linear-gradient(
+      to right,
+      transparent 0 71px,
+      color-mix(in srgb, var(--line) 55%, transparent) 71px 72px
+    ),
+    var(--bg-hero);
+}
+
+@media (max-width: 62rem) {
+  .hero { padding-block: 34px 60px; }
   .hero-art { display: none; }
 }
 
@@ -1611,7 +1678,52 @@ details.fold.wide > summary { font-weight: 600; }
   z-index: 2;
 }
 
-.searchbox .filters { padding-block: 10px 6px; }
+.searchbox { padding: 4px 18px 16px; }
+.searchbox .filters { padding-block: 0 2px; align-items: flex-end; }
+
+/* Поле адреса растягивается, остальные — по содержимому: искать начинают с
+   него, и короткая строка рядом с длинными выглядит необязательной. */
+.field.grow { flex: 1 1 16rem; min-width: 12rem; }
+.field.grow input { width: 100%; }
+
+.filters > button {
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 9px 22px;
+  border: 1px solid var(--brand-deep);
+  border-radius: 9px;
+  background: linear-gradient(180deg, var(--brand), var(--brand-deep));
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filters > button:hover { filter: brightness(1.07); }
+
+/* Складка редких полей. Заголовок — фирменным цветом и без рамки: это
+   ссылка, а не вторая кнопка рядом с главной. */
+.more { flex-basis: 100%; margin-top: 2px; }
+.more > summary {
+  cursor: pointer;
+  color: var(--brand);
+  font-size: 0.88rem;
+  font-weight: 500;
+  list-style: none;
+  padding: 4px 0;
+  width: max-content;
+}
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary::after { content: " ▾"; }
+.more[open] > summary::after { content: " ▴"; }
+.more-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: flex-end;
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
 
 .zonechips { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 4px; }
 .zonechips a {

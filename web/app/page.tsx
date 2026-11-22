@@ -23,6 +23,7 @@ export default async function CatalogPage({
   ]);
 
   const hasFilters =
+    filters.q !== null ||
     filters.deal !== null ||
     filters.kind !== null ||
     filters.zone !== null ||
@@ -53,10 +54,10 @@ export default async function CatalogPage({
       {/* Панель поиска «наезжает» на герой — так она на макете, и так она
           первое, что видно: за поиском сюда и приходят. */}
       <div className="searchbox">
+      {/* Вкладки подчёркиванием, а не таблетками: это не фильтр среди
+          фильтров, а выбор того, зачем человек пришёл. «Всё» справа и
+          бледнее — им пользуются реже, чем двумя первыми. */}
       <nav className="deal-tabs" aria-label="Тип сделки">
-        <a href={withParam(params, "deal", null)} aria-current={!filters.deal}>
-          Всё
-        </a>
         <a
           href={withParam(params, "deal", "sale")}
           aria-current={filters.deal === "sale"}
@@ -69,6 +70,9 @@ export default async function CatalogPage({
         >
           Снять
         </a>
+        <a href={withParam(params, "deal", null)} aria-current={!filters.deal}>
+          Всё
+        </a>
       </nav>
 
       {/* Обычная форма с методом GET: фильтры живут в адресе страницы,
@@ -77,6 +81,21 @@ export default async function CatalogPage({
       <form className="filters" method="get" action="/">
         {filters.deal && <input type="hidden" name="deal" value={filters.deal} />}
 
+        {/* Адрес и район одним полем — так его ищет человек: «Джал» это
+            район, «Чуй 120» это адрес, и разбирать за него, что именно он
+            ввёл, незачем. */}
+        <div className="field grow">
+          <label htmlFor="q">Адрес или район</label>
+          <input
+            id="q"
+            name="q"
+            type="search"
+            maxLength={60}
+            placeholder="Чуй, Асанбай, Джал…"
+            defaultValue={filters.q ?? ""}
+          />
+        </div>
+
         <div className="field">
           <label htmlFor="kind">Тип</label>
           <select id="kind" name="kind" defaultValue={filters.kind ?? ""}>
@@ -84,18 +103,6 @@ export default async function CatalogPage({
             {facets.kinds.map((k) => (
               <option key={k} value={k}>
                 {KIND_PLURAL[k]}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="field">
-          <label htmlFor="zone">Район</label>
-          <select id="zone" name="zone" defaultValue={filters.zone ?? ""}>
-            <option value="">Любой</option>
-            {facets.zones.map((z) => (
-              <option key={z} value={z}>
-                {z}
               </option>
             ))}
           </select>
@@ -114,20 +121,7 @@ export default async function CatalogPage({
         </div>
 
         <div className="field">
-          <label htmlFor="price_min">Цена от</label>
-          <input
-            id="price_min"
-            name="price_min"
-            type="number"
-            min="0"
-            step="100"
-            inputMode="numeric"
-            defaultValue={filters.priceMin ?? ""}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="price_max">до</label>
+          <label htmlFor="price_max">Цена до</label>
           <input
             id="price_max"
             name="price_max"
@@ -135,26 +129,66 @@ export default async function CatalogPage({
             min="0"
             step="100"
             inputMode="numeric"
+            placeholder="120 000"
             defaultValue={filters.priceMax ?? ""}
           />
         </div>
 
-        <div className="field">
-          <label htmlFor="sort">Сортировка</label>
-          <select id="sort" name="sort" defaultValue={filters.sort}>
-            <option value="fresh">Сначала подтверждённые</option>
-            <option value="price_asc">Цена по возрастанию</option>
-            <option value="price_desc">Цена по убыванию</option>
-            <option value="area_desc">Площадь по убыванию</option>
-          </select>
-        </div>
+        {/* Число на кнопке — это сколько сейчас найдено под текущие условия.
+            Не обещание, а факт: нажатие ничего к нему не добавит. */}
+        <button type="submit">Найти {page.total}</button>
 
-        <button type="submit">Найти</button>
-        {hasFilters && (
-          <a className="reset" href="/">
-            Сбросить
-          </a>
-        )}
+        {/* Нижний предел цены и сортировка — редкие поля. В строке они
+            занимают место у частых, поэтому сложены; складка раскрыта сама,
+            если ими уже пользуются, иначе выбор исчезал бы из виду. */}
+        <details className="more" open={filters.priceMin !== null || filters.sort !== "fresh" || filters.zone !== null}>
+          <summary>Дополнительные фильтры</summary>
+          <div className="more-row">
+            {/* Выпадающий список районов живёт здесь: район уже набирается в
+                поле адреса и выбирается строкой плашек под карточкой. Третий
+                способ сделать то же самое в первом ряду только мешал. */}
+            <div className="field">
+              <label htmlFor="zone">Район</label>
+              <select id="zone" name="zone" defaultValue={filters.zone ?? ""}>
+                <option value="">Любой</option>
+                {facets.zones.map((z) => (
+                  <option key={z} value={z}>
+                    {z}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="price_min">Цена от</label>
+              <input
+                id="price_min"
+                name="price_min"
+                type="number"
+                min="0"
+                step="100"
+                inputMode="numeric"
+                defaultValue={filters.priceMin ?? ""}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="sort">Сортировка</label>
+              <select id="sort" name="sort" defaultValue={filters.sort}>
+                <option value="fresh">Сначала подтверждённые</option>
+                <option value="price_asc">Цена по возрастанию</option>
+                <option value="price_desc">Цена по убыванию</option>
+                <option value="area_desc">Площадь по убыванию</option>
+              </select>
+            </div>
+
+            {hasFilters && (
+              <a className="reset" href="/">
+                Сбросить всё
+              </a>
+            )}
+          </div>
+        </details>
       </form>
       </div>
 
@@ -231,7 +265,7 @@ export default async function CatalogPage({
       {/* Тёмная полоса в конце. Здесь не реклама, а честный ответ на то, чего
           в каталоге нет: половина объектов города в него не попадает, потому
           что собственник ещё не подписал договор. */}
-      <section className="cta-band">
+      <section className="cta-band" id="zayavka">
         <div className="wrap">
           <div>
             <p className="kicker dark">Не нашли подходящее</p>

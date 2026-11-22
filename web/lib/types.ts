@@ -29,6 +29,8 @@ export type ObjectKind =
   | "garage";
 
 export type CatalogFilters = {
+  /** Адрес или район словами: «Чуй», «Асанбай», «Джал». */
+  q: string | null;
   deal: DealType | null;
   kind: ObjectKind | null;
   zone: string | null;
