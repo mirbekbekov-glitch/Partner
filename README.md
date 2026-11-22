@@ -72,6 +72,12 @@ app/robots.ts                 robots.txt: кабинет, вход и api зак
 app/opengraph-image.tsx       карточка превью каталога при пересылке (1200×630)
 lib/listing-schema.ts         разметка объявления для поисковика (schema.org)
 lib/ai/describe.ts            черновик описания объекта: пишет модель, правит агент
+
+cloudflare.config.ts          Worker: привязка AI, расписание рассылки, секреты
+worker/index.ts               точка входа Worker: запросы и scheduled() для рассылки
+vite.config.ts                сборка через vinext
+.github/workflows/deploy-cloudflare.yml
+                              выкладка на Cloudflare: push в main или вручную
 app/LeadForm.tsx              форма заявки под карточкой объекта
 app/lead-actions.ts           приём заявки: перевод отказов в человеческий вид
 app/Photo.tsx                 фото с запасным видом, если ссылка протухла

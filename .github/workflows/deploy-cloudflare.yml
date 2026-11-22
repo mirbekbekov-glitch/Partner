@@ -1,0 +1,54 @@
+# Выкладка сайта на Cloudflare Workers.
+#
+# Зачем через GitHub, а не с чьей-то машины: загрузка статики требует
+# одноразового пропуска в заголовке Authorization, и окружения, где этот
+# заголовок подменяется (прокси, агентские контейнеры), выложить не могут
+# в принципе. Здесь заголовками распоряжается сам cf, и всё проходит.
+#
+# Секреты задаются один раз: Settings — Secrets and variables — Actions.
+#   CLOUDFLARE_API_TOKEN   токен с правами Workers Scripts Edit и Workers AI Read
+#   CLOUDFLARE_ACCOUNT_ID  идентификатор аккаунта Cloudflare
+#
+# Секреты САМОГО сайта (ключи Supabase, CRON_SECRET, токен бота) здесь не
+# нужны и не должны появляться: они живут на Worker и задаются командой
+# `npx cf secret put ИМЯ`. Сборке они ни к чему — проверено, собирается без них.
+
+name: Выкладка на Cloudflare
+
+# В кавычках намеренно: без них разборщики YAML 1.1 читают `on` как «да».
+"on":
+  push:
+    branches: [main]
+  # Ручной запуск с любой ветки: нужен, пока работа идёт не в main.
+  workflow_dispatch:
+
+# Две выкладки разом затёрли бы друг друга в произвольном порядке.
+concurrency:
+  group: deploy-cloudflare
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # ci, а не install: ставит ровно то, что записано в package-lock.json.
+      - run: npm ci
+
+      # Типы — до выкладки. Выложить сборку, которая не проходит проверку
+      # типов, значит узнать о поломке от посетителя.
+      - run: npm run typecheck
+
+      - name: Сборка и выкладка Worker
+        run: npm run deploy:vinext
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
