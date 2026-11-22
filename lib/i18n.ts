@@ -64,6 +64,9 @@ type Dict = {
   roomsShort: string; sqm: string; floorShort: string; priceHint: string;
   namePlaceholder: string; phonePlaceholder: string;
   messageLabel: string; messagePlaceholder: string; honeypotLabel: string;
+  // siteTitle — без названия агентства: его добавляет шаблон title в
+  // app/layout.tsx ('%s — Liberterra'). Если вписать бренд сюда, во вкладке
+  // и в выдаче он удвоится.
   siteTitle: string; siteDescription: string; drawingAlt: string;
   // Полоса «оставьте заявку» на главной
   pitchEyebrow: string; pitchTitle: string; pitchLede: string; pitchButton: string;
@@ -134,7 +137,7 @@ const ru: Dict = {
   namePlaceholder: 'Азамат', phonePlaceholder: '+996 700 00 00 00',
   messageLabel: 'Вопрос или удобное время (необязательно)',
   messagePlaceholder: 'Можно посмотреть в субботу днём?', honeypotLabel: 'Сайт',
-  siteTitle: 'Недвижимость в Бишкеке: аренда и продажа — Liberterra',
+  siteTitle: 'Недвижимость в Бишкеке: аренда и продажа',
   siteDescription: 'Liberterra: квартиры, дома и коммерческая недвижимость в Бишкеке.',
   drawingAlt: 'Рисунок вместо фотографии',
   forAgentsShort: 'Вход',
@@ -217,7 +220,7 @@ const ky: Dict = {
   namePlaceholder: 'Азамат', phonePlaceholder: '+996 700 00 00 00',
   messageLabel: 'Сурооңуз же ыңгайлуу убакыт (милдеттүү эмес)',
   messagePlaceholder: 'Ишембиде күндүз көрсө болобу?', honeypotLabel: 'Сайт',
-  siteTitle: 'Бишкектеги кыймылсыз мүлк: ижара жана сатуу — Liberterra',
+  siteTitle: 'Бишкектеги кыймылсыз мүлк: ижара жана сатуу',
   siteDescription: 'Liberterra: Бишкектеги батирлер, үйлөр жана коммерциялык мүлк.',
   drawingAlt: 'Сүрөттүн ордуна тартылган сүрөт',
   forAgentsShort: 'Кирүү',
@@ -300,7 +303,7 @@ const en: Dict = {
   namePlaceholder: 'Azamat', phonePlaceholder: '+996 700 00 00 00',
   messageLabel: 'Question or a convenient time (optional)',
   messagePlaceholder: 'Could I see it on Saturday afternoon?', honeypotLabel: 'Website',
-  siteTitle: 'Real estate in Bishkek: for sale and for rent — Liberterra',
+  siteTitle: 'Real estate in Bishkek: for sale and for rent',
   siteDescription: 'Liberterra: flats, houses and commercial property in Bishkek.',
   drawingAlt: 'Drawing shown instead of a photo',
   forAgentsShort: 'Log in',
@@ -383,7 +386,7 @@ const zh: Dict = {
   namePlaceholder: '您的称呼', phonePlaceholder: '+996 700 00 00 00',
   messageLabel: '问题或方便的时间（可选）',
   messagePlaceholder: '周六下午可以看房吗？', honeypotLabel: '网站',
-  siteTitle: '比什凯克房产：出售与出租 — Liberterra',
+  siteTitle: '比什凯克房产：出售与出租',
   siteDescription: 'Liberterra：比什凯克的公寓、住宅与商业地产。',
   drawingAlt: '以插图代替照片',
   forAgentsShort: '登录',
