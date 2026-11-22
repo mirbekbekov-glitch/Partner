@@ -16,6 +16,7 @@
  * отложенно и только когда PHOTO_STORAGE=r2.
  */
 
+import { workerBinding } from "./runtime.ts";
 import type { Driver } from "./storage.ts";
 
 type Bucket = {
@@ -33,10 +34,7 @@ type Bucket = {
 };
 
 async function bucket(): Promise<Bucket> {
-  const mod = (await import("cloudflare:workers")) as {
-    env: Record<string, unknown>;
-  };
-  const found = mod.env.R2 as Bucket | undefined;
+  const found = await workerBinding<Bucket>("R2");
   if (!found) {
     throw new Error(
       "привязка R2 не настроена: добавьте R2: bindings.r2({ name: ... }) в cloudflare.config.ts",

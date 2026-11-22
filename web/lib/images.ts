@@ -19,6 +19,8 @@
  * неверное значение. Поэтому рантайм определяется, а не спрашивается.
  */
 
+import { onWorkers } from "./runtime.ts";
+
 /** Готовые байты и то, что о них нужно знать базе. */
 export type Encoded = {
   bytes: Uint8Array;
@@ -38,17 +40,6 @@ export type Shape =
   | { kind: "fit"; side: number; quality: number }
   /** Квадрат `side`×`side` с обрезкой по содержательной части кадра. */
   | { kind: "square"; side: number; quality: number };
-
-/**
- * В воркере нет sharp, в node нет привязки Images. Признак взят из рантайма:
- * workerd сообщает о себе через `navigator.userAgent`.
- */
-function onWorkers(): boolean {
-  return (
-    typeof navigator !== "undefined" &&
-    navigator.userAgent === "Cloudflare-Workers"
-  );
-}
 
 /**
  * Имя реализации. Нужно проверкам и журналу: «перекодировано» без указания

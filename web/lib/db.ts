@@ -1,4 +1,5 @@
 import { Client, type ClientBase } from "pg";
+import { workerBinding } from "./runtime.ts";
 
 /**
  * Соединение внутри транзакции.
@@ -31,13 +32,33 @@ export type Db = ClientBase;
  * ловит ту же ошибку в тот же момент — на первом обращении к базе, — но уже
  * там, где значение действительно есть.
  */
-function connectionString(): string {
-  const value = process.env.DATABASE_URL;
+let cachedConnectionString: string | undefined;
+
+async function connectionString(): Promise<string> {
+  if (cachedConnectionString) return cachedConnectionString;
+
+  // Hyperdrive, если привязка есть. Он держит пул соединений у края сети, то
+  // есть делает ровно то, что воркер делать не может: соединение в workerd
+  // принадлежит одному запросу и переиспользовать его нельзя. Строку
+  // подключения он подменяет своей — к самому Hyperdrive, не к базе.
+  //
+  // Это не настройка: привязки вне воркера не существует, а в воркере она
+  // либо настроена, либо нет. Поэтому и проверяется наличие, а не значение
+  // переменной.
+  const hyperdrive = await workerBinding<{ connectionString?: string }>(
+    "HYPERDRIVE",
+  );
+  const value = hyperdrive?.connectionString ?? process.env.DATABASE_URL;
+
   if (!value) {
     throw new Error(
       "DATABASE_URL не задан. Смотрите web/.env.example: каталогу нужна строка подключения к базе.",
     );
   }
+
+  // Строка подключения — настройка, а не соединение: кэшировать её между
+  // запросами можно, в отличие от самого соединения.
+  cachedConnectionString = value;
   return value;
 }
 
@@ -155,7 +176,7 @@ async function withRole<T>(
   // есть, и это сознательный размен на то, что на стенде работает тот же код,
   // что в продакшне, а не его двойник.
   const client = new Client({
-    connectionString: connectionString(),
+    connectionString: await connectionString(),
     // Долгий запрос означает ошибку, а не работу.
     statement_timeout: 5_000,
   });

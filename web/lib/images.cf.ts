@@ -21,6 +21,7 @@
  */
 
 import type { Encoded, Shape } from "./images.ts";
+import { workerBinding } from "./runtime.ts";
 
 export const name = "images-binding";
 
@@ -34,10 +35,7 @@ type Images = {
 };
 
 async function binding(): Promise<Images> {
-  const mod = (await import("cloudflare:workers")) as {
-    env: Record<string, unknown>;
-  };
-  const images = mod.env.IMAGES as Images | undefined;
+  const images = await workerBinding<Images>("IMAGES");
   if (!images) {
     throw new Error(
       "привязка IMAGES не настроена: добавьте IMAGES: bindings.images() в cloudflare.config.ts",
