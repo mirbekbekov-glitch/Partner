@@ -46,6 +46,15 @@ jobs:
       # ci, а не install: ставит ровно то, что записано в package-lock.json.
       - run: npm ci
 
+      # Типы привязок Worker (Ai, ScheduledController, cloudflare:workers)
+      # не лежат в репозитории — их выдаёт Cloudflare по составу привязок.
+      # Без этого шага проверка типов падает на чистой машине.
+      - name: Типы привязок Worker
+        run: npx cf workers types
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       # Типы — до выкладки. Выложить сборку, которая не проходит проверку
       # типов, значит узнать о поломке от посетителя.
       - run: npm run typecheck
