@@ -18,7 +18,13 @@
 //   --check     только посмотреть, что в базе сейчас. Ничего не пишет;
 //   --apply     применить supabase/migrations/*.sql по порядку;
 //   --reset     ПЕРЕД применением снести схемы public и app целиком;
-//   --schedule  зарегистрировать плановые работы (db/install_schedule.sql).
+//   --schedule  зарегистрировать плановые работы (db/install_schedule.sql);
+//   --verify    сверить устройство размещённой базы с местной.
+//
+// --verify отвечает на единственный вопрос, который на самом деле важен после
+// выкладывания: та ли это схема, на которой проходят тесты. Сравниваются
+// отношения, столбцы, функции, политики RLS, триггеры и ограничения. Местная
+// база берётся из VERIFY_DB (по умолчанию partner) через psql.
 //
 // `db/local_supabase_stub.sql` здесь НЕ применяется, и это важно: он
 // воспроизводит auth.uid() и роли Supabase для местного Postgres, а в
@@ -29,10 +35,25 @@
 // инструмент «догнать до текущего состояния». Журнала применённых миграций в
 // проекте нет, поэтому единственное надёжное состояние — известное: пусто,
 // затем все миграции по порядку. Отсюда и --reset.
+//
+// ПОЧЕМУ ФАЙЛ ИНОГДА ИДЁТ ПООПЕРАТОРНО. Management API выполняет запрос одной
+// транзакцией, а миграции опираются на пооператорную фиксацию: 0039 добавляет
+// значение в перечисление и ниже в том же файле его использует, что Postgres
+// внутри одной транзакции запрещает («unsafe use of new value»). Местный
+// прогонщик этого не видит, потому что `psql -f` фиксирует каждый оператор.
+//
+// Поэтому файл сначала посылается целиком — так быстрее, — и только при
+// отказе разбирается на операторы и посылается по одному, то есть ровно так,
+// как его гоняет psql. Это безопасно: отказ одной транзакции откатывает файл
+// целиком, проверено на 0039 — ни таблицы, ни новых значений перечисления
+// после падения не осталось.
 
 import { readFile, readdir } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { split } from "./split-sql.mjs";
+import { SIGNATURE, PARTS } from "./signature.mjs";
+import { execFileSync } from "node:child_process";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REF = process.env.SUPABASE_PROJECT_REF;
@@ -55,9 +76,10 @@ const CHECK = args.has("--check");
 const APPLY = args.has("--apply");
 const RESET = args.has("--reset");
 const SCHEDULE = args.has("--schedule");
-if (!CHECK && !APPLY && !SCHEDULE) {
+const VERIFY = args.has("--verify");
+if (!CHECK && !APPLY && !SCHEDULE && !VERIFY) {
   console.error(
-    "нужен --check, --apply или --schedule (и, возможно, --reset). Смотрите шапку файла.",
+    "нужен --check, --apply, --schedule или --verify (и, возможно, --reset). Смотрите шапку файла.",
   );
   process.exit(1);
 }
@@ -112,7 +134,7 @@ console.log(
     `представлений ${before.views.length}, строк ${before.rows}`,
 );
 
-if (CHECK && !APPLY && !SCHEDULE) {
+if (CHECK && !APPLY && !SCHEDULE && !VERIFY) {
   for (const t of before.tables) console.log(`  таблица     ${t.схема}.${t.имя}`);
   for (const v of before.views) console.log(`  представление ${v.схема}.${v.имя}`);
   process.exit(0);
@@ -140,27 +162,64 @@ if (RESET) {
   }
 }
 
-const dir = join(ROOT, "supabase", "migrations");
-const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
-console.log(`применяю ${files.length} миграций`);
+// Миграции гоняются ТОЛЬКО по --apply. Без этой оговорки --verify заходил
+// в прогон и падал на 0001 «тип contact_kind уже существует»: миграции не
+// идемпотентны, и это не недостаток, а их устройство.
+if (APPLY) {
+  const dir = join(ROOT, "supabase", "migrations");
+  const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
+  console.log(`применяю ${files.length} миграций`);
 
-let done = 0;
-for (const file of files) {
-  const text = await readFile(join(dir, file), "utf8");
-  process.stdout.write(`  ${file} … `);
-  try {
-    await sql(text);
-  } catch (error) {
-    console.log("ОШИБКА");
-    console.error(`\nмиграция ${file} не применилась:\n${String(error.message)}\n`);
-    console.error(`применено до этого: ${done} из ${files.length}`);
-    // Остановка на первой ошибке, а не «пропустить и дальше»: половина
-    // применённых миграций — состояние, которого не бывает в тестах, и
-    // отлаживать его потом будет некому.
-    process.exit(1);
+  let done = 0;
+  let perStatement = 0;
+  for (const file of files) {
+    const text = await readFile(join(dir, file), "utf8");
+    process.stdout.write(`  ${file} … `);
+
+    let whole;
+    try {
+      await sql(text);
+    } catch (error) {
+      whole = error;
+    }
+
+    if (whole) {
+      // Запасной путь: как psql. Разбор проверен сверкой с db/rebuild.sh —
+      // смотрите db/check-split.mjs.
+      let statements;
+      try {
+        statements = split(text);
+      } catch (error) {
+        console.log("ОШИБКА РАЗБОРА");
+        console.error(`\n${file} не разобрался на операторы: ${String(error.message)}`);
+        process.exit(1);
+      }
+      try {
+        for (const statement of statements) await sql(statement);
+      } catch (error) {
+        console.log("ОШИБКА");
+        console.error(`\nмиграция ${file} не применилась.`);
+        console.error(`одним запросом: ${String(whole.message).trim()}`);
+        console.error(`пооператорно:   ${String(error.message).trim()}\n`);
+        console.error(`применено до этого: ${done} из ${files.length}`);
+        // Остановка на первой ошибке, а не «пропустить и дальше»: половина
+        // применённых миграций — состояние, которого не бывает в тестах, и
+        // отлаживать его потом будет некому.
+        process.exit(1);
+      }
+      console.log(`ок (пооператорно, ${statements.length})`);
+      perStatement += 1;
+    } else {
+      console.log("ок");
+    }
+    done += 1;
   }
-  console.log("ок");
-  done += 1;
+  if (perStatement > 0) {
+    console.log(
+      `\nфайлов, которым понадобился пооператорный прогон: ${perStatement} ` +
+        `(одной транзакцией они не проходят — смотрите шапку файла)`,
+    );
+  }
 }
 
 if (APPLY) {
@@ -211,4 +270,52 @@ if (SCHEDULE) {
   for (const r of health) {
     console.log(`  ${r.работа}: ${r.состояние} (молчание ${r.молчание})`);
   }
+}
+
+if (VERIFY) {
+  const local = process.env.VERIFY_DB ?? "partner";
+  console.log(`\nсверяю устройство с местной базой ${local}`);
+
+  let bad = 0;
+  for (const part of PARTS) {
+    const query = SIGNATURE[part];
+
+    // Пробелы сворачиваются по обеим сторонам, и это не косметика. Вывод
+    // `psql -tA` разделяет записи переводом строки, а определение ограничения
+    // или выражение политики сами многострочные — без сворачивания одно
+    // значение разрезалось на куски, и сверка показывала «104 расхождения»
+    // там, где схемы совпадают. Заодно это снимает разницу в том, как две
+    // версии Postgres печатают одно и то же выражение.
+    const flat = `select regexp_replace(x, '\\s+', ' ', 'g') from (${query}) t(x) order by 1`;
+
+    const hostedRows = await sql(flat);
+    const hosted = hostedRows.map((r) => Object.values(r)[0]);
+
+    // Местная база читается psql, а не через pg: лишняя зависимость тут не
+    // нужна, а вывод -tA — это ровно по строке на значение.
+    const localText = execFileSync(
+      "psql",
+      ["-h", "/tmp", "-p", "55432", "-U", "postgres", "-d", local, "-tA",
+       "-c", flat],
+      { encoding: "utf8" },
+    );
+    const localList = localText.split("\n").filter((x) => x.length > 0);
+
+    const onlyLocal = localList.filter((x) => !hosted.includes(x));
+    const onlyHosted = hosted.filter((x) => !localList.includes(x));
+    const mark = onlyLocal.length + onlyHosted.length === 0 ? "ок" : "РАСХОЖДЕНИЕ";
+    console.log(`  ${part}: местно ${localList.length}, размещено ${hosted.length} — ${mark}`);
+    for (const x of onlyLocal.slice(0, 5)) console.log(`      только местно:   ${x.slice(0, 160)}`);
+    for (const x of onlyHosted.slice(0, 5)) console.log(`      только размещено: ${x.slice(0, 160)}`);
+    bad += onlyLocal.length + onlyHosted.length;
+  }
+
+  if (bad > 0) {
+    console.error(
+      `\nустройство разошлось в ${bad} местах: размещённая база — НЕ та, ` +
+        `на которой проходят тесты`,
+    );
+    process.exit(1);
+  }
+  console.log("\nустройство совпало: размещённая база та же, что проверяют тесты");
 }
