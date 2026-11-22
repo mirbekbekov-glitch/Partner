@@ -26,6 +26,10 @@ export default defineConfig({
     env: {
       ASSETS: bindings.assets(),
 
+      // Перекодирование картинок. Заменяет sharp, который в workerd не
+      // грузится: нативный модуль.
+      IMAGES: bindings.images(),
+
       // База. Роли — не украшение, а защита: каждая страница ходит в базу под
       // понижённой ролью, и RLS отдаёт только то, что этой роли позволено.
       DATABASE_URL: bindings.secret(),

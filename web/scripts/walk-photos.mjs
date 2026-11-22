@@ -13,7 +13,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const SHOT = process.env.SHOT_DIR ?? "/tmp/partner-shots";
-const BASE = "http://localhost:3000";
+// Тот же обход нужен по двум стендам: обычный Next (порт 3000) и воркер
+// (порт 3001). Прошитый адрес означал бы, что воркер проверяется не этим
+// обходом, а похожим на него.
+const BASE = process.env.WALK_BASE ?? "http://localhost:3000";
 const log = (...a) => console.log(...a);
 
 // Снимки «с телефона»: большие, с координатами в EXIF.

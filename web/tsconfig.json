@@ -39,7 +39,10 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    // Типы привязок воркера. Генерируются `cf workers types` при разработке и
+    // сборке; для отдельной проверки типов команду надо позвать самому.
+    ".cloudflare/types/**/*.d.ts"
   ],
   "exclude": [
     "node_modules"

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import sharp, { type OutputInfo } from "sharp";
+import { encode } from "./images.ts";
 import { storage } from "./storage.ts";
 
 /**
@@ -23,6 +23,11 @@ import { storage } from "./storage.ts";
  * КЛЮЧ ВЫДАЁТ СЕРВЕР. Имя файла из браузера не участвует: ни как имя, ни как
  * часть пути. Форма ключа ограничена проверкой схемы (инвариант 11), поэтому
  * выйти за каталог объекта нельзя даже ошибкой в этом файле.
+ *
+ * ЧЕМ ПЕРЕКОДИРУЮТ — дело `lib/images.ts`: sharp в node, привязка Images в
+ * воркере. Этот файл о требованиях, а не о библиотеке: раскодировать и
+ * закодировать заново, выбросить метаданные, развернуть по EXIF. Реализация
+ * выбирается по рантайму, потому что sharp в workerd не грузится вовсе.
  *
  * ГДЕ ЛЕЖАТ БАЙТЫ — дело `lib/storage.ts`: диск для разработки,
  * S3-совместимое хранилище для всего остального. Этот файл о том, ЧТО в
@@ -58,35 +63,21 @@ export async function save(objectId: string, file: File): Promise<StoredPhoto> {
     );
   }
 
-  const input = Buffer.from(await file.arrayBuffer());
+  const input = new Uint8Array(await file.arrayBuffer());
 
-  let output: Buffer;
-  let info: OutputInfo;
-  try {
-    const result = await sharp(input, { failOn: "error" })
-      // Поворот по EXIF делается ДО того, как EXIF выбрасывается: иначе
-      // снимки, сделанные боком, останутся боком.
-      .rotate()
-      .resize({ width: MAX_SIDE, height: MAX_SIDE, fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 82 })
-      .toBuffer({ resolveWithObject: true });
-    output = result.data;
-    info = result.info;
-  } catch {
-    // Сюда попадает и битый файл, и документ с расширением .jpg, и попытка
-    // подсунуть что-нибудь исполняемое. Причина для человека одна.
-    throw new Error("это не изображение или оно повреждено");
-  }
+  // Снимок объекта не обрезается: кадрировать чужую фотографию квартиры —
+  // значит решать за агента, что на ней главное.
+  const image = await encode(input, { kind: "fit", side: MAX_SIDE, quality: 82 });
 
   const storageKey = `objects/${objectId}/${randomBytes(16).toString("hex")}.webp`;
-  await storage().put(storageKey, output, "image/webp");
+  await storage().put(storageKey, image.bytes, "image/webp");
 
   return {
     storageKey,
     contentType: "image/webp",
-    width: info.width,
-    height: info.height,
-    byteSize: output.byteLength,
+    width: image.width,
+    height: image.height,
+    byteSize: image.bytes.byteLength,
   };
 }
 
@@ -111,30 +102,22 @@ export async function saveAvatar(agentId: string, file: File): Promise<StoredPho
     );
   }
 
-  const input = Buffer.from(await file.arrayBuffer());
-  let output: Buffer;
-  let info: OutputInfo;
-  try {
-    const result = await sharp(input, { failOn: "error" })
-      .rotate()
-      .resize({ width: AVATAR_SIDE, height: AVATAR_SIDE, fit: "cover", position: "attention" })
-      .webp({ quality: 85 })
-      .toBuffer({ resolveWithObject: true });
-    output = result.data;
-    info = result.info;
-  } catch {
-    throw new Error("это не изображение или оно повреждено");
-  }
+  const input = new Uint8Array(await file.arrayBuffer());
+  const image = await encode(input, {
+    kind: "square",
+    side: AVATAR_SIDE,
+    quality: 85,
+  });
 
   const storageKey = `avatars/${agentId}/${randomBytes(16).toString("hex")}.webp`;
-  await storage().put(storageKey, output, "image/webp");
+  await storage().put(storageKey, image.bytes, "image/webp");
 
   return {
     storageKey,
     contentType: "image/webp",
-    width: info.width,
-    height: info.height,
-    byteSize: output.byteLength,
+    width: image.width,
+    height: image.height,
+    byteSize: image.bytes.byteLength,
   };
 }
 

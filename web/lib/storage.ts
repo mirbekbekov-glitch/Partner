@@ -46,7 +46,7 @@ export type StoredObject = {
 
 export interface Storage {
   /** Положить байты под ключом. Ключ выдаёт вызывающий, а не хранилище. */
-  put(key: string, bytes: Buffer, contentType: string): Promise<void>;
+  put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   /** Прочитать. `null` — файла нет; это не ошибка, а ответ. */
   read(key: string): Promise<StoredObject | null>;
   /** Убрать. Отсутствие файла ошибкой не считается: запись уже удалена. */
