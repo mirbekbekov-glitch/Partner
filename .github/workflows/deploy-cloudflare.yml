@@ -59,8 +59,16 @@ jobs:
       # типов, значит узнать о поломке от посетителя.
       - run: npm run typecheck
 
-      - name: Сборка и выкладка Worker
-        run: npm run deploy:vinext
+      - name: Сборка Worker
+        run: npm run build:vinext
+
+      # --force: выкладка иначе останавливается, если Worker последний раз
+      # меняли не ею — через панель Cloudflare или API. Флаг у cf заведён
+      # ровно для CI и означает простую вещь: источник правды здесь —
+      # репозиторий. Правка, сделанная в панели мимо кода, будет затёрта
+      # следующей выкладкой, и это намеренно.
+      - name: Выкладка Worker
+        run: npx cf deploy --prebuilt --force
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
