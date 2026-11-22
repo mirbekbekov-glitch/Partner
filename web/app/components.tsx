@@ -32,24 +32,26 @@ export function ObjectCard({ item }: { item: CatalogObject }) {
       ) : (
         <span className="cover cover-empty">Фотографий пока нет</span>
       )}
-      <span className="tag">
-        {KIND_LABEL[item.kind]} · {DEAL_LABEL[item.deal_type]}
-        {item.zone ? ` · ${item.zone}` : ""}
-      </span>
-      <span className="price">
-        {formatPrice(item.price, item.currency, item.deal_type)}
+      {/* Тип сделки — красной плашкой на снимке, как в макете: это первое,
+          что человек ищет глазами в сетке карточек. */}
+      <span className="deal-badge">{DEAL_LABEL[item.deal_type]}</span>
+
+      <span className="price-row">
+        <span className="price">
+          {formatPrice(item.price, item.currency, item.deal_type)}
+        </span>
+        <span className={`fresh-dot fresh-${fresh.tone}`}>{fresh.label}</span>
       </span>
       <span className="addr">{item.address}</span>
-      {params.length > 0 && (
-        <span className="params">
-          {params.map((p) => (
-            <span key={p}>{p}</span>
-          ))}
-        </span>
-      )}
-      <span className="foot">
-        <span className={`fresh-${fresh.tone}`}>{fresh.label}</span>
-        <span className="tag">Подробнее</span>
+
+      {/* Параметры серыми плашками, а не строкой через точку: так они
+          читаются как набор фактов, а не как предложение. */}
+      <span className="params">
+        <span>{KIND_LABEL[item.kind]}</span>
+        {item.zone && <span>{item.zone}</span>}
+        {params.map((p) => (
+          <span key={p}>{p}</span>
+        ))}
       </span>
     </a>
   );

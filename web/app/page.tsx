@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ObjectCard } from "./components";
+import { Hero } from "./Hero";
 import { PAGE_SIZE, fetchCatalog, fetchFacets, parseFilters } from "@/lib/catalog";
 import { DEAL_LABEL, KIND_PLURAL, plural, withParam } from "@/lib/format";
 
@@ -41,7 +42,17 @@ export default async function CatalogPage({
   };
 
   return (
-    <div className="wrap">
+    <>
+      <div className="hero-band">
+        <div className="wrap">
+          <Hero total={page.total} />
+        </div>
+      </div>
+
+      <div className="wrap">
+      {/* Панель поиска «наезжает» на герой — так она на макете, и так она
+          первое, что видно: за поиском сюда и приходят. */}
+      <div className="searchbox">
       <nav className="deal-tabs" aria-label="Тип сделки">
         <a href={withParam(params, "deal", null)} aria-current={!filters.deal}>
           Всё
@@ -50,13 +61,13 @@ export default async function CatalogPage({
           href={withParam(params, "deal", "sale")}
           aria-current={filters.deal === "sale"}
         >
-          {DEAL_LABEL.sale}
+          Купить
         </a>
         <a
           href={withParam(params, "deal", "rent")}
           aria-current={filters.deal === "rent"}
         >
-          {DEAL_LABEL.rent}
+          Снять
         </a>
       </nav>
 
@@ -138,13 +149,27 @@ export default async function CatalogPage({
           </select>
         </div>
 
-        <button type="submit">Показать</button>
+        <button type="submit">Найти</button>
         {hasFilters && (
           <a className="reset" href="/">
             Сбросить
           </a>
         )}
       </form>
+      </div>
+
+      {/* Районы строкой: самый частый вопрос к каталогу — «что есть в
+          Центре», и ради него не стоит лезть в выпадающий список. */}
+      {facets.zones.length > 0 && (
+        <nav className="zonechips" aria-label="Районы">
+          {facets.zones.slice(0, 8).map((z) => (
+            <a key={z} href={withParam(params, "zone", filters.zone === z ? null : z)}
+               aria-current={filters.zone === z}>
+              {z}
+            </a>
+          ))}
+        </nav>
+      )}
 
       <p className="count">
         {page.total > 0
@@ -201,6 +226,34 @@ export default async function CatalogPage({
           Показываем по {PAGE_SIZE} объектов на странице.
         </p>
       )}
-    </div>
+      </div>
+
+      {/* Тёмная полоса в конце. Здесь не реклама, а честный ответ на то, чего
+          в каталоге нет: половина объектов города в него не попадает, потому
+          что собственник ещё не подписал договор. */}
+      <section className="cta-band">
+        <div className="wrap">
+          <div>
+            <p className="kicker dark">Не нашли подходящее</p>
+            <h2>Опишите, что ищете — искать будут агенты</h2>
+            <p>
+              В каталоге только то, что уже подтверждено договором. Остальное
+              агентства знают, но не публикуют: собственник не всегда готов,
+              цена обсуждается. Заявка открывает им ваш запрос.
+            </p>
+            <a className="pill" href="/cabinet">Оставить заявку →</a>
+            <p className="cta-note">
+              Пока заявка с сайта принимается через агентов: публичной формы
+              здесь ещё нет, и делать вид, что она есть, незачем.
+            </p>
+          </div>
+          <ol className="steps">
+            <li><b>Вы описываете</b><span>что ищете, в каком районе и за сколько</span></li>
+            <li><b>Заявку видят агенты</b><span>все, у кого есть подходящий объект</span></li>
+            <li><b>Вам приносят варианты</b><span>с договором, ценой и датой подтверждения</span></li>
+          </ol>
+        </div>
+      </section>
+    </>
   );
 }

@@ -1,28 +1,82 @@
+/* ===========================================================================
+   Фирменный стиль Liberterra
+   ===========================================================================
+   Цвета сняты с макета пипеткой, а не подобраны на глаз: кнопка #b02b26,
+   тёмная полоса #0b131a, подвал #121619, фон героя #f1f2ed, серая плашка
+   #eaeae8, зелёная точка свежести ≈ #5e8f3e.
+
+   ГЛАВНОЕ РЕШЕНИЕ, которое пришлось принять вместе с палитрой. В кабинете
+   красный до сих пор значил «беда»: просроченный договор, ушедший клиент,
+   неготовый канал. В фирменном стиле красный значит «главное»: это цвет
+   кнопки и самого бренда. Два смысла на один цвет — это ноль смыслов, и
+   через неделю работы агент перестал бы замечать тревогу.
+
+   Поэтому они разведены, и не оттенком, а ФОРМОЙ:
+
+     — действие  — СПЛОШНАЯ заливка фирменным красным, белый текст. Так
+       выглядит только то, что нажимают;
+     — тревога   — светлый фон, полоса слева и тёмно-бордовый текст. Так
+       выглядит только то, что сломано. Заливкой тревога не бывает никогда.
+
+   И тревога всегда названа словами: цвет её усиливает, но не заменяет.
+   --------------------------------------------------------------------- */
+
 :root {
-  --bg: #fbfaf8;
+  /* Бренд */
+  --brand: #b02b26;          /* действие и фирменный цвет */
+  --brand-deep: #8e1f1c;     /* нижняя граница кнопки, нажатие */
+  --brand-bright: #d2302a;   /* цифры и значки на тёмном */
+  --brand-soft: #fdeceb;     /* фон плашки, подложка */
+
+  /* Поверхности */
+  --bg: #f4f4f1;
+  --bg-hero: #f1f2ed;
   --panel: #ffffff;
-  --fg: #1a1a18;
-  --muted: #6b6b64;
-  --line: #e4e1da;
-  --accent: #1f5c4a;
-  --accent-soft: #e8f0ec;
-  --fresh: #1f7a4d;
+  --dark: #0b131a;           /* тёмная полоса */
+  --dark-2: #121619;         /* подвал */
+
+  /* Текст */
+  --fg: #1c1c1c;
+  --muted: #5b5f63;
+  --faint: #8c9094;
+  --on-dark: #e8eaec;
+  --on-dark-muted: #9aa1a7;
+
+  /* Линии и плашки */
+  --line: #e4e4e0;
+  --chip: #eaeae8;
+
+  /* Смысловые. Зелёный — только свежесть, как на макете. */
+  --fresh: #5e8f3e;
   --aging: #8a6a1f;
   --stale: #9a4a3c;
-  --radius: 10px;
+
+  /* Тревога — бордовее бренда и никогда не заливкой. */
+  --alarm: #7f1d1d;
+  --alarm-bg: #fdf2f2;
+
+  --accent: var(--brand);
+  --accent-soft: var(--brand-soft);
+  --radius: 12px;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #15161a;
-    --panel: #1d1f24;
+    --bg: #0f1216;
+    --bg-hero: #11151a;
+    --panel: #171b20;
     --fg: #ececea;
-    --muted: #9b9b96;
-    --line: #30333a;
-    --accent: #6fc0a3;
-    --accent-soft: #1e2a26;
-    --fresh: #6fc08c;
+    --muted: #9aa1a7;
+    --faint: #6f767c;
+    --line: #272c33;
+    --chip: #222830;
+    --brand-soft: #2a1514;
+    --brand: #cf3a33;
+    --brand-bright: #e1483f;
+    --alarm: #e08a84;
+    --alarm-bg: #2a1514;
+    --fresh: #7fb05c;
     --aging: #d3ad5a;
     --stale: #e0897a;
     color-scheme: dark;
@@ -68,30 +122,77 @@ a {
 .site-head {
   border-bottom: 1px solid var(--line);
   background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .site-head .wrap {
   display: flex;
-  align-items: baseline;
-  gap: 16px;
+  align-items: center;
+  gap: 14px;
   flex-wrap: wrap;
-  padding-block: 18px;
+  padding-block: 14px;
 }
 
+/* Знак перед названием: буква в фирменном квадрате. Он же — единственное
+   место, где красный стоит в шапке рядом с нейтральным текстом. */
 .brand {
-  font-size: 1.1rem;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 1.12rem;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
+.brand i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 7px;
+  background: linear-gradient(180deg, var(--brand), var(--brand-deep));
+  color: #fff;
+  font: 700 0.9rem/1 "Inter", system-ui, sans-serif;
+  font-style: normal;
+}
+
 .brand span {
-  color: var(--accent);
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .site-head p {
   margin: 0;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.head-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+/* Кнопка-таблетка фирменного цвета. Сплошная заливка здесь не украшение:
+   так на всём сайте выглядит только то, что нажимают. */
+.pill {
+  display: inline-block;
+  padding: 0.52rem 1.05rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--brand), var(--brand-deep));
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border: 0;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+.pill:hover { filter: brightness(1.06); }
+.pill.ghost {
+  background: none;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  box-shadow: none;
+  font-weight: 500;
 }
 
 /* --- фильтры --- */
@@ -198,26 +299,69 @@ a {
 }
 
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 16px;
+  border-radius: 14px;
+  padding: 12px 12px 16px;
   min-width: 0;
-  transition: border-color 120ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
 .card:hover {
-  border-color: var(--accent);
+  border-color: var(--brand);
+  box-shadow: 0 8px 22px rgba(11, 19, 26, 0.08);
+  transform: translateY(-1px);
+}
+
+/* Плашка сделки лежит НА снимке, в его углу. */
+.deal-badge {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 0.25rem 0.6rem;
+  border-radius: 7px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.card .price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .card .price {
-  font-size: 1.15rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+}
+
+/* Свежесть — точкой и словом. Зелёный на этом сайте означает ровно одно:
+   агент подтвердил, что цена и фотографии ещё в силе. */
+.fresh-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+}
+.fresh-dot::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .card .addr {
@@ -228,9 +372,18 @@ a {
 .card .params {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 10px;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 4px;
+  font-size: 0.78rem;
+}
+
+.card .params span {
+  background: var(--chip);
   color: var(--muted);
-  font-size: 0.85rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 
 .card .foot {
@@ -400,15 +553,38 @@ a {
   margin: 0 0 12px;
 }
 
+/* Подвал тёмный — как на макете. Тёмная полоса внизу закрывает страницу и
+   отделяет «витрину» от служебного текста. */
 .site-foot {
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.82rem;
-  background: var(--panel);
+  color: var(--on-dark-muted);
+  font-size: 0.84rem;
+  background: var(--dark-2);
 }
 
 .site-foot .wrap {
-  padding-block: 18px 28px;
+  padding-block: 32px 36px;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 24px 40px;
+}
+
+@media (max-width: 42rem) {
+  .site-foot .wrap { grid-template-columns: 1fr; }
+}
+
+.site-foot p { margin: 0 0 0.4rem; max-width: 46rem; }
+.site-foot a { color: var(--on-dark); border-bottom: 1px solid #3a4148; }
+.foot-brand {
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  font-size: 0.95rem;
+}
+.foot-label {
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.72rem;
 }
 
 /* --- отчёт собственнику --- */
@@ -561,9 +737,9 @@ a {
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
-  border-radius: 6px;
-  background: var(--accent-soft);
-  margin-bottom: 2px;
+  border-radius: 10px;
+  background: var(--chip);
+  margin-bottom: 4px;
 }
 
 .card .cover-empty {
@@ -626,7 +802,17 @@ a {
    глазу первым должно попадаться то, что требует действия.
 */
 
-.cabinet { --cab-alarm: #b42318; --cab-ok: #067647; --cab-warn: #b54708; }
+/* Кабинет берёт те же токены, что витрина. Тревога здесь БОРДОВЕЕ бренда и
+   никогда не бывает заливкой: заливка фирменным красным означает «нажми»,
+   светлый блок с полосой слева — «сломано». Пока оба были одним красным,
+   кнопка и беда выглядели одинаково, и через неделю агент перестал бы
+   замечать вторую. */
+.cabinet {
+  --cab-alarm: var(--alarm);
+  --cab-ok: #2f7a3e;
+  --cab-warn: #9a6513;
+  --cab-ink: #101820;
+}
 
 /* --- оболочка кабинета -----------------------------------------------------
    Меню разделов стоит слева, а не в шапке. Горизонтально одиннадцать пунктов
@@ -845,7 +1031,7 @@ button.link {
 .chip.ok, .chip.approved, .chip.published { background: #ecfdf3; color: var(--cab-ok); }
 .chip.warn, .chip.pending, .chip.new { background: #fffaeb; color: var(--cab-warn); }
 .chip.danger, .chip.blocked, .chip.spam { background: #fef3f2; color: var(--cab-alarm); }
-.chip.admin { background: #eef4ff; color: #3538cd; }
+.chip.admin { background: var(--brand-soft); color: var(--brand-deep); }
 
 /* Формы действий. Кнопка и ответ базы рядом — ответ относится к ней. */
 .act { display: flex; flex-direction: column; gap: 0.35rem; margin: 0; }
@@ -912,7 +1098,7 @@ button.link {
 /* Ссылка наружу: стрелка говорит, что уводит с сайта, а цвет — что это
    вообще ссылка. Заголовок, который кликается, но выглядит как текст,
    кликают случайно и не кликают нарочно. */
-.ext { color: #175cd3; text-decoration: none; }
+.ext { color: var(--brand-deep); text-decoration: none; }
 .ext:hover { text-decoration: underline; }
 
 /* Галерея кабинета. Обложка выделена рамкой, а не подписью: её узнают
@@ -931,7 +1117,7 @@ button.link {
   overflow: hidden;
   background: #fff;
 }
-.shot.cover { border-color: #175cd3; box-shadow: 0 0 0 1px #175cd3; }
+.shot.cover { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
 .shot img {
   display: block;
   width: 100%;
@@ -959,8 +1145,15 @@ input[type="file"] {
 .head-row { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
 .head-row h1 { margin-right: auto; }
 
-.btn.primary { background: #175cd3; border-color: #175cd3; color: #fff; }
-.btn.primary:hover { background: #1349a8; }
+/* Главное действие — фирменным красным заливкой. Синего в системе больше
+   нет: он не был ничьим цветом и спорил с бордовым рядом. */
+.btn.primary {
+  background: linear-gradient(180deg, var(--brand), var(--brand-deep));
+  border-color: var(--brand-deep);
+  color: #fff;
+  font-weight: 600;
+}
+.btn.primary:hover { filter: brightness(1.07); }
 
 fieldset {
   border: 1px solid #e4e7ec;
@@ -1014,12 +1207,12 @@ textarea { resize: vertical; }
   font-style: normal;
   font-size: 0.8rem;
   margin-top: 0.35rem;
-  color: #175cd3;
+  color: var(--brand-deep);
 }
 .stage em.stuck { color: #b42318; font-weight: 600; }
 .stage.done { background: #f9fafb; color: #667085; }
 .stage.done strong::before { content: "✓ "; color: #067647; }
-.stage.now { border-color: #175cd3; box-shadow: 0 0 0 1px #175cd3; }
+.stage.now { border-color: var(--brand-deep); box-shadow: 0 0 0 1px var(--brand-deep); }
 .stage.next { opacity: 0.65; }
 
 /* --- показы --------------------------------------------------------------- */
@@ -1095,7 +1288,7 @@ h2.alarm { color: var(--cab-alarm); }
 .cal-head strong { display: block; text-transform: capitalize; }
 .cal-head span { color: #667085; font-size: 0.82rem; }
 .cal-head.today { background: #eff8ff; }
-.cal-head.today span { color: #175cd3; font-weight: 600; }
+.cal-head.today span { color: var(--brand-deep); font-weight: 600; }
 .cal-hour {
   padding: 0.35rem 0.5rem;
   color: #667085;
@@ -1127,7 +1320,7 @@ h2.alarm { color: var(--cab-alarm); }
 .slot em { display: block; font-style: normal; color: #667085; font-size: 0.76rem; }
 /* Свои показы сплошные, чужие бледные: на своей неделе агент ищет глазами
    свои встречи, а чужие нужны, чтобы понимать, почему час занят. */
-.slot.mine   { background: #eff8ff; border-left-color: #175cd3; }
+.slot.mine   { background: var(--brand-soft); border-left-color: var(--brand); }
 .slot.theirs { background: #f9fafb; border-left-color: #d0d5dd; }
 .slot.past   { opacity: 0.6; }
 .slot.clash  { background: #fffbfa; border-left-color: var(--cab-alarm); }
@@ -1221,7 +1414,7 @@ h2.alarm { color: var(--cab-alarm); }
 }
 .fdays.stuck { color: var(--cab-alarm, #b42318); font-weight: 600; }
 
-.ftask { font-size: 0.82rem; color: #175cd3; }
+.ftask { font-size: 0.82rem; color: var(--brand-deep); }
 .ftask.none { color: #98a2b3; }
 
 .act.tight { gap: 0.3rem; margin-top: 0.4rem; align-items: stretch; }
@@ -1352,3 +1545,143 @@ code { background: #f2f4f7; padding: 0.1rem 0.35rem; border-radius: 5px;
    а список вариантов, и ужимать его в колонку действий незачем. */
 details.fold.wide { width: 100%; margin-top: 0.75rem; }
 details.fold.wide > summary { font-weight: 600; }
+
+/* ===========================================================================
+   Витрина: герой, поиск, тёмная полоса
+   ======================================================================== */
+
+.hero-band {
+  background: var(--bg-hero);
+  border-bottom: 1px solid var(--line);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 24px;
+  align-items: center;
+  padding-block: 44px 72px;
+}
+
+.hero-text h1 {
+  margin: 0.4rem 0 0.9rem;
+  font-size: clamp(1.9rem, 4.2vw, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+
+/* Вторая строка заголовка — фирменным цветом. Ровно одно красное пятно на
+   экран: если их станет два, не выделено будет ни одно. */
+.hero-text h1 em { color: var(--brand); font-style: normal; }
+
+.kicker {
+  margin: 0;
+  font-size: 0.74rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.kicker.dark { color: var(--brand-bright); }
+
+.hero-lead {
+  margin: 0;
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 0.97rem;
+}
+
+.hero-art svg { width: 100%; height: auto; display: block; }
+
+@media (max-width: 54rem) {
+  .hero { grid-template-columns: 1fr; padding-block: 28px 56px; }
+  .hero-art { display: none; }
+}
+
+/* Карточка поиска наезжает на герой. Отрицательный отступ — ровно на
+   величину нижнего поля героя, иначе на узком экране она отрывается. */
+.searchbox {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(11, 19, 26, 0.07);
+  padding: 6px 18px 14px;
+  margin-top: -40px;
+  position: relative;
+  z-index: 2;
+}
+
+.searchbox .filters { padding-block: 10px 6px; }
+
+.zonechips { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 4px; }
+.zonechips a {
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.zonechips a:hover { border-color: var(--brand); color: var(--fg); }
+.zonechips a[aria-current="true"] {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Тёмная полоса. Единственное место сайта, где фон тёмный: им страница и
+   заканчивается. */
+.cta-band {
+  background: var(--dark);
+  color: var(--on-dark);
+  margin-top: 56px;
+}
+
+.cta-band .wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 32px 48px;
+  padding-block: 54px 58px;
+}
+
+.cta-band h2 {
+  margin: 0.5rem 0 0.8rem;
+  font-size: clamp(1.4rem, 3vw, 2.1rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.cta-band p { margin: 0 0 1rem; color: var(--on-dark-muted); max-width: 32rem; }
+.cta-note { font-size: 0.8rem; margin-top: 0.9rem; }
+
+.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+.steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 2px 14px;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid #1d242b;
+}
+.steps li::before {
+  content: counter(step);
+  grid-row: span 2;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--brand-bright);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.steps b { color: #fff; font-weight: 600; }
+.steps span { color: var(--on-dark-muted); font-size: 0.88rem; }
+
+@media (max-width: 54rem) {
+  .cta-band .wrap { grid-template-columns: 1fr; padding-block: 36px 40px; }
+}
