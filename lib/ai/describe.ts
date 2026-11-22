@@ -8,21 +8,22 @@
  * результат попадает в поле формы, а не в базу: сохраняет его агент,
  * прочитав. Автопубликации машинного текста здесь нет и быть не должно.
  *
- * Почему через шлюз, а не напрямую к провайдеру: шлюз держит запасные
- * модели на случай сбоя одного провайдера и один счёт на всё. Ключ
- * (AI_GATEWAY_API_KEY) на Vercel подставляется платформой.
+ * Модель вызывается через привязку Workers AI — `env.AI`. Ни ключа, ни
+ * карты, ни внешнего ключа в переменных: Cloudflare выдаёт доступ самой
+ * площадке. На бесплатном плане 10 000 нейронов в сутки, описание стоит
+ * доли нейрона.
  */
 import 'server-only';
-import { generateText } from 'ai';
+import { env } from 'cloudflare:workers';
 
 /**
- * Модель. Haiku: задача — четыре предложения по десятку полей, думать тут
- * не над чем, а разница в цене со старшими моделями полусотенная. Меняется
- * переменной окружения, без правки кода.
+ * Модель. Gemma 4 26B A4B: многоязычная из коробки (нам нужен русский),
+ * доступна на бесплатном плане, 26 млрд параметров при 4 млрд активных —
+ * отвечает быстро. Меняется переменной окружения, без правки кода.
  */
-const MODEL = process.env.AI_DESCRIPTION_MODEL ?? 'anthropic/claude-haiku-5.5';
+const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 
-/** Поля карточки, из которых пишется описание. Все необязательные, кроме вида и сделки. */
+/** Поля карточки, из которых пишется описание. */
 export type ObjectSpec = {
   kind: string;
   deal_type: string;
@@ -48,7 +49,7 @@ const KIND_RU: Record<string, string> = {
   garage: 'гараж',
 };
 
-const INSTRUCTIONS = [
+const SYSTEM = [
   'Ты пишешь описания объявлений недвижимости для агентства в Бишкеке.',
   '',
   'Жёсткие правила:',
@@ -86,33 +87,59 @@ function brief(o: ObjectSpec): string {
   return lines.join('\n');
 }
 
+/**
+ * Ответ Workers AI. Модели отдают текст по-разному: новые — в виде ответа
+ * чата, старые — одним полем `response`. Разбираем оба вида, чтобы смена
+ * модели не ломала кнопку.
+ */
+function answerOf(raw: unknown): string {
+  if (typeof raw === 'string') return raw;
+  const r = raw as {
+    response?: unknown;
+    choices?: { message?: { content?: unknown } }[];
+  };
+  if (typeof r?.response === 'string') return r.response;
+  const content = r?.choices?.[0]?.message?.content;
+  return typeof content === 'string' ? content : '';
+}
+
 export type DraftResult = { text: string | null; error: string | null };
 
 export async function describeObject(o: ObjectSpec): Promise<DraftResult> {
-  // Без ключа шлюз ответит 401, а агент увидит невнятную ошибку. Говорим
-  // прямо, что настройка не доделана, — это не его вина и не его забота.
-  if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN) {
+  // Привязки нет — значит Worker собран без неё. Говорим прямо, что
+  // настройка не доделана: это не вина агента и не его забота.
+  const ai = (env as { AI?: Ai }).AI;
+  if (!ai) {
     return {
       text: null,
-      error: 'Генерация не настроена: нет доступа к AI Gateway. Напишите описание сами.',
+      error: 'Генерация не настроена: нет привязки Workers AI. Напишите описание сами.',
     };
   }
 
   try {
-    const { text } = await generateText({
-      model: MODEL,
-      instructions: INSTRUCTIONS,
-      prompt: brief(o),
+    const raw = await ai.run(MODEL, {
+      messages: [
+        { role: 'system', content: SYSTEM },
+        { role: 'user', content: brief(o) },
+      ],
+      // Размышления вслух нам не нужны: нужен готовый абзац, а не ход
+      // мысли. Без этого модель возвращает рассуждение вперемешку с
+      // ответом.
+      chat_template_kwargs: { enable_thinking: false },
+      max_tokens: 400,
     });
 
-    const clean = text.trim();
+    const clean = answerOf(raw).trim();
     if (!clean) return { text: null, error: 'Модель вернула пустой ответ. Попробуйте ещё раз.' };
 
     return { text: clean, error: null };
   } catch (e) {
-    // Наружу — человеческая фраза, в журнал сервера — настоящая причина:
+    // Наружу — человеческая фраза, в журнал Worker — настоящая причина:
     // агенту нечего делать с текстом ошибки провайдера.
     console.error('describeObject:', e);
-    return { text: null, error: 'Не удалось связаться с моделью. Попробуйте ещё раз или напишите описание сами.' };
+    return {
+      text: null,
+      error: 'Не удалось связаться с моделью. Попробуйте ещё раз или напишите описание сами.',
+    };
   }
 }

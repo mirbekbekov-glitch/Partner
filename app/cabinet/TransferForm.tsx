@@ -57,7 +57,9 @@ export function TransferForm({
         action={formAction}
         className="inline"
         onSubmit={(e) => {
-          const sel = (e.currentTarget.elements.namedItem('to_agent_id') as HTMLSelectElement);
+          // Через unknown: с типами Worker в проекте namedItem возвращает
+          // объединение, которое напрямую к HTMLSelectElement не приводится.
+          const sel = e.currentTarget.elements.namedItem('to_agent_id') as unknown as HTMLSelectElement | null;
           const name = sel?.selectedOptions[0]?.text ?? 'коллеге';
           if (!window.confirm(`Передать ${what} — ${name}? ${warning}`)) {
             e.preventDefault();
