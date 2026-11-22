@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
-import { agencyAgents } from "../../../lib/cabinet";
-import { formatPhone } from "../../../lib/format";
+import { agencyAgents, certificateQueue } from "../../../lib/cabinet";
+import { formatDate, formatPhone } from "../../../lib/format";
 import { gate } from "../Gate";
 import { ActionForm } from "../ActionForm";
-import { approveAgent, blockAgent, setAgentRole } from "../actions";
+import {
+  approveAgent,
+  blockAgent,
+  confirmCertificate,
+  revokeCertificate,
+  setAgentRole,
+} from "../actions";
 
 export const metadata: Metadata = {
   title: "Агенты",
@@ -28,6 +34,10 @@ export default async function AgentsPage({
 
   const agents = await agencyAgents();
   const admin = access.agent.is_admin;
+  // Очередь сверки аттестаций. Представление само отдаёт только то, что
+  // видно политикой, поэтому спрашивать его не только администратору можно:
+  // агент увидит в нём себя и коллег своего агентства.
+  const claims = await certificateQueue();
 
   return (
     <div className="wrap">
@@ -40,11 +50,80 @@ export default async function AgentsPage({
 
       {note && <p className="ok-banner">{note}</p>}
 
+      {claims.length > 0 && (
+        <section>
+          <h2>Аттестация ТПП <span className="muted">({claims.length})</span></h2>
+          <p className="muted">
+            {admin
+              ? "Номер со слов агента. Сверьте его с палатой и подтвердите — до этого коллеги видят «заявлен», а не «в реестре». Онлайн-реестра, который можно спросить запросом, у ТПП пока нет, поэтому сверка ручная."
+              : "Номер со слов агента. Подтверждает его администратор платформы, сверив с палатой."}
+          </p>
+          <div className="rows">
+            {claims.map((c) => (
+              <article key={c.agent_id}
+                       className={c.state === "заявлен" ? "row alarm" : "row"}>
+                <div className="row-main">
+                  <h3>{c.full_name}</h3>
+                  <p className="row-meta">
+                    {c.agency_name} · № {c.certificate_no}
+                    {c.certificate_issued_on && ` · выдан ${formatDate(c.certificate_issued_on)}`}
+                    {c.certificate_valid_to && ` · до ${formatDate(c.certificate_valid_to)}`}
+                  </p>
+                  {c.confirmed_by_name && (
+                    <p className="faint sm">сверил {c.confirmed_by_name}</p>
+                  )}
+                </div>
+                <div className="row-state">
+                  <span className={
+                    c.state === "подтверждён" ? "chip ok"
+                      : c.state === "истёк" ? "chip danger" : "chip warn"
+                  }>{c.state}</span>
+                </div>
+                {admin && (
+                  <div className="row-acts">
+                    {c.state !== "подтверждён" && (
+                      <ActionForm action={confirmCertificate} label="Сверено, подтвердить">
+                        <input type="hidden" name="agent_id" value={c.agent_id} />
+                      </ActionForm>
+                    )}
+                    {c.certificate_confirmed_at && (
+                      <details className="fold">
+                        <summary>Снять</summary>
+                        <ActionForm action={revokeCertificate} label="Снять" danger>
+                          <input type="hidden" name="agent_id" value={c.agent_id} />
+                          <label>
+                            Почему
+                            <input name="reason" maxLength={120}
+                                   placeholder="в палате такого номера нет" />
+                          </label>
+                        </ActionForm>
+                      </details>
+                    )}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <h2>Состав</h2>
       <div className="rows">
         {agents.map((a) => (
           <article key={a.id} className={a.status === "pending" ? "row alarm" : "row"}>
             <div className="row-main">
-              <h3>{a.full_name}</h3>
+              <h3 className="avatar-name">
+                {a.avatar_key ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img className="avatar" src={`/avatar/${a.avatar_key}`}
+                       alt="" width={32} height={32} />
+                ) : (
+                  <span className="avatar empty" aria-hidden="true">
+                    {a.full_name.slice(0, 1).toUpperCase()}
+                  </span>
+                )}
+                {a.full_name}
+              </h3>
               <p className="row-meta">{formatPhone(a.phone)}</p>
               <p className="muted">
                 {a.objects_total} объектов · {a.mandates_active} действующих договоров ·{" "}
@@ -54,6 +133,15 @@ export default async function AgentsPage({
 
             <div className="row-state">
               <span className={`chip ${a.status}`}>{STATUS[a.status] ?? a.status}</span>
+              {/* Аттестация рядом со статусом: «работает» и «в реестре» —
+                  разные вещи, и первое второго не означает. */}
+              {a.certificate_state === "подтверждён" ? (
+                <span className="chip ok">в реестре ТПП</span>
+              ) : a.certificate_state === "заявлен" ? (
+                <span className="chip warn">аттестация заявлена</span>
+              ) : a.certificate_state === "истёк" ? (
+                <span className="chip danger">аттестация истекла</span>
+              ) : null}
               {a.role === "admin" && <span className="chip admin">администратор</span>}
             </div>
 

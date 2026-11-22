@@ -1330,3 +1330,20 @@ h2.alarm { color: var(--cab-alarm); }
 .act label.check input { width: auto; margin: 0; }
 code { background: #f2f4f7; padding: 0.1rem 0.35rem; border-radius: 5px;
        font-size: 0.85em; overflow-wrap: anywhere; }
+
+/* --- лицо агента (инвариант 38) ------------------------------------------- */
+/* Аватар круглый и небольшой: это подпись к имени, а не портрет. Пока
+   фотографии нет, на её месте стоит буква, а не серый силуэт: силуэт читается
+   как «человек не найден», а буква — как «фотографии нет». */
+.avatar {
+  width: 2rem; height: 2rem; border-radius: 50%; object-fit: cover;
+  background: #f2f4f7; flex: none; vertical-align: middle;
+}
+.avatar.empty {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 600; color: #667085; font-size: 0.85rem;
+}
+.avatar.big { width: 8rem; height: 8rem; font-size: 2.5rem; }
+.avatar-row { display: flex; gap: 1.25rem; align-items: flex-start; flex-wrap: wrap; }
+.avatar-row .grow { flex: 1 1 14rem; min-width: 0; }
+.avatar-name { display: inline-flex; align-items: center; gap: 0.45rem; }

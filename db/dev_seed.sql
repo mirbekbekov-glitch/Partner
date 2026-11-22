@@ -260,3 +260,50 @@ begin
 end $$;
 
 select 'второе агентство: Альфа Недвижимость, 4 объекта' as мультилистинг;
+
+-- ---------------------------------------------------------------------------
+-- Аттестация ТПП (инвариант 38)
+-- ---------------------------------------------------------------------------
+-- Три состояния из четырёх: подтверждённое, заявленное и истёкшее. Без них
+-- экран виден только в одном положении, а разница между «заявлен» и
+-- «подтверждён» — это весь смысл поля.
+
+do $$
+declare
+  v_admin uuid := (select id from agents where full_name = 'Админ');
+begin
+  update agents set certificate_no = 'ТПП-КР-0241',
+                    certificate_issued_on = current_date - 400,
+                    certificate_valid_to  = current_date + 1425
+   where full_name = 'Айбек';
+  update agents set certificate_confirmed_at = now() - interval '380 days',
+                    certificate_confirmed_by = v_admin
+   where full_name = 'Айбек';
+
+  -- Заявлен и ждёт сверки: главное состояние очереди администратора.
+  update agents set certificate_no = 'ТПП-КР-0588',
+                    certificate_issued_on = current_date - 20,
+                    certificate_valid_to  = current_date + 1805
+   where full_name = 'Бакыт';
+
+  -- Истёк: агент был в реестре, и это не то же самое, что «не проходил».
+  update agents set certificate_no = 'ТПП-КР-0107',
+                    certificate_issued_on = current_date - 1900,
+                    certificate_valid_to  = current_date - 75
+   where full_name = 'Чынгыз';
+  update agents set certificate_confirmed_at = now() - interval '1890 days',
+                    certificate_confirmed_by = v_admin
+   where full_name = 'Чынгыз';
+
+  -- Агент чужого агентства тоже аттестован: по чужому объекту это и есть
+  -- ответ на вопрос «с кем я имею дело».
+  update agents set certificate_no = 'ТПП-КР-0903',
+                    certificate_issued_on = current_date - 200,
+                    certificate_valid_to  = current_date + 1625
+   where full_name = 'Нурлан Абдиев';
+  update agents set certificate_confirmed_at = now() - interval '190 days',
+                    certificate_confirmed_by = v_admin
+   where full_name = 'Нурлан Абдиев';
+end $$;
+
+select 'аттестация: подтверждена, заявлена, истекла' as тпп;

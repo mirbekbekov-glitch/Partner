@@ -111,6 +111,56 @@ export async function save(objectId: string, file: File): Promise<StoredPhoto> {
   };
 }
 
+/** Сторона аватара. Квадрат: в списке агентов он стоит в строке. */
+const AVATAR_SIDE = 512;
+
+/**
+ * Принять аватар агента.
+ *
+ * Та же труба, что у фотографии объекта, и это главное: байты из браузера
+ * никуда не записываются, они раскодируются и кодируются заново. EXIF с
+ * координатами съёмки выбрасывается тем же движением — селфи, сделанное
+ * дома, иначе принесло бы домашний адрес агента.
+ *
+ * Отличий ровно два: квадрат вместо вписывания и сторона поменьше.
+ */
+export async function saveAvatar(agentId: string, file: File): Promise<StoredPhoto> {
+  if (file.size === 0) throw new Error("файл пустой");
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(
+      `файл ${(file.size / 1024 / 1024).toFixed(1)} МБ, это больше предела в ${MAX_UPLOAD_BYTES / 1024 / 1024} МБ`,
+    );
+  }
+
+  const input = Buffer.from(await file.arrayBuffer());
+  let output: Buffer;
+  let info: OutputInfo;
+  try {
+    const result = await sharp(input, { failOn: "error" })
+      .rotate()
+      .resize({ width: AVATAR_SIDE, height: AVATAR_SIDE, fit: "cover", position: "attention" })
+      .webp({ quality: 85 })
+      .toBuffer({ resolveWithObject: true });
+    output = result.data;
+    info = result.info;
+  } catch {
+    throw new Error("это не изображение или оно повреждено");
+  }
+
+  const storageKey = `avatars/${agentId}/${randomBytes(16).toString("hex")}.webp`;
+  const path = pathFor(storageKey);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, output);
+
+  return {
+    storageKey,
+    contentType: "image/webp",
+    width: info.width,
+    height: info.height,
+    byteSize: output.byteLength,
+  };
+}
+
 /**
  * Убрать файл из хранилища.
  *

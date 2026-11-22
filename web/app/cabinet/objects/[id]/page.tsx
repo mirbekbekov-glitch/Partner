@@ -87,10 +87,12 @@ export default async function ObjectPage({
         <p className="warn-banner">
           Объект другой организации:{" "}
           <b>{data.terms.agency_name ?? "агентство не названо"}</b>
-          {data.terms.holder_agent_name ? `, ведёт ${data.terms.holder_agent_name}` : ""}.
-          Править, публиковать и снимать его может только она. Вы можете
-          предложить его своему клиенту и назначить показ — договорившись с
-          агентом объекта.
+          {data.terms.holder_agent_name ? `, ведёт ${data.terms.holder_agent_name}` : ""}
+          {data.terms.holder_certified
+            ? " — агент в реестре риэлторов ТПП"
+            : " — агент не в реестре ТПП"}. Править, публиковать и снимать его
+          может только она. Вы можете предложить его своему клиенту и
+          назначить показ — договорившись с агентом объекта.
         </p>
       ) : data.terms.source === "agency" && data.terms.holder_agent_name ? (
         <p className="muted">Ведёт {data.terms.holder_agent_name}, ваша организация.</p>

@@ -25,6 +25,13 @@ export type Me = {
   is_admin: boolean;
   is_head: boolean;
   telegram_id: string | null;
+  avatar_key: string | null;
+  certificate_no: string | null;
+  certificate_issued_on: Date | string | null;
+  certificate_valid_to: Date | string | null;
+  certificate_confirmed_at: Date | string | null;
+  /** «нет» | «заявлен» | «подтверждён» | «истёк» — выводится в базе. */
+  certificate_state: string;
 };
 
 export type CabinetObject = {
@@ -69,7 +76,9 @@ export async function me(): Promise<Me | null> {
       `select id, full_name, email, phone, phone_verified_at, role, status,
               directions::text[] as directions,
               agency_id, agency_name, is_admin, is_head,
-              telegram_id::text as telegram_id
+              telegram_id::text as telegram_id,
+              avatar_key, certificate_no, certificate_issued_on,
+              certificate_valid_to, certificate_confirmed_at, certificate_state
          from me_v`,
     );
     return rows[0] ?? null;
@@ -223,6 +232,10 @@ export type AgencyAgent = {
   role: string;
   status: string;
   created_at: Date | string;
+  directions: ("sale" | "rent")[];
+  avatar_key: string | null;
+  certificate_state: string;
+  certificate_valid_to: Date | string | null;
   objects_total: number;
   mandates_active: number;
   deals_closed: number;
@@ -233,7 +246,13 @@ export async function agencyAgents(): Promise<AgencyAgent[]> {
   if (!session) return [];
 
   return asAgent(session, "read only", async (db) => {
-    const { rows } = await db.query<AgencyAgent>(`select * from agency_agents_v`);
+    const { rows } = await db.query<AgencyAgent>(
+      `select id, full_name, phone, role, status, created_at,
+              directions::text[] as directions, avatar_key,
+              certificate_state, certificate_valid_to,
+              objects_total, mandates_active, deals_closed
+         from agency_agents_v`,
+    );
     return rows;
   });
 }
@@ -344,6 +363,8 @@ export type ObjectDetail = {
     mandate_kind: string | null;
     contract_confirmed: boolean | null;
     valid_to: Date | string | null;
+    holder_certified: boolean;
+    holder_avatar_key: string | null;
   };
   photos: {
     storage_key: string;
@@ -455,7 +476,8 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
     const { rows: termRows } = await db.query(
       `select app.object_source(t.holder_agent_id, t.agency_id) as source,
               t.agency_name, t.holder_agent_name, t.has_mandate,
-              t.mandate_kind::text, t.contract_confirmed, t.valid_to
+              t.mandate_kind::text, t.contract_confirmed, t.valid_to,
+              t.holder_certified, t.holder_avatar_key
          from app.object_terms_v t where t.object_id = $1`,
       [id],
     );
@@ -1591,6 +1613,40 @@ export async function objectZones(): Promise<{ zone: string; objects: number }[]
   return asAgent(session, "read only", async (db) => {
     const { rows } = await db.query<{ zone: string; objects: number }>(
       "select zone, objects from app.object_zones()",
+    );
+    return rows;
+  });
+}
+
+/* ---------------------------------------------------------------------------
+ * Аттестация ТПП (инвариант 38)
+ * -------------------------------------------------------------------------*/
+
+export type CertificateClaim = {
+  agent_id: string;
+  full_name: string;
+  agency_name: string;
+  certificate_no: string;
+  certificate_issued_on: Date | string | null;
+  certificate_valid_to: Date | string | null;
+  certificate_confirmed_at: Date | string | null;
+  state: string;
+  confirmed_by_name: string | null;
+};
+
+/**
+ * Очередь сверки: кто заявил номер. Это работа, а не справочник, поэтому
+ * несверенные идут первыми — порядок задан в представлении, а не здесь.
+ */
+export async function certificateQueue(): Promise<CertificateClaim[]> {
+  const session = await readSession();
+  if (!session) return [];
+  return asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<CertificateClaim>(
+      `select agent_id, full_name, agency_name, certificate_no,
+              certificate_issued_on, certificate_valid_to,
+              certificate_confirmed_at, state, confirmed_by_name
+         from certificate_queue_v`,
     );
     return rows;
   });

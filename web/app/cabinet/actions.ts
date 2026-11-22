@@ -6,7 +6,11 @@ import { redirect } from "next/navigation";
 import { asAgent, asAuthService } from "../../lib/db";
 import { clearSession, readSession, writeSession } from "../../lib/session";
 import { channel, sendLoginCode, showsCodeOnScreen } from "../../lib/otp";
-import { remove as removePhotoFile, save as savePhotoFile } from "../../lib/photos";
+import {
+  remove as removePhotoFile,
+  save as savePhotoFile,
+  saveAvatar as saveAvatarFile,
+} from "../../lib/photos";
 
 /**
  * Действия кабинета.
@@ -572,6 +576,154 @@ export async function updateMyTelegram(_prev: unknown, form: FormData): Promise<
       throw e;
     }
     return "Telegram привязан: уведомления будут приходить туда.";
+  }, "/cabinet/profile");
+}
+
+/** Администратор платформы сверил номер с ТПП. */
+export async function confirmCertificate(_prev: unknown, form: FormData): Promise<Result> {
+  const agentId = String(form.get("agent_id"));
+  return act(async (db) => {
+    await db.query("select confirm_certificate($1)", [agentId]);
+    return "Аттестация подтверждена.";
+  }, "/cabinet/agents");
+}
+
+/** Снять подтверждение. Причина обязательна: её прочитает агент. */
+export async function revokeCertificate(_prev: unknown, form: FormData): Promise<Result> {
+  const agentId = String(form.get("agent_id"));
+  const reason = String(form.get("reason") ?? "").trim();
+  if (!reason) return { ok: false, error: "Укажите причину: её прочитает агент." };
+  return act(async (db) => {
+    await db.query("select revoke_certificate($1, $2)", [agentId, reason]);
+    return "Подтверждение снято.";
+  }, "/cabinet/agents");
+}
+
+/**
+ * Аватар агента.
+ *
+ * Файл проходит ту же трубу, что фотография объекта: он перекодируется, и в
+ * хранилище попадают наши байты, а не присланные. Порядок тот же — сначала
+ * файл, потом запись в базу, и если база откажет, файл убирается.
+ *
+ * Старый файл удаляется ПОСЛЕ того, как новый ключ записан: наоборот значило
+ * бы, что отказ базы оставляет агента без лица.
+ */
+export async function updateMyAvatar(_prev: unknown, form: FormData): Promise<Result> {
+  const file = form.get("avatar");
+  const session = await readSession();
+  if (!session) return { ok: false, error: "Вход истёк. Войдите снова." };
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Файл не выбран." };
+  }
+
+  const agentId = await asAgent(session, "read only", async (db) => {
+    const { rows } = await db.query<{ id: string }>("select id from me_v");
+    return rows[0]?.id ?? null;
+  });
+  if (!agentId) return { ok: false, error: "Профиль не найден." };
+
+  let stored;
+  try {
+    stored = await saveAvatarFile(agentId, file);
+  } catch (error) {
+    return { ok: false, error: humanize(error) };
+  }
+
+  return act(async (db) => {
+    const { rows } = await db.query<{ avatar_key: string | null }>(
+      "select avatar_key from agents where auth_user_id = auth.uid()",
+    );
+    const previous = rows[0]?.avatar_key ?? null;
+
+    try {
+      await db.query(
+        "update agents set avatar_key = $1 where auth_user_id = auth.uid()",
+        [stored.storageKey],
+      );
+    } catch (error) {
+      await removePhotoFile(stored.storageKey);
+      throw error;
+    }
+
+    if (previous && previous !== stored.storageKey) await removePhotoFile(previous);
+    return "Фотография обновлена.";
+  }, "/cabinet/profile");
+}
+
+/** Убрать аватар. Запись и файл уходят вместе, запись первой. */
+export async function removeMyAvatar(): Promise<Result> {
+  return act(async (db) => {
+    const { rows } = await db.query<{ avatar_key: string | null }>(
+      "select avatar_key from agents where auth_user_id = auth.uid()",
+    );
+    const previous = rows[0]?.avatar_key ?? null;
+    if (!previous) return "Фотографии и так не было.";
+
+    await db.query("update agents set avatar_key = null where auth_user_id = auth.uid()");
+    await removePhotoFile(previous);
+    return "Фотография убрана.";
+  }, "/cabinet/profile");
+}
+
+/**
+ * Аттестация ТПП со слов агента.
+ *
+ * Сохраняется как ЗАЯВЛЕНИЕ: подтверждение ставит администратор платформы,
+ * сверив номер с палатой вручную — онлайн-реестра, который можно спросить
+ * запросом, у неё пока нет. Правка номера или дат сбрасывает подтверждение,
+ * и это делает база, а не эта функция.
+ *
+ * Срок по умолчанию — пять лет от выдачи: столько действует сертификат.
+ */
+export async function updateMyCertificate(_prev: unknown, form: FormData): Promise<Result> {
+  const text = (name: string) => {
+    const v = String(form.get(name) ?? "").trim();
+    return v === "" ? null : v;
+  };
+  const no = text("certificate_no");
+  const issued = text("certificate_issued_on");
+  let validTo = text("certificate_valid_to");
+
+  if (no === null) {
+    return act(async (db) => {
+      await db.query(
+        `update agents set certificate_no = null, certificate_issued_on = null,
+                           certificate_valid_to = null
+          where auth_user_id = auth.uid()`,
+      );
+      return "Номер убран: аттестация больше не заявлена.";
+    }, "/cabinet/profile");
+  }
+
+  if (no.length < 3) {
+    return { ok: false, error: "Номер слишком короткий — проверьте сертификат." };
+  }
+  if (issued && !validTo) {
+    const d = new Date(`${issued}T00:00:00Z`);
+    if (!Number.isNaN(d.getTime())) {
+      d.setUTCFullYear(d.getUTCFullYear() + 5);
+      validTo = d.toISOString().slice(0, 10);
+    }
+  }
+
+  return act(async (db) => {
+    try {
+      await db.query(
+        `update agents set certificate_no = $1,
+                           certificate_issued_on = $2::date,
+                           certificate_valid_to = $3::date
+          where auth_user_id = auth.uid()`,
+        [no, issued, validTo],
+      );
+    } catch (e) {
+      if ((e as { code?: string }).code === "23505") {
+        throw new Error("Этот номер уже заявлен другим агентом.");
+      }
+      throw e;
+    }
+    return "Номер сохранён. Он помечен заявленным, пока администратор не сверит его с палатой.";
   }, "/cabinet/profile");
 }
 

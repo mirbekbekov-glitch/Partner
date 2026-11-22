@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
 import { me } from "../../../lib/cabinet";
-import { formatPhone } from "../../../lib/format";
+import { formatDate, formatPhone } from "../../../lib/format";
 import { gate } from "../Gate";
 import { ActionForm } from "../ActionForm";
-import { updateMyName, updateMyPhone, updateMyTelegram } from "../actions";
+import {
+  removeMyAvatar,
+  updateMyAvatar,
+  updateMyCertificate,
+  updateMyName,
+  updateMyPhone,
+  updateMyTelegram,
+} from "../actions";
 
 export const metadata: Metadata = {
   title: "Профиль",
@@ -26,6 +33,21 @@ const DIRECTION_LABEL: Record<string, string> = {
   sale: "продажа",
   rent: "аренда",
 };
+
+/** Класс плашки аттестации. Цвет здесь несёт смысл, а не украшает. */
+const CERT_CHIP: Record<string, string> = {
+  "подтверждён": "chip ok",
+  "заявлен": "chip warn",
+  "истёк": "chip danger",
+  "нет": "chip",
+};
+
+/** Дата в поле формы: input[type=date] понимает только ГГГГ-ММ-ДД. */
+function dateValue(v: Date | string | null): string {
+  if (!v) return "";
+  const d = v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
 
 export default async function ProfilePage({
   searchParams,
@@ -52,6 +74,102 @@ export default async function ProfilePage({
       </p>
 
       {note && <p className="ok-banner">{note}</p>}
+
+      <section className="card">
+        <h2>Фотография</h2>
+        <div className="avatar-row">
+          {agent.avatar_key ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img className="avatar big" src={`/avatar/${agent.avatar_key}`}
+                 alt={`Фотография: ${agent.full_name}`} width={128} height={128} />
+          ) : (
+            <span className="avatar big empty" aria-hidden="true">
+              {agent.full_name.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          <div className="grow">
+            <ActionForm action={updateMyAvatar} label="Загрузить">
+              <label>
+                Новая фотография
+                <input type="file" name="avatar" accept="image/*" required />
+              </label>
+            </ActionForm>
+            {agent.avatar_key && (
+              <ActionForm action={removeMyAvatar} label="Убрать" danger
+                          confirm="Убрать фотографию? Коллеги будут видеть только имя." />
+            )}
+          </div>
+        </div>
+        <p className="hint">
+          Её видят коллеги во всех агентствах — рядом с вашим именем на чужом
+          объекте и в подборе. Клиент её не видит: ни подборка, ни отчёт
+          собственнику агента не показывают вовсе.
+        </p>
+        <p className="hint">
+          Файл перекодируется при загрузке, как фотографии объектов: в
+          хранилище попадает наша картинка, а не присланная, и координаты
+          съёмки из снимка выбрасываются вместе со всеми метаданными.
+        </p>
+      </section>
+
+      <section className="card">
+        <h2>Аттестация ТПП</h2>
+        <p className="muted">
+          <span className={CERT_CHIP[agent.certificate_state] ?? "chip"}>
+            {agent.certificate_state}
+          </span>
+          {agent.certificate_state === "подтверждён" && agent.certificate_valid_to && (
+            <> до {formatDate(agent.certificate_valid_to)}</>
+          )}
+        </p>
+
+        {agent.certificate_state === "заявлен" && (
+          <p className="warn-banner">
+            Номер записан, но ещё не сверен. Пока его не сверили, коллеги видят
+            «заявлен», а не «в реестре»: платформа не выдаёт за проверенное то,
+            чего не проверяла.
+          </p>
+        )}
+        {agent.certificate_state === "истёк" && (
+          <p className="warn-banner">
+            Срок сертификата вышел. Сертификат ТПП действует пять лет;
+            продлите его и впишите новые даты — подтверждение после этого
+            нужно будет получить заново.
+          </p>
+        )}
+
+        <ActionForm action={updateMyCertificate} label="Сохранить">
+          <label>
+            Номер сертификата
+            <input name="certificate_no" maxLength={40}
+                   defaultValue={agent.certificate_no ?? ""}
+                   placeholder="как в сертификате" />
+          </label>
+          <label>
+            Выдан
+            <input type="date" name="certificate_issued_on"
+                   defaultValue={dateValue(agent.certificate_issued_on)} />
+          </label>
+          <label>
+            Действует до
+            <input type="date" name="certificate_valid_to"
+                   defaultValue={dateValue(agent.certificate_valid_to)} />
+          </label>
+        </ActionForm>
+        <p className="hint">
+          С 2025 года обучение и аттестация агентов риэлторских фирм поручены
+          Торгово-промышленной палате КР, а сертификат выдаётся на пять лет.
+          Если оставить «действует до» пустым, подставится пять лет от даты
+          выдачи.
+        </p>
+        <p className="hint">
+          Номер — это ваши слова. Подтверждает его администратор платформы,
+          сверив с палатой: онлайн-реестра, который можно спросить запросом, у
+          неё пока нет. Правка номера или дат сбрасывает подтверждение — иначе
+          сверенный номер можно было бы молча подменить. Пустой номер убирает
+          заявление целиком.
+        </p>
+      </section>
 
       <section className="card">
         <h2>Что решила компания</h2>
