@@ -3,14 +3,16 @@ import Image from 'next/image';
 import { AGENCY_NAME } from '@/lib/agency';
 import { t, type Lang } from '@/lib/i18n';
 import { LangSwitcher } from './LangSwitcher';
+import { ThemeSwitch } from './ThemeSwitch';
 import logo from '../public/liberterra.png';
+import logoDark from '../public/liberterra-dark.png';
 
 /**
  * Шапка публичной части: знак, заявки, язык, дверь для агентов.
  *
- * Светлая и липкая. Светлая — потому что страница светлая целиком:
- * тёмной осталась только нижняя полоса, и одна тёмная плашка внизу
- * читается как решение, а две по краям — как рамка.
+ * Светлая в светлой теме и тёмная в тёмной — вместе со страницей.
+ * Знак при этом меняется на версию для тёмного фона: исходный красный
+ * целиком и на тёмном читается плохо.
  *
  * Телефонов здесь нет намеренно: три номера в ряд перетягивали на себя
  * верх страницы. Они остались в подвале и в карточке объекта — то есть
@@ -26,12 +28,17 @@ export function CatalogHeader({ lang }: { lang: Lang }) {
     <header className="nav">
       <div className="nav-in wrap">
         <Link href={`/${lang}`} className="brand" aria-label={AGENCY_NAME}>
-          <Image src={logo} alt={AGENCY_NAME} priority />
+          {/* Два знака, переключаются темой. Исходный красный целиком, и
+              на тёмной шапке он даёт 3.6 : 1 — для имени агентства мало.
+              Во второй версии ступенька красная, слово белое. */}
+          <Image src={logo} alt={AGENCY_NAME} className="on-light" priority />
+          <Image src={logoDark} alt={AGENCY_NAME} className="on-dark" priority />
         </Link>
         {/* Единственный раздел рядом со знаком: человек, не нашедший
             объект в каталоге, не должен искать, куда написать. */}
         <Link href={`/${lang}/request`} className="nav-link">{d.reqNav}</Link>
         <span className="spacer" />
+        <ThemeSwitch label={d.themeSwitch} />
         <LangSwitcher lang={lang} />
         <Link href="/login" className="enter">
           {/* На узком экране подпись короче: полная не влезала в строку и

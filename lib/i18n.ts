@@ -30,7 +30,7 @@ export const LOCALE: Record<Lang, string> = {
 
 type Dict = {
   // Шапка и подвал
-  forAgents: string; forAgentsShort: string; agency: string; city: string; phones: string; sections: string;
+  forAgents: string; forAgentsShort: string; themeSwitch: string; agency: string; city: string; phones: string; sections: string;
   agencyLine: string; cabinetLine: string;
   // Герой
   heroTitle: string; heroEm: string;
@@ -169,6 +169,7 @@ const ru: Dict = {
   pitchStep3: 'Вам приносят варианты', pitchStep3Note: 'Появится позже — позвоним, заявка остаётся в работе',
   mapTitle: 'Районы города', mapHint: 'Нажмите район — покажем, что в нём есть',
   mapEmpty: 'пока пусто',
+  themeSwitch: 'Светлая или тёмная тема',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
            land: 'участок', commercial: 'коммерческая', garage: 'гараж' },
 };
@@ -251,6 +252,7 @@ const ky: Dict = {
   pitchStep3: 'Сизге варианттар келет', pitchStep3Note: 'Кийин пайда болсо — чалабыз, арыз иште калат',
   mapTitle: 'Шаардын райондору', mapHint: 'Районду басыңыз — андагысын көрсөтөбүз',
   mapEmpty: 'азырынча жок',
+  themeSwitch: 'Жарык же караңгы тема',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
            land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж' },
 };
@@ -333,6 +335,7 @@ const en: Dict = {
   pitchStep3: 'They bring you options', pitchStep3Note: 'If it appears later, we call: the request stays open',
   mapTitle: 'Districts of the city', mapHint: 'Tap a district to see what it holds',
   mapEmpty: 'empty for now',
+  themeSwitch: 'Light or dark theme',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
            land: 'land', commercial: 'commercial', garage: 'garage' },
 };
@@ -415,6 +418,7 @@ const zh: Dict = {
   pitchStep3: '他们为您带来房源', pitchStep3Note: '日后出现也会致电：需求一直有效',
   mapTitle: '城市区域', mapHint: '点击区域，查看其中房源',
   mapEmpty: '暂无',
+  themeSwitch: '浅色或深色主题',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
            land: '地块', commercial: '商业用房', garage: '车库' },
 };

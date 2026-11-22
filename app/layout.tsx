@@ -18,6 +18,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={lang}>
       <head>
+        {/* Выбранная тема применяется ДО отрисовки: React сделал бы это
+            после, и страница успевала бы моргнуть светлой перед тёмной.
+            Скрипт крошечный и синхронный намеренно. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('theme');" +
+              "if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}",
+          }}
+        />
         {/* Manrope — шрифт дизайн-системы. Ссылкой, а не next/font: сборка
             идёт в сети, где Google Fonts недоступен, а браузер читателя
             загрузит его сам. Запасные шрифты заданы в globals.css. */}

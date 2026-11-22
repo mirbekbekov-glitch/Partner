@@ -426,6 +426,16 @@ main:has(.nav) { max-width: none; padding: 0; }
 .nav-in { display: flex; align-items: center; gap: 20px; padding-block: 13px; }
 .brand { display: flex; align-items: center; margin-right: 4px; }
 .brand img { height: 25px; width: auto; display: block; }
+/* Знак для тёмного фона прячется в светлой теме и наоборот. Условия
+   повторяют те, по которым переключаются сами цвета: системная тёмная,
+   если человек не выбрал иного, и явный выбор в любую сторону. */
+.brand .on-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .brand .on-light { display: none; }
+  :root:not([data-theme='light']) .brand .on-dark { display: block; }
+}
+:root[data-theme='dark'] .brand .on-light { display: none; }
+:root[data-theme='dark'] .brand .on-dark { display: block; }
 .nav .spacer { margin-left: auto; }
 .nav-link { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600;
   white-space: nowrap; transition: color .18s; }
@@ -914,3 +924,9 @@ main:has(.nav) { max-width: none; padding: 0; }
   .zone-cell { grid-column: auto !important; grid-row: auto !important; }
   .avenue { display: none; }
 }
+
+/* Переключатель темы: такой же тихий, как выбор языка, и рядом с ним. */
+.theme-btn { display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; background: var(--sunk); color: var(--fg); border: 0;
+  border-radius: var(--r-full); cursor: pointer; transition: background .18s, color .18s; }
+.theme-btn:hover { background: var(--ink); color: #fff; }
