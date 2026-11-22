@@ -182,14 +182,34 @@ async function withRole<T>(
   });
   await client.connect();
   try {
-    await client.query(`begin ${mode}`);
-    await client.query(`set local time zone '${TZ}'`);
-    if (claims !== null) {
+    // Открытие транзакции одним запросом, а не четырьмя.
+    //
+    // Это не преждевременная оптимизация, а следствие измерения: одна
+    // загрузка главной делала 12 обращений к базе, и шесть из них были
+    // служебными — begin, часовой пояс, роль, по три на каждую из двух
+    // транзакций. `pg` не конвейеризирует: каждое обращение это отдельный
+    // обход сети. Пока база была в том же контейнере, это стоило микросекунды.
+    // С базой в другом регионе каждый обход стоит сотни миллисекунд, и
+    // служебные обходы становятся половиной времени страницы.
+    //
+    // Несколько операторов в одном запросе Postgres выполняет за один обход,
+    // но только без параметров. Поэтому клеймы остаются отдельным запросом:
+    // в них идентификатор человека и его адрес, и подставлять их в текст
+    // запроса нельзя — это ровно то место, где появляется внедрение SQL.
+    //
+    // Порядок сохранён: роль понижается последней. Иначе set_config и сам
+    // `set local role` выполнялись бы уже под понижёнными правами.
+    if (claims === null) {
+      await client.query(
+        `begin ${mode}; set local time zone '${TZ}'; set local role ${roleName}`,
+      );
+    } else {
+      await client.query(`begin ${mode}; set local time zone '${TZ}'`);
       // Клеймы идут параметром, а не в текст запроса: там номер телефона и
       // идентификатор человека.
       await client.query("select set_config('request.jwt.claims', $1, true)", [claims]);
+      await client.query(`set local role ${roleName}`);
     }
-    await client.query(`set local role ${roleName}`);
     const result = await fn(client);
     await client.query("commit");
     return result;
