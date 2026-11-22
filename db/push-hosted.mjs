@@ -15,9 +15,10 @@
 // поэтому скрипт проверяет её сам и говорит, чего не хватает. Иначе ошибка
 // выглядела бы как «api.supabase.com не найден», то есть указывала бы не туда.
 //
-//   --check   только посмотреть, что в базе сейчас. Ничего не пишет;
-//   --apply   применить supabase/migrations/*.sql по порядку;
-//   --reset   ПЕРЕД применением снести схемы public и app целиком.
+//   --check     только посмотреть, что в базе сейчас. Ничего не пишет;
+//   --apply     применить supabase/migrations/*.sql по порядку;
+//   --reset     ПЕРЕД применением снести схемы public и app целиком;
+//   --schedule  зарегистрировать плановые работы (db/install_schedule.sql).
 //
 // `db/local_supabase_stub.sql` здесь НЕ применяется, и это важно: он
 // воспроизводит auth.uid() и роли Supabase для местного Postgres, а в
@@ -53,8 +54,11 @@ const args = new Set(process.argv.slice(2));
 const CHECK = args.has("--check");
 const APPLY = args.has("--apply");
 const RESET = args.has("--reset");
-if (!CHECK && !APPLY) {
-  console.error("нужен --check или --apply (и, возможно, --reset). Смотрите шапку файла.");
+const SCHEDULE = args.has("--schedule");
+if (!CHECK && !APPLY && !SCHEDULE) {
+  console.error(
+    "нужен --check, --apply или --schedule (и, возможно, --reset). Смотрите шапку файла.",
+  );
   process.exit(1);
 }
 
@@ -108,7 +112,7 @@ console.log(
     `представлений ${before.views.length}, строк ${before.rows}`,
 );
 
-if (CHECK && !APPLY) {
+if (CHECK && !APPLY && !SCHEDULE) {
   for (const t of before.tables) console.log(`  таблица     ${t.схема}.${t.имя}`);
   for (const v of before.views) console.log(`  представление ${v.схема}.${v.имя}`);
   process.exit(0);
@@ -159,7 +163,52 @@ for (const file of files) {
   done += 1;
 }
 
-const final = await describe();
-console.log(
-  `\nготово: таблиц ${final.tables.length}, представлений ${final.views.length}`,
-);
+if (APPLY) {
+  const final = await describe();
+  console.log(
+    `\nготово: таблиц ${final.tables.length}, представлений ${final.views.length}`,
+  );
+}
+
+if (SCHEDULE) {
+  // db/install_schedule.sql написан для psql и содержит его мета-команды.
+  // Management API их не понимает, поэтому \set и \echo снимаются — они
+  // только печатают. Любая ДРУГАЯ мета-команда означает, что файл делает
+  // что-то, чего здесь не будет (например \gexec строит запросы на ходу),
+  // и тогда прогон останавливается: тихо применить половину смысла хуже,
+  // чем отказаться.
+  const text = await readFile(join(ROOT, "db", "install_schedule.sql"), "utf8");
+  const safe = /^\\(set|echo)\b/;
+  const kept = [];
+  for (const line of text.split("\n")) {
+    if (!line.startsWith("\\")) {
+      kept.push(line);
+      continue;
+    }
+    if (safe.test(line)) continue;
+    console.error(
+      `db/install_schedule.sql содержит мета-команду psql, которую нельзя ` +
+        `снять без потери смысла:\n  ${line.trim()}\n` +
+        `Запустите файл через psql, а не через этот скрипт.`,
+    );
+    process.exit(1);
+  }
+
+  console.log("\nрегистрирую плановые работы");
+  try {
+    await sql(kept.join("\n"));
+  } catch (error) {
+    console.error(`расписание не установилось: ${String(error.message)}`);
+    console.error(
+      "если причина в pg_cron — включите расширение: Dashboard → Database → Extensions → pg_cron",
+    );
+    process.exit(1);
+  }
+
+  const health = await sql(
+    "select job as работа, status as состояние, silence as молчание from maintenance_health_v order by job",
+  );
+  for (const r of health) {
+    console.log(`  ${r.работа}: ${r.состояние} (молчание ${r.молчание})`);
+  }
+}
