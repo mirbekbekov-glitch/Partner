@@ -3,17 +3,39 @@ import { me } from "../../../lib/cabinet";
 import { formatPhone } from "../../../lib/format";
 import { gate } from "../Gate";
 import { ActionForm } from "../ActionForm";
-import { updateMyName, updateMyPhone } from "../actions";
+import { updateMyName, updateMyPhone, updateMyTelegram } from "../actions";
 
 export const metadata: Metadata = {
   title: "Профиль",
   robots: { index: false, follow: false },
 };
 
-export default async function ProfilePage() {
+const ROLE_LABEL: Record<string, string> = {
+  admin: "администратор",
+  head: "руководитель",
+  agent: "агент",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  approved: "работает",
+  pending: "ждёт одобрения",
+  blocked: "заблокирован",
+};
+
+const DIRECTION_LABEL: Record<string, string> = {
+  sale: "продажа",
+  rent: "аренда",
+};
+
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ note?: string }>;
+}) {
   const access = await gate();
   if (!access.ok) return access.screen;
 
+  const { note } = await searchParams;
   const agent = await me();
   if (!agent) return null;
 
@@ -21,8 +43,73 @@ export default async function ProfilePage() {
     <div className="wrap narrow">
       <h1>Профиль</h1>
 
+      <p className="lead">
+        Здесь ровно две части, и граница между ними — не оформление. Сверху
+        то, что про вас решила компания: агентство, роль, направления,
+        доступ. Ниже — то, что вы меняете сами. Запрещает правку не этот
+        экран, а права на столбцы в базе: форма, которой здесь нет, всё
+        равно получила бы отказ.
+      </p>
+
+      {note && <p className="ok-banner">{note}</p>}
+
       <section className="card">
+        <h2>Что решила компания</h2>
         <dl className="facts">
+          <dt>Агентство</dt>
+          <dd>
+            {agent.agency_name}
+            <p className="hint">
+              Клиенты, договоры и подборы принадлежат агентству, а объекты
+              видны всей платформе. Перевод в другое агентство — это не
+              правка профиля, а новая работа.
+            </p>
+          </dd>
+
+          <dt>Роль</dt>
+          <dd>
+            {ROLE_LABEL[agent.role] ?? agent.role}
+            {agent.is_head && <span className="chip info">видит всё агентство</span>}
+            {agent.is_admin && <span className="chip admin">админ</span>}
+            {agent.is_head && (
+              <p className="hint">
+                Руководитель видит работу всего агентства и может в ней всё:
+                двинуть чужой объект по этапам, заключить договор, закрыть
+                чужую задачу, передать работу.
+              </p>
+            )}
+          </dd>
+
+          <dt>Направления</dt>
+          <dd>
+            {agent.directions.length === 0 ? (
+              <span className="chip danger">не заданы</span>
+            ) : (
+              agent.directions.map((d) => (
+                <span key={d} className="chip">{DIRECTION_LABEL[d] ?? d}</span>
+              ))
+            )}
+            <p className="hint">
+              Направление — не ярлык: агент отдела аренды не видит работу
+              отдела продаж. Назначает их руководитель.
+            </p>
+          </dd>
+
+          <dt>Доступ</dt>
+          <dd>
+            <span
+              className={`chip ${
+                agent.status === "approved"
+                  ? "ok"
+                  : agent.status === "pending"
+                    ? "warn"
+                    : "danger"
+              }`}
+            >
+              {STATUS_LABEL[agent.status] ?? agent.status}
+            </span>
+          </dd>
+
           <dt>Адрес почты</dt>
           <dd>
             {agent.email}
@@ -31,17 +118,6 @@ export default async function ProfilePage() {
               нельзя: новый адрес подтверждается кодом, как при входе.
             </p>
           </dd>
-          <dt>Телефон</dt>
-          <dd>
-            {agent.phone ? formatPhone(agent.phone) : <span className="muted">не указан</span>}
-            {agent.phone && !agent.phone_verified_at && (
-              <span className="chip warn"> не подтверждён</span>
-            )}
-          </dd>
-          <dt>Роль</dt>
-          <dd>{agent.role === "admin" ? "администратор" : "агент"}</dd>
-          <dt>Статус</dt>
-          <dd>{agent.status === "approved" ? "работает" : agent.status}</dd>
         </dl>
       </section>
 
@@ -54,14 +130,19 @@ export default async function ProfilePage() {
           </label>
         </ActionForm>
         <p className="hint">
-          Имя, телефон и Telegram — то, что агент меняет сам. Адрес почты,
-          статус и роль меняет администратор, и это запрещено не экраном, а
-          правами на столбцы в базе.
+          Его видят коллеги во всех агентствах: рядом с вашим объектом в
+          общем списке стоит именно оно.
         </p>
       </section>
 
       <section className="card">
         <h2>Телефон</h2>
+        <p className="muted">
+          {agent.phone ? formatPhone(agent.phone) : "не указан"}
+          {agent.phone && !agent.phone_verified_at && (
+            <span className="chip warn">не подтверждён</span>
+          )}
+        </p>
         <ActionForm action={updateMyPhone} label="Сохранить">
           <label>
             Номер телефона
@@ -80,6 +161,40 @@ export default async function ProfilePage() {
           него не опирается — он нужен коллегам и клиентам, чтобы до вас
           дозвониться. Смена номера сбрасывает подтверждение, когда оно
           появится.
+        </p>
+      </section>
+
+      <section className="card">
+        <h2>Telegram</h2>
+        {/* Поле, которого на этом экране не было, хотя подпись рядом его
+            обещала. Оно не украшение: очередь уведомлений отдаёт сообщения
+            по telegram_id, и агент без него не получает ничего — молча. */}
+        <p className="muted">
+          {agent.telegram_id ? (
+            <>
+              привязан <code>{agent.telegram_id}</code>
+            </>
+          ) : (
+            <span className="chip warn">не привязан — уведомления не придут</span>
+          )}
+        </p>
+        <ActionForm action={updateMyTelegram} label="Сохранить">
+          <label>
+            Telegram ID
+            <input
+              name="telegram_id"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              defaultValue={agent.telegram_id ?? ""}
+              placeholder="123456789"
+            />
+          </label>
+        </ActionForm>
+        <p className="hint">
+          Это число, а не имя пользователя: его присылает бот платформы при
+          первом сообщении ему. Пустое поле отвязывает Telegram, и
+          уведомления туда приходить перестанут. Один аккаунт Telegram может
+          принадлежать только одному агенту.
         </p>
       </section>
     </div>

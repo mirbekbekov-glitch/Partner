@@ -524,6 +524,57 @@ export async function updateMyPhone(_prev: unknown, form: FormData): Promise<Res
   }, "/cabinet/profile");
 }
 
+/**
+ * Telegram агента.
+ *
+ * Поле, которое экран обещал и не давал. Оно не украшение: очередь
+ * уведомлений (инвариант 27) отдаёт сообщения по `agents.telegram_id`, и
+ * агент без него просто не получает ничего в Telegram — молча, потому что
+ * очередь ничего не нарушает, ей некуда слать.
+ *
+ * Номер уникален в базе: один аккаунт Telegram — один агент. Чужой номер
+ * отклоняется не формой, а уникальным индексом, и ответ об этом надо
+ * перевести на человеческий — «permission denied» и «duplicate key» клиенту
+ * ничего не говорят.
+ */
+export async function updateMyTelegram(_prev: unknown, form: FormData): Promise<Result> {
+  const raw = String(form.get("telegram_id") ?? "").trim();
+  if (raw === "") {
+    return act(async (db) => {
+      await db.query(
+        "update agents set telegram_id = null where auth_user_id = auth.uid()",
+      );
+      return "Telegram отвязан: уведомления туда приходить перестанут.";
+    }, "/cabinet/profile");
+  }
+
+  // Только «это число и оно влезает в bigint». Нижней границы длины у
+  // Telegram ID нет, и придуманная тут же отвергла бы значения, которые в
+  // базе уже лежат. Правило, выдуманное формой, — это не правило.
+  if (!/^\d{1,19}$/.test(raw) || BigInt(raw) > 9223372036854775807n) {
+    return {
+      ok: false,
+      error:
+        "Telegram ID — это число, которое присылает бот. Имя пользователя (@name) не подойдёт.",
+    };
+  }
+
+  return act(async (db) => {
+    try {
+      await db.query(
+        "update agents set telegram_id = $1 where auth_user_id = auth.uid()",
+        [raw],
+      );
+    } catch (e) {
+      if ((e as { code?: string }).code === "23505") {
+        throw new Error("Этот Telegram уже привязан к другому агенту.");
+      }
+      throw e;
+    }
+    return "Telegram привязан: уведомления будут приходить туда.";
+  }, "/cabinet/profile");
+}
+
 // ---------------------------------------------------------------------------
 // Подбор
 // ---------------------------------------------------------------------------

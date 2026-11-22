@@ -24,6 +24,7 @@ export type Me = {
   agency_name: string;
   is_admin: boolean;
   is_head: boolean;
+  telegram_id: string | null;
 };
 
 export type CabinetObject = {
@@ -67,7 +68,8 @@ export async function me(): Promise<Me | null> {
     const { rows } = await db.query<Me>(
       `select id, full_name, email, phone, phone_verified_at, role, status,
               directions::text[] as directions,
-              agency_id, agency_name, is_admin, is_head
+              agency_id, agency_name, is_admin, is_head,
+              telegram_id::text as telegram_id
          from me_v`,
     );
     return rows[0] ?? null;

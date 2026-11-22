@@ -46,6 +46,9 @@ export default async function CabinetLayout({
         { href: "/cabinet/candidates", label: "Объявления" },
         { href: "/cabinet/channels", label: "Площадки",
           count: a?.channels_not_ready, hint: "включены, но фид не соберётся" },
+        // Профиль был доступен только через имя в подвале, и его не находили.
+        // Своё имя в углу — это подпись «кто вошёл», а не указатель на раздел.
+        { href: "/cabinet/profile", label: "Профиль" },
         ...(agent.is_admin
           ? [
               { href: "/cabinet/agents", label: "Агенты",
