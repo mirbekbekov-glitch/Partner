@@ -23,9 +23,12 @@
     "walk:notifications": "node scripts/walk-notifications.mjs",
     "demo": "node scripts/demo-shots.mjs",
     "smoke:feed": "node scripts/smoke-feed.mjs",
-    "notify": "node --experimental-strip-types --no-warnings scripts/send-notifications.mjs"
+    "notify": "node --experimental-strip-types --no-warnings scripts/send-notifications.mjs",
+    "smoke:storage": "node --experimental-strip-types --no-warnings scripts/smoke-storage.mjs",
+    "photos:to-storage": "node --experimental-strip-types --no-warnings scripts/photos-to-storage.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.726.1",
     "next": "16.4.6",
     "pg": "8.13.1",
     "react": "19.2.0",

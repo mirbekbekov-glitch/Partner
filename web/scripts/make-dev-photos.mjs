@@ -9,8 +9,6 @@
 // Файл и запись в базе появляются вместе: ключ без файла даёт битую картинку,
 // файл без ключа недостижим.
 
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import { readFileSync } from "node:fs";
 import pg from "pg";
 import pw from "/opt/node-tools/node_modules/playwright/index.js";
@@ -20,8 +18,11 @@ for (const line of readFileSync(new URL("../.env", import.meta.url), "utf8").spl
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
 }
 
-const PHOTO_DIR = process.env.PHOTO_DIR;
-if (!PHOTO_DIR) throw new Error("PHOTO_DIR не задан");
+// Заглушки кладутся через тот же слой, что и настоящие снимки: иначе при
+// PHOTO_STORAGE=s3 они молча уходили бы на диск, а каталог показывал бы
+// битые картинки.
+const { storage } = await import("../lib/storage.ts");
+const store = storage();
 
 const TONES = [
   ["#20323f", "#3d6473"],
@@ -81,9 +82,7 @@ for (const [i, obj] of objects.entries()) {
     const buffer = await page.screenshot({ type: "jpeg", quality: 72 });
 
     const key = `objects/${obj.id}/${hex()}.jpg`;
-    const file = join(PHOTO_DIR, key);
-    await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, buffer);
+    await store.put(key, buffer, "image/jpeg");
 
     await client.query(
       `insert into object_photos (object_id, storage_key, sort_order, content_type,

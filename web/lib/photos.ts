@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join, normalize } from "node:path";
 import sharp, { type OutputInfo } from "sharp";
+import { storage } from "./storage.ts";
 
 /**
  * Хранилище фотографий.
@@ -25,9 +24,11 @@ import sharp, { type OutputInfo } from "sharp";
  * часть пути. Форма ключа ограничена проверкой схемы (инвариант 11), поэтому
  * выйти за каталог объекта нельзя даже ошибкой в этом файле.
  *
- * Хранилище — каталог на диске. Supabase Storage не подключён; когда дойдут
- * руки, меняются только `save` и `remove`, потому что право на файл
- * проверяется в базе на каждый запрос, а не настройками бакета.
+ * ГДЕ ЛЕЖАТ БАЙТЫ — дело `lib/storage.ts`: диск для разработки,
+ * S3-совместимое хранилище для всего остального. Этот файл о том, ЧТО в
+ * хранилище кладут, и про бакеты не знает ничего. Так и было обещано в
+ * первой версии: «меняются только save и remove, потому что право на файл
+ * проверяется в базе на каждый запрос, а не настройками бакета».
  */
 
 /** Длинная сторона после перекодирования. */
@@ -43,26 +44,6 @@ export type StoredPhoto = {
   height: number;
   byteSize: number;
 };
-
-function photoDir(): string {
-  const dir = process.env.PHOTO_DIR;
-  if (!dir) {
-    throw new Error(
-      "PHOTO_DIR не задан: хранилищу фотографий негде лежать. Смотрите web/.env.example.",
-    );
-  }
-  return dir;
-}
-
-/** Путь файла в хранилище. Ключ уже проверен формой — проверяется ещё раз. */
-function pathFor(storageKey: string): string {
-  const base = normalize(photoDir());
-  const path = join(base, normalize(storageKey));
-  if (!path.startsWith(base)) {
-    throw new Error(`ключ ${storageKey} выводит за пределы хранилища`);
-  }
-  return path;
-}
 
 /**
  * Принять файл: перекодировать и записать. Возвращает то, что нужно базе.
@@ -98,9 +79,7 @@ export async function save(objectId: string, file: File): Promise<StoredPhoto> {
   }
 
   const storageKey = `objects/${objectId}/${randomBytes(16).toString("hex")}.webp`;
-  const path = pathFor(storageKey);
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, output);
+  await storage().put(storageKey, output, "image/webp");
 
   return {
     storageKey,
@@ -148,9 +127,7 @@ export async function saveAvatar(agentId: string, file: File): Promise<StoredPho
   }
 
   const storageKey = `avatars/${agentId}/${randomBytes(16).toString("hex")}.webp`;
-  const path = pathFor(storageKey);
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, output);
+  await storage().put(storageKey, output, "image/webp");
 
   return {
     storageKey,
@@ -169,9 +146,16 @@ export async function saveAvatar(agentId: string, file: File): Promise<StoredPho
  * база и хранилище — это сообщение в журнале, а не остановка работы.
  */
 export async function remove(storageKey: string): Promise<void> {
-  try {
-    await rm(pathFor(storageKey), { force: true });
-  } catch (error) {
-    console.error(`не удалось убрать файл ${storageKey}: ${String(error)}`);
-  }
+  await storage().remove(storageKey);
+}
+
+/**
+ * Прочитать файл. Нужна маршрутам отдачи: они сначала спрашивают базу, кому
+ * этот файл сейчас положен, и только потом идут за байтами.
+ *
+ * `null` означает «такого файла нет», и это ответ, а не ошибка: база и
+ * хранилище расходятся при любом сбое между записью строки и записью файла.
+ */
+export async function read(storageKey: string) {
+  return storage().read(storageKey);
 }

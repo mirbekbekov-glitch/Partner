@@ -13,6 +13,12 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    // Явное расширение .ts в импортах внутри lib/. Без него дымовые проверки
+    // не могут импортировать эти модули напрямую: они запускаются обычным
+    // node со снятием типов, а он расширение не достраивает. Сборщик такой
+    // импорт понимает, а проверять руками то, что проверяется запуском, —
+    // плохой размен.
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",

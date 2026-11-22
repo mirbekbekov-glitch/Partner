@@ -1,7 +1,5 @@
-import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
-import { join, normalize } from "node:path";
 import { Readable } from "node:stream";
+import { read } from "@/lib/photos";
 import { asAgent } from "@/lib/db";
 import { readSession } from "@/lib/session";
 
@@ -18,16 +16,10 @@ import { readSession } from "@/lib/session";
  * (инвариант 38). Обход каталога невозможен дважды.
  */
 
-const PHOTO_DIR = process.env.PHOTO_DIR;
-
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ key: string[] }> },
 ) {
-  if (!PHOTO_DIR) {
-    return new Response("Хранилище не настроено", { status: 500 });
-  }
-
   const session = await readSession();
   if (!session) return new Response("Не найдено", { status: 404 });
 
@@ -44,23 +36,20 @@ export async function GET(
 
   if (!found) return new Response("Не найдено", { status: 404 });
 
-  const path = join(PHOTO_DIR, normalize(key));
-  if (!path.startsWith(normalize(PHOTO_DIR))) {
+  const file = await read(key);
+  if (!file) {
+    console.error(`аватар ${key} есть в базе, но не найден в хранилище`);
     return new Response("Не найдено", { status: 404 });
   }
 
-  try {
-    const info = await stat(path);
-    const stream = Readable.toWeb(createReadStream(path)) as ReadableStream;
-    return new Response(stream, {
-      headers: {
-        "content-type": "image/webp",
-        "content-length": String(info.size),
-        // Приватная картинка: общие кеши её хранить не должны.
-        "cache-control": "private, max-age=300",
-      },
-    });
-  } catch {
-    return new Response("Не найдено", { status: 404 });
-  }
+  const stream = Readable.toWeb(file.body) as unknown as ReadableStream;
+
+  return new Response(stream, {
+    headers: {
+      "content-type": "image/webp",
+      ...(file.size === null ? {} : { "content-length": String(file.size) }),
+      // Приватная картинка: общие кеши её хранить не должны.
+      "cache-control": "private, max-age=300",
+    },
+  });
 }
