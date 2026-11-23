@@ -74,32 +74,84 @@ log("у нового агента кнопка правки:", await page.locato
 await page.screenshot({ path: `${SHOT}/transfer-object-after.png`, fullPage: true });
 
 // --- клиент ---------------------------------------------------------------------
-await page.goto(`${BASE}/cabinet/requirements`, { waitUntil: "networkidle" });
-const mineClients = await page.locator('a:text("Подбор")').count();
-if (mineClients > 0) {
-  await page.locator('a:text("Подбор")').first().click();
-  await page.waitForURL(/\/cabinet\/requirements\/[0-9a-f-]{36}/, { timeout: 20000 });
-  const reqUrl = page.url().split("?")[0];
-  const client = await page.locator("h1").innerText();
-  await page.locator('summary:text("Передать клиента другому агенту")').click();
-  await page.locator('select[name="to_agent"]').selectOption({ label: "Чынгыз" });
-  await page.locator('button:text("Передать клиента")').click();
-  await page.waitForSelector(".ok-banner, .act-err", { timeout: 20000 });
-  log(`клиент «${client}» →`, await page.locator(".ok-banner, .act-err").first().innerText());
+// Клиент заводится ПРОГОНОМ, а не берётся из списка. Раньше обход отдавал
+// Чынгызу первого попавшегося клиента Бакыта: данные разработки таяли с
+// каждым прогоном, а когда клиенты кончались, обход уходил в ветку «нет
+// клиентов — обновите данные» и проходил, не проверив ничего.
+//
+// Телефон у прогона свой: клиент ищется по телефону, и с общим номером
+// каждый прогон цеплялся бы к контакту первого.
+const stamp = String(Date.now()).slice(-6);
+const client = `Передача ${stamp}`;
+await page.goto(`${BASE}/cabinet/requirements/new`, { waitUntil: "networkidle" });
+await page.locator('input[name="client_name"]').fill(client);
+await page.locator('input[name="client_phone"]').fill(`0700 ${stamp}`);
+await page.locator('select[name="deal_type"]').selectOption("sale");
+await page.locator('input[name="budget_min"]').fill("50000");
+await page.locator('input[name="budget_max"]').fill("90000");
+await page.locator('input[name="zones"]').fill("Центр, Юг");
+await page.locator('input[name="rooms"]').fill("1, 2");
+await page.locator('button:text("Завести клиента")').click();
+await page.waitForURL(/\/cabinet\/requirements\/[0-9a-f-]{36}/, { timeout: 30000 });
+const reqUrl = page.url().split("?")[0];
 
-  await page.goto(reqUrl, { waitUntil: "networkidle" });
-  log("у прежнего агента кнопка подбора:",
-      await page.locator('button:text("Предложить клиенту")').count(),
-      "| предупреждение:", (await page.locator(".warn").count()) > 0);
+await page.locator('summary:text("Передать клиента другому агенту")').click();
+await page.locator('select[name="to_agent"]').selectOption({ label: "Чынгыз" });
+// Ждём ОТВЕТА действия: баннера на этой странице ждать нельзя — после
+// передачи карточка агенту уже не принадлежит, и возврат идёт в список.
+await Promise.all([
+  page.waitForResponse((r) => r.request().method() === "POST" && r.status() < 400),
+  page.locator('button:text("Передать клиента")').click(),
+]);
+await page.waitForURL(/\/cabinet\/requirements(\?|$)/, { timeout: 20000 });
+const note = await page.locator(".ok-banner, .act-err").first().innerText();
+if (!/передан/i.test(note)) throw new Error(`после передачи клиента сказано не то: ${note}`);
+log(`клиент «${client}» →`, note);
 
-  await login("chyngyz@partner.kg");
-  await page.goto(reqUrl, { waitUntil: "networkidle" });
-  log("у нового агента кнопок подбора:",
-      await page.locator('button:text("Предложить клиенту")').count());
-  await page.screenshot({ path: `${SHOT}/transfer-requirement.png`, fullPage: true });
-} else {
-  log("клиентов в работе нет — обновите данные");
+// Прежний агент карточку больше не открывает.
+//
+// Проверка нужна именно здесь: возврат после передачи раньше вёл на эту самую
+// карточку, и агент попадал на отказ, написанный для витрины, — «Такого
+// объекта в каталоге нет. Вернуться в каталог», — а сообщение об успехе
+// уезжало в адресную строку и не показывалось никогда.
+const lost = await page.goto(reqUrl, { waitUntil: "networkidle" });
+if (lost?.status() !== 404) {
+  throw new Error(`прежний агент открыл переданного клиента: ${lost?.status()}`);
 }
+if ((await page.locator('button:text("Предложить клиенту")').count()) !== 0) {
+  throw new Error("прежнему агенту предложено работать с переданным клиентом");
+}
+log("у прежнего агента карточки больше нет (404)");
+
+// Новый — открывает и работает.
+await login("chyngyz@partner.kg");
+const got = await page.goto(reqUrl, { waitUntil: "networkidle" });
+if (got?.status() !== 200) throw new Error(`новый агент клиента не видит: ${got?.status()}`);
+const canWork = await page.locator('button:text("Предложить клиенту")').count();
+if (canWork === 0) throw new Error("новый агент видит клиента, но работать с ним не может");
+log("у нового агента кнопок подбора:", canWork);
+await page.screenshot({ path: `${SHOT}/transfer-requirement.png`, fullPage: true });
+
+// --- объект возвращается Айбеку -------------------------------------------------
+// Иначе каждый прогон уводил у Айбека по объекту, и данные разработки таяли
+// до «передавать нечего». Заодно проверяется обратный путь: принявший агент
+// может отдать объект назад.
+await login("bakyt@partner.kg");
+await page.goto(`${BASE}${href}`, { waitUntil: "networkidle" });
+await page.locator('summary:text("Передать объект другому агенту")').click();
+await page.locator('select[name="to_agent"]').selectOption({ label: "Айбек" });
+await Promise.all([
+  page.waitForResponse((r) => r.request().method() === "POST" && r.status() < 400),
+  page.locator('button:text("Передать объект")').click(),
+]);
+
+await login("aibek@partner.kg");
+await page.goto(`${BASE}/cabinet/objects`, { waitUntil: "networkidle" });
+const mineAfter = await page.locator('.row:has(button:text("Подтвердить актуальность"))').count();
+if (mineAfter !== mineBefore) {
+  throw new Error(`объект не вернулся: было ${mineBefore}, стало ${mineAfter}`);
+}
+log(`объект вернулся Айбеку: своих объектов снова ${mineAfter}`);
 
 await browser.close();
 log("проход завершён");

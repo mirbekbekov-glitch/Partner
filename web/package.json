@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke.mjs",
     "smoke:cabinet": "node scripts/smoke-cabinet.mjs",
-    "walk": "node scripts/walk-cabinet.mjs",
+    "walk": "node scripts/walk-all.mjs",
     "smoke:photos": "node --experimental-strip-types --no-warnings scripts/smoke-photos.mjs",
     "walk:photos": "node scripts/walk-photos.mjs",
     "walk:new": "node scripts/walk-new-object.mjs",

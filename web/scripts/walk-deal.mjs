@@ -42,29 +42,66 @@ async function login(email) {
 await login("bakyt@partner.kg");
 log("агент вошёл");
 
-// --- находим свой подбор без сделки -----------------------------------------
-await page.goto(`${BASE}/cabinet/requirements`, { waitUntil: "networkidle" });
-// Берётся клиент, который ещё в работе: закрытая сделка закрывает и
-// потребность, и мандат, поэтому каждый проход съедает один набор данных.
-// Это свойство прохода, а не продукта — данные обновляются
-// db/dev_seed_cabinet.sql и db/dev_seed.sql.
-const withMatch = page
-  .locator('.row:has(a:text("Подбор"))')
-  .filter({ hasNot: page.locator(".chip.closed, .chip.in_deal") })
-  .first();
-if ((await withMatch.count()) === 0) {
-  throw new Error("нет клиентов в работе — обновите данные: psql -d partner -f db/dev_seed.sql");
+// Действие и ожидание ЕГО ОТВЕТА.
+//
+// Ждать баннера нельзя: на этих страницах баннер от предыдущего действия уже
+// висит, waitForSelector(".ok-banner") возвращается мгновенно, и обход бежит
+// дальше по странице, которой ещё нет. Так закрытие сделки «проходило», не
+// происходя: суммы до и после совпадали, кнопка закрытия оставалась на
+// месте, а обход печатал зелёные строки.
+async function submit(button) {
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === "POST" && r.status() < 400),
+    button.click(),
+  ]);
 }
-await withMatch.locator('a:text("Подбор")').click();
-await page.waitForURL(/\/cabinet\/requirements\/[0-9a-f-]{36}/, { timeout: 20000 });
+
+// --- свой клиент с подбором --------------------------------------------------
+// Обход заводит клиента СЕБЕ, а не берёт первую подходящую строку из списка.
+//
+// Закрытая сделка закрывает и потребность, и мандат, поэтому каждый прогон
+// съедал один набор данных из засева. А когда первой в списке оказалась
+// потребность с пустым подбором, обход упал с «подбор пуст — проверьте
+// данные»: выглядело как поломка продукта, было зависимостью проверки от
+// того, что лежит в базе и в каком порядке.
+//
+// Условия те же, под которыми scripts/walk-matching.mjs получает пять
+// вариантов: если подбор окажется пуст теперь — сломан подбор, а не данные.
+const stamp = String(Date.now()).slice(-6);
+const mark = `Сделка ${stamp}`;
+// Телефон тоже свой: клиент ищется ПО ТЕЛЕФОНУ, и с общим номером каждый
+// прогон цеплялся к контакту первого — в сделке стояло чужое имя, а обход
+// печатал своё. Один телефон — один человек, это правильно; значит и номер
+// у прогона должен быть свой.
+const phone = `0700 ${stamp}`;
+await page.goto(`${BASE}/cabinet/requirements/new`, { waitUntil: "networkidle" });
+await page.locator('input[name="client_name"]').fill(mark);
+await page.locator('input[name="client_phone"]').fill(phone);
+await page.locator('select[name="deal_type"]').selectOption("sale");
+await page.locator('input[name="budget_min"]').fill("50000");
+await page.locator('input[name="budget_max"]').fill("90000");
+await page.locator('input[name="zones"]').fill("Центр, Юг");
+await page.locator('input[name="rooms"]').fill("1, 2");
+await page.locator('button:text("Завести клиента")').click();
+await page.waitForURL(/\/cabinet\/requirements\/[0-9a-f-]{36}/, { timeout: 30000 });
 const requirementUrl = page.url().split("?")[0];
+log("клиент для прогона заведён:", mark);
 
 // Если клиенту ещё ничего не предложено — предлагаем.
 if ((await page.locator('button:text("Завести сделку")').count()) === 0) {
   const first = page.locator('.row:has(button:text("Предложить клиенту"))').first();
-  if ((await first.count()) === 0) throw new Error("подбор пуст — проверьте данные");
-  await first.locator('form:has(button:text("Предложить клиенту")) button').click();
-  await page.waitForSelector(".ok-banner, .act-err", { timeout: 20000 });
+  if ((await first.count()) === 0) {
+    throw new Error("подбор пуст под теми же условиями, под которыми walk-matching находит пять: сломан подбор");
+  }
+  // Ждём ОТВЕТА действия, а не баннера.
+  //
+  // Баннер «Потребность заведена» уже висел на экране с прошлого шага, и
+  // waitForSelector(".ok-banner") возвращался мгновенно — страница
+  // перечитывалась раньше, чем действие успевало отработать, и кнопки
+  // «Завести сделку» в перечитанном ответе ещё не было. Дальше обход ждал её
+  // тридцать секунд на статической странице, где она сама не появится.
+  // Падало через раз и выглядело как поломка продукта.
+  await submit(first.locator('form:has(button:text("Предложить клиенту")) button'));
   await page.goto(requirementUrl, { waitUntil: "networkidle" });
 }
 
@@ -75,21 +112,30 @@ const dealUrl = page.url().split("?")[0];
 log("сделка заведена →", await page.locator(".ok-banner").first().innerText());
 await page.screenshot({ path: `${SHOT}/deal-open.png`, fullPage: true });
 
-const facts = await page.locator(".facts").allInnerTexts();
-log("деньги до закрытия:", facts.join(" | ").replace(/\n/g, " ").slice(0, 190));
+const beforeMoney = (await page.locator(".facts").allInnerTexts()).join(" | ").replace(/\n/g, " ");
+log("деньги до закрытия:", beforeMoney.slice(0, 190));
 
 // --- закрываем ----------------------------------------------------------------
 await page.locator('input[name="final_price"]').fill("95000");
-await page.locator('form:has(input[name="final_price"]) button').click();
-await page.waitForSelector(".ok-banner, .act-err", { timeout: 25000 });
-log("закрытие →", await page.locator(".ok-banner, .act-err").first().innerText());
+await submit(page.locator('form:has(input[name="final_price"]) button'));
 
 await page.goto(dealUrl, { waitUntil: "networkidle" });
 await page.screenshot({ path: `${SHOT}/deal-closed.png`, fullPage: true });
+
+// Закрытие проверяется тремя признаками, а не печатается строкой. Печаталось
+// оно и тогда, когда сделка не закрывалась вовсе.
+if ((await page.locator('button:text("Закрыть сделку")').count()) !== 0) {
+  throw new Error("сделка не закрылась: кнопка закрытия на месте");
+}
+const afterMoney = (await page.locator(".facts").allInnerTexts()).join(" | ").replace(/\n/g, " ");
+if (afterMoney === beforeMoney) {
+  throw new Error("суммы после закрытия те же: они так и остались индикативными");
+}
+if (!/зафиксирован/i.test(await page.locator("main").innerText())) {
+  throw new Error("на закрытой сделке не сказано, что суммы зафиксированы");
+}
 log("состояние:", (await page.locator(".chip").allInnerTexts()).join(" | "));
-log("деньги после закрытия:",
-    (await page.locator(".facts").allInnerTexts()).join(" | ").replace(/\n/g, " ").slice(0, 190));
-log("кнопка закрытия исчезла:", (await page.locator('button:text("Закрыть сделку")').count()) === 0);
+log("деньги после закрытия:", afterMoney.slice(0, 190));
 
 // --- что стало с объектом и клиентом -------------------------------------------
 await page.goto(requirementUrl, { waitUntil: "networkidle" });
@@ -102,11 +148,23 @@ await page.screenshot({ path: `${SHOT}/deals.png`, fullPage: true });
 log("сделок в списке:", await page.locator(".row").count(),
     "| кнопок «Открыть»:", await page.locator('a:text("Открыть")').count());
 
+// Чынгыз — коллега из ТОГО ЖЕ агентства, но в этой сделке не участвует.
+// Инвариант 33: «чужую сделку, в которой не участвуешь, не видно» — и не
+// видно вовсе, а не «видно с оговоркой».
+//
+// Прежняя редакция ждала здесь заголовок сделки и предупреждение рядом с
+// ним. Она была написана, когда сделку показывали чужому с оговоркой; теперь
+// её не показывают. Проверка осталась от прежнего поведения и падала на
+// отсутствующем h1 — то есть ловила не дефект, а собственную устарелость.
 await login("chyngyz@partner.kg");
-await page.goto(dealUrl, { waitUntil: "networkidle" });
-log("чужой агент видит сделку:", await page.locator("h1").innerText(),
-    "| кнопок закрытия:", await page.locator('button:text("Закрыть сделку")').count(),
-    "| предупреждение:", (await page.locator(".warn").count()) > 0);
+const foreign = await page.goto(dealUrl, { waitUntil: "networkidle" });
+if (foreign?.status() !== 404) {
+  throw new Error(`коллега не из сделки получил ${foreign?.status()}, а сделки видеть не должен`);
+}
+if ((await page.locator('button:text("Закрыть сделку")').count()) !== 0) {
+  throw new Error("коллеге не из сделки предложено её закрыть");
+}
+log("коллега не из сделки: сделки не видит (404), закрыть не предложено");
 
 await browser.close();
 log("проход завершён");

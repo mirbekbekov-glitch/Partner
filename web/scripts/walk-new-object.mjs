@@ -4,6 +4,9 @@
 const pw = await import(process.env.PLAYWRIGHT ?? "playwright");
 const { chromium } = pw.default ?? pw;
 
+import { readFileSync } from "node:fs";
+import pg from "pg";
+
 const SHOT = process.env.SHOT_DIR ?? "/tmp/partner-shots";
 // Тот же обход нужен по двум стендам: обычный Next (порт 3000) и воркер
 // (порт 3001). Прошитый адрес означал бы, что воркер проверяется не этим
@@ -44,11 +47,34 @@ await page.screenshot({ path: `${SHOT}/new-object.png`, fullPage: true });
 log("форма открыта:", await page.locator("h1").innerText());
 
 // Отказ: собственник не указан.
+//
+// Отказ приходит ОТ БРАУЗЕРА, а не от базы: поля собственника помечены
+// required, и форма не уходит вовсе. Это лучше хода до сервера и обратно, и
+// это то, что видит агент.
+//
+// Прежняя редакция ждала здесь баннера `.act-err` от действия и висела до
+// таймаута. Проверка была красной не потому, что продукт сломан, а потому
+// что отказ ждали не с той стороны. Отказ базы на этот счёт никуда не делся
+// и закреплён инвариантом 19 — повторять его проходом незачем.
+const formUrl = page.url();
 await page.locator('input[name="address"]').fill("Токтогула 100, кв. 5");
 await page.locator('input[name="price"]').fill("72000");
 await page.locator("button:text(\"Завести объект\")").click();
-await page.waitForSelector(".act-err, .ok-banner", { timeout: 20000 });
-log("без собственника →", await page.locator(".act-err").first().innerText());
+await page.waitForTimeout(1500);
+
+const owner = await page.locator('input[name="owner_name"]').evaluate((el) => ({
+  valid: el.checkValidity(),
+  message: el.validationMessage,
+}));
+if (owner.valid) {
+  throw new Error(
+    "форма ушла без собственника: браузер не остановил её, и узнала бы об этом последней база",
+  );
+}
+if (page.url() !== formUrl || (await page.locator(".ok-banner").count()) > 0) {
+  throw new Error("форма всё-таки отправилась, хотя собственник не указан");
+}
+log("без собственника →", owner.message || "браузер не отпустил форму");
 
 // Теперь с собственником.
 await page.locator('input[name="owner_name"]').fill("Жаныбек Осмонов");
@@ -69,23 +95,60 @@ log("состояние нового объекта:", chips.join(" | "));
 log("форма загрузки фотографий на месте:", await page.locator('input[type="file"]').count() === 1);
 
 // --- из объявления ----------------------------------------------------------
-await page.goto(`${BASE}/cabinet/candidates`, { waitUntil: "networkidle" });
-const free = page.locator('.row:has(button:text("Взять в работу"))').first();
-if ((await free.count()) === 0) {
-  // Каждый проход разбирает одно объявление, и пул кончается. Это свойство
-  // прохода, а не продукта: объявления приносит сборщик, а в разработке —
-  // db/dev_seed_cabinet.sql.
-  log("свободных объявлений в пуле нет — пополните: psql -d partner -f db/dev_seed_cabinet.sql");
-  await browser.close();
-  process.exit(0);
+// Объявление для прогона заводится ПРОГОНОМ.
+//
+// Каждый прогон разбирает одно объявление, и пул из db/dev_seed_cabinet.sql
+// кончался. Раньше обход на этом месте печатал «пополните данные» и выходил
+// с успехом — то есть половина прохода молча не выполнялась, а строка
+// «проход завершён» даже не печаталась. Выглядело это то как падение, то как
+// успех, в зависимости от того, что осталось в базе.
+//
+// Заводится тем же путём, что в бою: функцией приёма от имени роли сборщика.
+const stamp = String(Date.now()).slice(-6);
+const title = `Проба обхода ${stamp}, 2-комн. 54 м²`;
+{
+  const envText = readFileSync(new URL("../.env", import.meta.url), "utf8");
+  const dbUrl = envText.match(/^DATABASE_URL=(.*)$/m)?.[1];
+  if (!dbUrl) throw new Error("DATABASE_URL не найден в web/.env");
+  const db = new pg.Client({ connectionString: dbUrl });
+  await db.connect();
+  await db.query("set role collector");
+  await db.query("select app.upsert_candidate($1::jsonb)", [JSON.stringify({
+    source: "house_kg",
+    external_id: `WALK-${stamp}`,
+    url: `https://www.house.kg/details/walk-${stamp}`,
+    title,
+    description: "Объявление для прогона обхода. Телефон выдуманный.",
+    address: "город Бишкек, 7 м-н",
+    zone: "7 м-н", kind: "flat", deal_type: "sale",
+    rooms: 2, area: 54, floor: 4, floors_total: 9,
+    price: 4700000, currency: "KGS",
+    photos_count: 8, author: "owner", phone: `0700 ${stamp}`,
+  })]);
+  await db.end();
+  log("объявление для прогона заведено:", title);
 }
-await free.locator('form:has(button:text("Взять в работу")) button').click();
-await page.waitForSelector(".ok-banner, .act-err", { timeout: 20000 });
-log("взято в работу →", await page.locator(".ok-banner, .act-err").first().innerText());
 
 await page.goto(`${BASE}/cabinet/candidates`, { waitUntil: "networkidle" });
-const mine = page.locator('.row:has(a:text("Завести объект"))').first();
-const title = await mine.locator("h3").innerText();
+const free = page
+  .locator(`.row:has(button:text("Взять в работу")):has-text(${JSON.stringify(stamp)})`)
+  .first();
+if ((await free.count()) === 0) {
+  throw new Error(`объявление «${title}» заведено, но в пуле его нет`);
+}
+await Promise.all([
+  page.waitForResponse((r) => r.request().method() === "POST" && r.status() < 400),
+  free.locator('form:has(button:text("Взять в работу")) button').click(),
+]);
+await page.goto(`${BASE}/cabinet/candidates`, { waitUntil: "networkidle" });
+log("взято в работу:", title);
+
+const mine = page
+  .locator(`.row:has(a:text("Завести объект")):has-text(${JSON.stringify(stamp)})`)
+  .first();
+if ((await mine.count()) === 0) {
+  throw new Error("взятое в работу объявление не предлагает завести объект");
+}
 await mine.locator('a:text("Завести объект")').click();
 await page.waitForURL("**/objects/new?candidate=*", { timeout: 20000 });
 await page.screenshot({ path: `${SHOT}/new-object-from-candidate.png`, fullPage: true });

@@ -4,6 +4,88 @@
 const pw = await import(process.env.PLAYWRIGHT ?? "playwright");
 const { chromium } = pw.default ?? pw;
 
+import { readFileSync } from "node:fs";
+import pg from "pg";
+
+// --- фикстура: показы, на которых держится этот обход -----------------------
+//
+// Обход закрывает просроченный показ исходом, помечает неявку и переносит
+// встречу — то есть съедает за прогон один забытый показ и два назначенных.
+// Из db/dev_seed_cabinet.sql их ровно столько, сколько хватает на один раз:
+// после первого прогона обход падал, не найдя ни строки. Падение выглядело
+// как поломка продукта.
+//
+// Поэтому фикстуру готовит тот, кому она нужна, и готовит заново на каждом
+// прогоне. Назначить показ задним числом приложение не даёт, и правильно
+// делает: показ — это уговор на будущее. Вставка идёт от владельца таблиц,
+// тем же способом, что в засеве.
+{
+  const envText = readFileSync(new URL("../.env", import.meta.url), "utf8");
+  const dbUrl = envText.match(/^DATABASE_URL=(.*)$/m)?.[1];
+  if (!dbUrl) throw new Error("DATABASE_URL не найден в web/.env");
+  const db = new pg.Client({ connectionString: dbUrl });
+  await db.connect();
+
+  // Подбор берётся такой, у которого назначенного показа ещё нет: иначе
+  // вторая вставка легла бы на тот же подбор, а база справедливо считает это
+  // накладкой.
+  const add = async (at) => {
+    const { rowCount } = await db.query(`
+      insert into showings (match_id, agent_id, scheduled_at, status, created_by_agent_id)
+      select m.id, a.id, $1::timestamptz, 'scheduled', a.id
+        from matches m
+        join requirements r on r.id = m.requirement_id
+        join agents a on a.email = 'bakyt@partner.kg'
+       where r.agent_id = a.id
+         and not exists (select 1 from showings s
+                          where s.match_id = m.id and s.status = 'scheduled')
+       order by m.created_at
+       limit 1`, [at]);
+    return rowCount;
+  };
+
+  // Фикстура ДОСОЗДАЁТ недостающее, а не добавляет каждый раз.
+  //
+  // Прогон, упавший посередине, оставляет назначенный показ за собой. Вторая
+  // версия фикстуры всё равно вставляла свой — и упиралась в накладку: «в это
+  // время у агента уже показ». База права, ошибка была в фикстуре.
+  const count = async (when) => (await db.query(`
+    select count(*)::int n from showings s
+      join matches m on m.id = s.match_id
+      join requirements r on r.id = m.requirement_id
+      join agents a on a.id = r.agent_id
+     where a.email = 'bakyt@partner.kg'
+       and s.status = 'scheduled'
+       and s.scheduled_at ${when} now()`)).rows[0].n;
+
+  // Забытый: двадцать часов назад, а не двое суток. Инвариант 25 разрешает
+  // назначать в прошлое не дальше app.showing_backdate_limit(), и это ровно
+  // двое суток — первая версия фикстуры об него и споткнулась.
+  if ((await count("<")) === 0) {
+    const late = new Date(Date.now() - 20 * 3600 * 1000);
+    if ((await add(late.toISOString())) === 0) {
+      throw new Error("забытый показ не завёлся: у Бакыта нет подбора без назначенного показа");
+    }
+  }
+
+  // Назначенные: на них проверяются неявка и перенос. Часы разные у каждого
+  // прогона — иначе прогон упирался бы в показ, оставленный предыдущим.
+  const stamp = Date.now();
+  let ahead = await count(">");
+  for (let k = 0; ahead < 3 && k < 6; k += 1) {
+    const at = new Date(stamp + (3 + k) * 86400000);
+    // Часы в UTC, а окно 08:00–21:00 база считает по Бишкеку (UTC+6). 3..12
+    // по UTC — это 09:00–18:00 по Бишкеку. Первая версия ставила 9..19 по
+    // UTC, то есть до часу ночи по Бишкеку, и база справедливо отказывала.
+    at.setUTCHours(3 + ((Math.floor(stamp / 1000) + k) % 10), (Math.floor(stamp / 100) % 12) * 5, 0, 0);
+    ahead += await add(at.toISOString());
+  }
+  await db.end();
+  if (ahead < 2) {
+    throw new Error(`назначенных показов у Бакыта ${ahead}: обходу нужно хотя бы два`);
+  }
+}
+
 const SHOT = process.env.SHOT_DIR ?? "/tmp/partner-shots";
 // Тот же обход нужен по двум стендам: обычный Next (порт 3000) и воркер
 // (порт 3001). Прошитый адрес означал бы, что воркер проверяется не этим

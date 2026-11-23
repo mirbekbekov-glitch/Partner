@@ -46,19 +46,41 @@ async function move(label) {
 await login("bakyt@partner.kg");
 log("агент вошёл");
 
-// --- заводим сделку из подбора ----------------------------------------------
-await page.goto(`${BASE}/cabinet/requirements`, { waitUntil: "networkidle" });
-const req = page.locator('.row:has(a:text("Подбор"))').first();
-if ((await req.count()) === 0) throw new Error("нет клиентов в работе — обновите данные");
-await req.locator('a:text("Подбор")').click();
-await page.waitForURL(/\/cabinet\/requirements\/[0-9a-f-]{36}/, { timeout: 20000 });
+// --- свой клиент, из подбора которого заводится сделка ------------------------
+// Клиент заводится ПРОГОНОМ, а не берётся из списка. Закрытая сделка закрывает
+// и потребность, и мандат, поэтому каждый прогон съедал один набор данных; а
+// когда первой в списке оказывалась потребность с пустым подбором, обход падал
+// с «подбор пуст — обновите данные», будто сломан продукт.
+//
+// Условия те же, под которыми walk-matching находит варианты. Телефон свой:
+// клиент ищется по телефону, и с общим номером прогон цеплялся бы к контакту
+// предыдущего.
+const stamp = String(Date.now()).slice(-6);
+await page.goto(`${BASE}/cabinet/requirements/new`, { waitUntil: "networkidle" });
+await page.locator('input[name="client_name"]').fill(`Этапы ${stamp}`);
+await page.locator('input[name="client_phone"]').fill(`0700 ${stamp}`);
+await page.locator('select[name="deal_type"]').selectOption("sale");
+await page.locator('input[name="budget_min"]').fill("50000");
+await page.locator('input[name="budget_max"]').fill("90000");
+await page.locator('input[name="zones"]').fill("Центр, Юг");
+await page.locator('input[name="rooms"]').fill("1, 2");
+await page.locator('button:text("Завести клиента")').click();
+await page.waitForURL(/\/cabinet\/requirements\/[0-9a-f-]{36}/, { timeout: 30000 });
 const reqUrl = page.url().split("?")[0];
+log("клиент для прогона заведён:", `Этапы ${stamp}`);
 
-if ((await page.locator('button:text("Завести сделку")').count()) === 0) {
+{
   const first = page.locator('.row:has(button:text("Предложить клиенту"))').first();
-  if ((await first.count()) === 0) throw new Error("подбор пуст — обновите данные");
-  await first.locator('form:has(button:text("Предложить клиенту")) button').click();
-  await page.waitForSelector(".ok-banner, .act-err", { timeout: 20000 });
+  if ((await first.count()) === 0) {
+    throw new Error("подбор пуст под теми же условиями, под которыми walk-matching находит варианты");
+  }
+  // Ждём ОТВЕТА действия, а не баннера: баннер «Потребность заведена» уже на
+  // экране, и ожидание возвращалось бы мгновенно — страница перечиталась бы
+  // раньше, чем действие сработает.
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === "POST" && r.status() < 400),
+    first.locator('form:has(button:text("Предложить клиенту")) button').click(),
+  ]);
   await page.goto(reqUrl, { waitUntil: "networkidle" });
 }
 await page.locator('form:has(button:text("Завести сделку")) button').first().click();

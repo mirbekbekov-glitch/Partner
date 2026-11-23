@@ -16,6 +16,73 @@
 const pw = await import(process.env.PLAYWRIGHT ?? "playwright");
 const { chromium } = pw.default ?? pw;
 
+import { readFileSync } from "node:fs";
+import pg from "pg";
+
+// --- фикстура: объект, который давно не подтверждали ------------------------
+//
+// Проверка плитки «требуют внимания» держится на таком объекте. Раньше она
+// держалась на объекте из db/dev_seed.sql — и он не выживал: обход правки
+// меняет цену, а правка цены поднимает actual_at (инвариант 5). После
+// первого же полного круга обходов плитка показывала ноль, проверка причин
+// под ней проходила, не проверив ничего, и обход оставался зелёным.
+//
+// Чинить это запретом другим обходам трогать «волшебный объект» бессмысленно:
+// следующий написанный обход споткнётся о него снова. Поэтому фикстуру
+// готовит тот, кому она нужна, и готовит заново на каждом прогоне.
+//
+// Назад actual_at не двигается ничем из приложения — так устроен инвариант 5,
+// и это правильно. Поэтому ровно на один оператор снимается триггер
+// a_object_timestamps. Это подготовка данных владельцем таблиц, как в
+// scripts/make-dev-photos.mjs, а не путь приложения.
+const STALE_ADDRESS = "Тоголок Молдо 17, кв. 12";
+{
+  const envText = readFileSync(new URL("../.env", import.meta.url), "utf8");
+  const dbUrl = envText.match(/^DATABASE_URL=(.*)$/m)?.[1];
+  if (!dbUrl) throw new Error("DATABASE_URL не найден в web/.env");
+  const db = new pg.Client({ connectionString: dbUrl });
+  await db.connect();
+  const { rows } = await db.query(
+    "select id, publication_state from objects where address = $1", [STALE_ADDRESS]);
+  if (rows.length === 0) {
+    throw new Error(`объекта «${STALE_ADDRESS}» нет: примените db/dev_seed.sql`);
+  }
+
+  // Объект должен быть ещё и В КАТАЛОГЕ.
+  //
+  // Прошлые прогоны снимали его с публикации, и важность падала со «срочно»
+  // до «предупреждения»: причина становилась другой — «мандат есть, объекта в
+  // каталоге нет». Плитка считает срочные, и показывала ноль. Публикуется
+  // настоящей функцией приложения, а не правкой состояния руками.
+  if (rows[0].publication_state !== "published") {
+    // Под листинг-агентом объекта: публикация — действие агента, и без
+    // мандата она невозможна (инвариант 1). Обойти это подготовкой данных
+    // было бы подлогом: проверка выше должна опираться на объект, который
+    // действительно стоит в каталоге по действующему договору.
+    const { rows: who } = await db.query(
+      `select a.auth_user_id from agents a
+         join mandates m on m.listing_agent_id = a.id
+        where m.object_id = $1 and m.status = 'active' limit 1`, [rows[0].id]);
+    if (!who[0]?.auth_user_id) {
+      throw new Error(`у «${STALE_ADDRESS}» нет действующего мандата: примените db/dev_seed.sql`);
+    }
+    await db.query("set role authenticated");
+    await db.query("select set_config('request.jwt.claims', $1, false)",
+      [JSON.stringify({ sub: who[0].auth_user_id, role: "authenticated" })]);
+    await db.query("select publish_object($1)", [rows[0].id]);
+    await db.query("reset role");
+    await db.query("select set_config('request.jwt.claims', '', false)");
+  }
+
+  // Давность подтверждения двигается назад прямой правкой: приложением её
+  // назад не сдвинуть ничем — так устроен инвариант 5, и это правильно.
+  await db.query("alter table objects disable trigger a_object_timestamps");
+  await db.query(
+    "update objects set actual_at = now() - interval '40 days' where id = $1", [rows[0].id]);
+  await db.query("alter table objects enable trigger a_object_timestamps");
+  await db.end();
+}
+
 const SHOT = process.env.SHOT_DIR ?? "/tmp/partner-shots";
 
 /** Сколько открытий показывает карточка объекта в кабинете. */
@@ -162,7 +229,20 @@ async function act(page, buttonText, scope) {
   const own = await page.locator('.row:has(button:text("Подтвердить актуальность"))').count();
   log(`объектов всего ${await page.locator(".row").count()}, своих (с действиями) ${own}`);
 
-  const row = page.locator('.row:has(button:text("Подтвердить актуальность"))').first();
+  // Берётся объект БЕЗ пометки внимания.
+  //
+  // Прежде брался первый в списке — а поиск сортирует срочные наверх, то есть
+  // первым шёл ровно тот объект, на котором держится проверка плитки
+  // «требуют внимания» выше. Обход подтверждал его актуальность и тем самым
+  // уничтожал собственную проверку: на следующем прогоне плитка показывала
+  // ноль. Проверка при этом оставалась зелёной, пока не завели запрет на ноль.
+  const row = page
+    .locator('.row:has(button:text("Подтвердить актуальность"))')
+    .filter({ hasNot: page.locator(".alarm-text, .warn-text") })
+    .first();
+  if ((await row.count()) === 0) {
+    throw new Error("нет ни одного объекта без пометки внимания: подтверждать нечего");
+  }
   const addr = await row.locator("h3").innerText();
   log(`«${addr}» → ${await act(page, "Подтвердить актуальность", row)}`);
 
