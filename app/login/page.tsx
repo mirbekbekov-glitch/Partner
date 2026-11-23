@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { publicSupabaseConfig } from '@/lib/supabase/public-config';
 import { safeNext } from '@/lib/next-param';
 import { LoginForm } from './LoginForm';
 
@@ -27,7 +28,7 @@ export default async function LoginPage({
       <h1>Вход в кабинет</h1>
       <p className="sub">Кабинет агента открывается после одобрения администратором.</p>
       {error ? <p className="error">{decodeURIComponent(error)}</p> : null}
-      <LoginForm next={target} />
+      <LoginForm next={target} supabase={publicSupabaseConfig()} />
     </>
   );
 }

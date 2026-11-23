@@ -9,18 +9,9 @@
 #   CLOUDFLARE_API_TOKEN   токен с правами Workers Scripts Edit и Workers AI Read
 #   CLOUDFLARE_ACCOUNT_ID  идентификатор аккаунта Cloudflare
 #
-# Серверные секреты сайта (SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET, токен
-# бота) здесь не нужны и не должны появляться: они живут на Worker и
-# задаются командой `npx cf secret put ИМЯ`.
-#
-# А вот три значения с префиксом NEXT_PUBLIC_ нужны именно сборке, и их
-# тоже надо завести здесь:
-#   NEXT_PUBLIC_SUPABASE_URL
-#   NEXT_PUBLIC_SUPABASE_ANON_KEY
-#   NEXT_PUBLIC_SITE_URL
-# Секретности они не требуют: anon-ключ по замыслу публичен и защищён RLS.
-# Почему без них сборка проходит, а сайт ломается — в комментарии у шага
-# сборки ниже.
+# Секреты САМОГО сайта (ключи Supabase, CRON_SECRET, токен бота) здесь не
+# нужны и не должны появляться: они живут на Worker и задаются командой
+# `npx cf secret put ИМЯ`. Сборке они ни к чему — проверено, собирается без них.
 
 name: Выкладка на Cloudflare
 
@@ -68,21 +59,8 @@ jobs:
       # типов, значит узнать о поломке от посетителя.
       - run: npm run typecheck
 
-      # Значения с префиксом NEXT_PUBLIC_ обязаны быть здесь, а не только на
-      # Worker. Их подставляют в код во время сборки — только так они
-      # доходят до браузера. Привязка secret() в cloudflare.config.ts отдаёт
-      # значение в рантайме и клиентскому коду ничем не помогает.
-      #
-      # Сборка без них не падает: подставляются пустые значения, и уже в
-      # браузере @supabase/ssr бросает «URL and API key are required».
-      # Счётчик найденного молчит, а форма заявки теряет обращения, ничего
-      # не отвечая посетителю. Один раз это уже случилось на проде.
       - name: Сборка Worker
         run: npm run build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
 
       # --force: выкладка иначе останавливается, если Worker последний раз
       # меняли не ею — через панель Cloudflare или API. Флаг у cf заведён

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
+import { publicSupabaseConfig } from '@/lib/supabase/public-config';
 import {
   CATALOG_PAGE_SIZE, parseCatalogFilters, catalogHref, sortHref, hasAnyFilter,
   firstPhoto, searchTokens, tokenFilter, daysSince,
@@ -109,7 +110,7 @@ function Search({ lang, f, deal }: { lang: Lang; f: CatalogFilters; deal: 'sale'
             <input id="to" name="to" type="number" min={0} step={1000} placeholder={d.priceHint}
                    inputMode="numeric" defaultValue={f.priceMax ?? ''} />
           </div>
-          <FindButton lang={lang} deal={deal} />
+          <FindButton lang={lang} deal={deal} supabase={publicSupabaseConfig()} />
         </div>
 
         {/* Район и нижняя граница цены нужны меньшинству, но нужны всерьёз.
