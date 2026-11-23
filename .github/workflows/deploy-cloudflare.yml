@@ -60,7 +60,7 @@ jobs:
       - run: npm run typecheck
 
       - name: Сборка Worker
-        run: npm run build:vinext
+        run: npm run build
 
       # --force: выкладка иначе останавливается, если Worker последний раз
       # меняли не ею — через панель Cloudflare или API. Флаг у cf заведён
