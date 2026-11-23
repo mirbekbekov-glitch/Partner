@@ -122,16 +122,15 @@ export default function ChaikaResortPage() {
       <div className="wrap">
         <div className="detail">
           <div>
+            {/* Один снимок сверху, остальные ниже отдельным разделом.
+                Шесть фотографий подряд уводили цену и площадь за пределы
+                экрана: человек сначала должен понять, что ему показывают и
+                почём, и только потом разглядывать. */}
             <div className="gallery">
-              {PHOTOS.map((ph, i) => (
-                // Первый снимок грузится сразу, остальные по мере прокрутки:
-                // на телефоне их пять, и тянуть все разом незачем.
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img key={ph.src} src={ph.src} alt={ph.alt}
-                     width={ph.w} height={ph.h}
-                     loading={i === 0 ? 'eager' : 'lazy'}
-                     className={i === 0 ? 'shot lead' : 'shot'} />
-              ))}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={PHOTOS[0].src} alt={PHOTOS[0].alt}
+                   width={PHOTOS[0].w} height={PHOTOS[0].h}
+                   className="shot lead" />
             </div>
 
             <div className="dhead">
@@ -190,12 +189,28 @@ export default function ChaikaResortPage() {
             </section>
 
             <section className="block">
+              <h2>Фотографии</h2>
+              <div className="gallery">
+                {PHOTOS.slice(1).map((ph) => (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img key={ph.src} src={ph.src} alt={ph.alt}
+                       width={ph.w} height={ph.h} loading="lazy" className="shot" />
+                ))}
+              </div>
+            </section>
+
+            <section className="block">
               <h2>Готовый арендный бизнес</h2>
               <p>
                 Дом уже сдаётся посуточно через Airbnb, есть сложившаяся база
                 постоянных гостей и своя история отзывов — почти все оценки
                 5 из 5. Работает отдельный аккаунт в Instagram. Покупатель
                 получает не просто дом, а действующий арендный продукт.
+              </p>
+              <p className="after">
+                <a href={AIRBNB} target="_blank" rel="noopener noreferrer">
+                  Объявление на Airbnb
+                </a>{' '}— то же жильё, с отзывами гостей.
               </p>
             </section>
 

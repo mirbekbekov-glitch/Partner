@@ -984,3 +984,9 @@ main:has(.nav) { max-width: none; padding: 0; }
   .gallery { grid-template-columns: 1fr; }
   .gallery .shot, .gallery .shot.lead { aspect-ratio: 4 / 3; }
 }
+
+/* Нечётная последняя плитка галереи занимает ряд целиком: иначе рядом с ней
+   зияет пустота, и ряд выглядит недоделанным. */
+.gallery .shot:last-child:nth-child(odd) { grid-column: 1 / -1; aspect-ratio: 16 / 9; }
+.block .gallery { padding-top: 0; }
+.block p.after { margin-top: 10px; }
