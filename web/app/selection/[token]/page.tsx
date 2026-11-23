@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { PrintBar } from "../PrintBar";
 import { asReportRole } from "../../../lib/db";
-import {
+import { formatDate,
   DEAL_LABEL,
   KIND_LABEL,
   formatArea,
@@ -28,7 +29,13 @@ type Item = {
   photos: string[];
 };
 
-type Page = { note: string | null; sent_at: string; objects: Item[] };
+type Page = {
+  note: string | null;
+  sent_at: string;
+  /** Агентство отправителя — брендирование листа (миграция 0053). */
+  agency_name: string | null;
+  objects: Item[];
+};
 
 // Страница по секретной ссылке. В индекс ей нельзя ни при каких условиях.
 export const metadata: Metadata = {
@@ -64,7 +71,22 @@ export default async function SelectionPage({
         {n} {plural(n, "вариант", "варианта", "вариантов")}
       </h1>
 
+      {/* От кого и когда. Нужно и на экране, и на листе, но по разным
+          причинам. На экране клиент видит в шапке «Liberterra» — платформу, —
+          а прислало ему агентство, и это разные вещи. На листе шапки сайта
+          нет вовсе, и без этой строки документ, который клиент показывает
+          мужу, матери или банку, выглядит ничьим.
+
+          Дата здесь не украшение: подборка недвижимости без даты через месяц
+          говорит неправду с тем же уверенным видом — цены стареют. */}
+      <p className="sent-by">
+        {page.agency_name ? `${page.agency_name} · ` : ""}
+        {formatDate(page.sent_at)}
+      </p>
+
       {page.note && <p className="lead">{page.note}</p>}
+
+      {n > 0 && <PrintBar />}
 
       {n === 0 && (
         <p className="muted">

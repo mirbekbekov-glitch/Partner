@@ -58,14 +58,21 @@ const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 let made = 0;
 
 for (const [i, obj] of objects.entries()) {
-  const { rows: already } = await client.query(
-    "select 1 from object_photos where object_id = $1 limit 1",
+  // Объект ДОВОДИТСЯ до нужного числа снимков, а не пропускается, если у него
+  // уже что-то есть. Иначе объект, заведённый в засеве позже, навсегда
+  // оставался бы с тем, что ему досталось в первый запуск.
+  const { rows: have } = await client.query(
+    "select count(*)::int n, coalesce(max(sort_order), -1) last from object_photos where object_id = $1",
     [obj.id],
   );
-  if (already.length) continue;
 
-  const count = 1 + (i % 3);
-  for (let n = 0; n < count; n++) {
+  // До шести, а не до трёх. У настоящего объявления снимков больше трёх, и
+  // при трёх печатное правило «на листе не больше четырёх» не проверялось бы
+  // ни скриптом, ни глазами: нечем.
+  const count = 1 + (i % 6);
+  if (have[0].n >= count) continue;
+
+  for (let n = have[0].n; n < count; n++) {
     const [from, to] = TONES[(i + n) % TONES.length];
     await page.setContent(`<!doctype html>
       <body style="margin:0;height:900px;display:flex;align-items:center;
@@ -88,7 +95,7 @@ for (const [i, obj] of objects.entries()) {
       `insert into object_photos (object_id, storage_key, sort_order, content_type,
                                   width, height, byte_size, uploaded_by_agent_id)
        values ($1, $2, $3, 'image/jpeg', 1200, 900, $4, $5)`,
-      [obj.id, key, n, buffer.length, obj.listing_agent_id],
+      [obj.id, key, have[0].last + 1 + (n - have[0].n), buffer.length, obj.listing_agent_id],
     );
     made += 1;
   }
