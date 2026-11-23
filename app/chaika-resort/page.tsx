@@ -49,8 +49,10 @@ const AIRBNB = 'https://www.airbnb.ru/rooms/1420997659375471402';
 const PHOTOS: { src: string; alt: string; w: number; h: number }[] = [
   { src: '/chaika/dom-s-vysoty.webp', w: 1600, h: 863,
     alt: 'Два дома комплекса с высоты, за ними полоса деревьев и пляж' },
+  { src: '/chaika/terrasa.webp', w: 1200, h: 1581,
+    alt: 'Крытая терраса второго этажа, за перилами деревья, пляж и озеро' },
   { src: '/chaika/vid-na-ozero.webp', w: 973, h: 1319,
-    alt: 'Вид с балкона: деревья, пляж и озеро' },
+    alt: 'Вид из комнаты через дверь на балкон: деревья, пляж и озеро' },
   { src: '/chaika/kompleks.webp', w: 1216, h: 969,
     alt: 'Территория комплекса с высоты, на горизонте снежные горы' },
   { src: '/chaika/plyazh.webp', w: 1200, h: 887,
