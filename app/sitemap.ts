@@ -91,6 +91,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // «Что я ищу»: форма, текст на ней меняется редко.
     ...cluster((l) => `/${l}/request`, now, 'monthly', 0.5),
 
+    // Посадочная страница печатного QR-кода. Языковых версий у неё нет —
+    // текст об объекте не переводится машиной, — поэтому не кластер, а одна
+    // запись.
+    {
+      url: siteUrl('/chaika-resort'),
+      lastModified: now,
+      changeFrequency: 'monthly' as const,
+      priority: 0.7,
+    },
+
     // Карточки объектов. lastModified — actual_at, дата последнего
     // подтверждения актуальности агентом: именно она говорит роботу,
     // что объявление живое, а не просто давно заведено.

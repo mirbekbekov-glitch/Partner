@@ -235,3 +235,38 @@ select test.eq(
      where c.id = (select contact_id from requests where id = :'rq_buy')),
   1, 'повторное превращение не плодит клиентов');
 reset role;
+
+-- ---------------------------------------------------------------------------
+-- 9. Источник заявки
+-- ---------------------------------------------------------------------------
+-- Метка нужна, чтобы отличить заявку с печатного QR-кода от заявки из
+-- каталога. Без неё понять, сработала ли реклама, нельзя.
+
+set role anon;
+select submit_request('+996700999777', 'С кода', null, null, null, null,
+                      null, 'USD', null, false, 'chayka-qr') as rq_src \gset
+reset role;
+
+select test.eq(
+  (select source from requests where id = :'rq_src'),
+  'chayka-qr', 'источник заявки сохраняется');
+
+-- Повтор того же номера за сутки возвращает прежнюю заявку — и первый
+-- источник. Иначе последний клик затирал бы тот, что привёл человека.
+set role anon;
+select submit_request('+996700999777', 'Он же', null, null, null, null,
+                      null, 'USD', null, false, 'другой-источник') as rq_src2 \gset
+reset role;
+
+select test.eq(
+  (select source from requests where id = :'rq_src2'),
+  'chayka-qr', 'повтор не затирает первый источник');
+
+-- Заявка без метки остаётся без неё, а не получает пустую строку.
+set role anon;
+select submit_request('+996700999778') as rq_nosrc \gset
+reset role;
+
+select test.ok(
+  (select source from requests where id = :'rq_nosrc') is null,
+  'заявка без метки источника хранит NULL, а не пустоту');

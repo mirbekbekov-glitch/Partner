@@ -40,6 +40,8 @@ export async function submitRequest(
     return Number.isFinite(v) && v > 0 ? v : null;
   };
 
+  const source = str('source');
+
   const supabase = await createClient();
   const { error } = await supabase.rpc('submit_request', {
     p_phone: String(formData.get('phone') ?? ''),
@@ -52,6 +54,14 @@ export async function submitRequest(
     p_budget_currency: str('budget_currency') ?? 'USD',
     p_wishes: str('wishes'),
     p_consent: formData.get('consent') === 'on',
+    // Метка источника добавляется, только когда форма её прислала.
+    //
+    // Это не украшение, а защита от порядка выкладки. PostgREST выбирает
+    // функцию по именам переданных параметров: пока миграция 0032 не
+    // применена, в базе лежит прежняя подпись без p_source, и запрос с
+    // лишним параметром упал бы. Формы без метки — то есть все прежние —
+    // продолжают работать при любом порядке событий.
+    ...(source === null ? {} : { p_source: source }),
   });
 
   if (!error) return { ok: true, code: null };
