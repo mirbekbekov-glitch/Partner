@@ -182,7 +182,7 @@ export default function ChaikaResortPage() {
       <section className="hero band" id="top">
         <div className="wrap">
           <div className="hero-copy">
-            <span className="eyebrow">Дуплекс на Иссык-Куле</span>
+            <span className="eyebrow">Иссык-Куль</span>
             <h1>Дом у самого <span className="accent">пляжа</span></h1>
             <p className="lead">
               Двухэтажный дуплекс в закрытом курортном комплексе Chaika Resort.
@@ -344,15 +344,12 @@ export default function ChaikaResortPage() {
             </div>
           </div>
 
-          <div className="gap-card">
-            <span className="big">Не средний</span>
+          <div className="caveat">
+            <b>200 $ — ставка мая, а не доходность за год</b>
             <p>
-              200 $ — тариф одного месяца, а не доходность за год
-              <span>
-                Загрузку по сезонам и расчёт доходности агент присылает
-                отдельно, по запросу: выдавать майскую ставку за годовую было бы
-                обманом.
-              </span>
+              Май на Иссык-Куле не пик сезона, и выдавать тариф одного месяца
+              за среднюю доходность было бы обманом. Загрузку по сезонам и
+              расчёт агент присылает отдельно, по запросу.
             </p>
           </div>
         </div>
