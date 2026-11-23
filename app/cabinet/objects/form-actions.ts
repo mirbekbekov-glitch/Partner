@@ -3,8 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { describeObject, type DraftResult } from '@/lib/ai/describe';
 
 export type FormResult = { error: string | null };
+export type { DraftResult };
 
 /** Пустое поле формы — это «не задано», а не 0 и не пустая строка. */
 const num = (v: FormDataEntryValue | null) => {
@@ -118,4 +120,48 @@ export async function objectAction(formData: FormData): Promise<FormResult> {
   revalidatePath('/cabinet/objects');
   revalidatePath('/cabinet');
   return { error: null };
+}
+
+/**
+ * Черновик описания: модель пишет, агент правит и сохраняет.
+ *
+ * Проверку прав здесь приходится делать руками. Остальные действия на этой
+ * странице опираются на RLS: она не пустит чужого к чужой строке, что бы ни
+ * прислал клиент. Но модель живёт вне базы, RLS её не прикрывает, и без
+ * этой проверки любой, кто дотянулся до действия, тратил бы деньги на
+ * генерацию. Поэтому: вошёл, запись агента есть, статус «одобрен».
+ *
+ * Ничего не сохраняется: результат возвращается в форму. Описание
+ * попадает в базу тогда же, когда и остальные поля, — когда агент нажал
+ * «Сохранить», прочитав текст.
+ */
+export async function draftDescription(formData: FormData): Promise<DraftResult> {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { text: null, error: 'Сессия истекла. Войдите заново.' };
+
+  const { data: agent } = await supabase
+    .from('agents')
+    .select('status')
+    .eq('auth_user_id', user.id)
+    .maybeSingle();
+
+  if (!agent || agent.status !== 'approved') {
+    return { text: null, error: 'Генерация доступна одобренным агентам.' };
+  }
+
+  return describeObject({
+    kind: str(formData.get('kind')) ?? 'flat',
+    deal_type: str(formData.get('deal_type')) ?? 'sale',
+    address: str(formData.get('address')),
+    zone: str(formData.get('zone')),
+    rooms: num(formData.get('rooms')),
+    area: num(formData.get('area')),
+    floor: num(formData.get('floor')),
+    floors_total: num(formData.get('floors_total')),
+    price: num(formData.get('price')),
+    currency: str(formData.get('currency')),
+    notes: str(formData.get('description')),
+  });
 }

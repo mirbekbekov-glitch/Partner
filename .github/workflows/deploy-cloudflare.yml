@@ -1,0 +1,74 @@
+# Выкладка сайта на Cloudflare Workers.
+#
+# Зачем через GitHub, а не с чьей-то машины: загрузка статики требует
+# одноразового пропуска в заголовке Authorization, и окружения, где этот
+# заголовок подменяется (прокси, агентские контейнеры), выложить не могут
+# в принципе. Здесь заголовками распоряжается сам cf, и всё проходит.
+#
+# Секреты задаются один раз: Settings — Secrets and variables — Actions.
+#   CLOUDFLARE_API_TOKEN   токен с правами Workers Scripts Edit и Workers AI Read
+#   CLOUDFLARE_ACCOUNT_ID  идентификатор аккаунта Cloudflare
+#
+# Секреты САМОГО сайта (ключи Supabase, CRON_SECRET, токен бота) здесь не
+# нужны и не должны появляться: они живут на Worker и задаются командой
+# `npx cf secret put ИМЯ`. Сборке они ни к чему — проверено, собирается без них.
+
+name: Выкладка на Cloudflare
+
+# В кавычках намеренно: без них разборщики YAML 1.1 читают `on` как «да».
+"on":
+  push:
+    # Рабочая ветка перечислена временно, пока работа не влита: запуск
+    # вручную GitHub разрешает только для процессов, лежащих в ветке по
+    # умолчанию, а там этого файла пока нет. Когда ветка вольётся,
+    # вторую строку можно убрать.
+    branches: [main, claude/eloquent-davinci-ve4all]
+  workflow_dispatch:
+
+# Две выкладки разом затёрли бы друг друга в произвольном порядке.
+concurrency:
+  group: deploy-cloudflare
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # ci, а не install: ставит ровно то, что записано в package-lock.json.
+      - run: npm ci
+
+      # Типы привязок Worker (Ai, ScheduledController, cloudflare:workers)
+      # не лежат в репозитории — их выдаёт Cloudflare по составу привязок.
+      # Без этого шага проверка типов падает на чистой машине.
+      - name: Типы привязок Worker
+        run: npx cf workers types
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Типы — до выкладки. Выложить сборку, которая не проходит проверку
+      # типов, значит узнать о поломке от посетителя.
+      - run: npm run typecheck
+
+      - name: Сборка Worker
+        run: npm run build
+
+      # --force: выкладка иначе останавливается, если Worker последний раз
+      # меняли не ею — через панель Cloudflare или API. Флаг у cf заведён
+      # ровно для CI и означает простую вещь: источник правды здесь —
+      # репозиторий. Правка, сделанная в панели мимо кода, будет затёрта
+      # следующей выкладкой, и это намеренно.
+      - name: Выкладка Worker
+        run: npx cf deploy --prebuilt --force
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

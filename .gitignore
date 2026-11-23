@@ -6,3 +6,9 @@ next-env.d.ts
 .env.local
 .DS_Store
 *.log
+.claude/settings.local.json
+/dist/
+.vinext/
+.cloudflare/
+.dev.vars
+cf-secrets.json

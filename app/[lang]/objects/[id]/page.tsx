@@ -2,9 +2,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
-import { allPhotos, daysSince, publicMoney } from '@/lib/catalog-params';
+import { allPhotos, firstPhoto, daysSince, publicMoney } from '@/lib/catalog-params';
 import { t, kindName, freshWordIn, LOCALE, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { AGENCY_PHONES } from '@/lib/agency';
+import { listingSchema } from '@/lib/listing-schema';
 import { CatalogHeader } from '../../../CatalogHeader';
 import { CatalogFooter } from '../../../CatalogFooter';
 import { Facade } from '../../../Facade';
@@ -56,12 +57,27 @@ export async function generateMetadata(
   const o = await load(id);
   if (!o) return { title: d.notFound };
   const what = `${kindName(lang, o.kind)}${o.rooms ? `, ${o.rooms} ${d.roomsShort}` : ''}`;
+  const title = `${o.address} — ${publicMoney(lang, o.price, o.currency)}`;
+  const description = `${o.deal_type === 'sale' ? d.sale : d.rent}: ${what}, ${o.address}.`;
+  const photo = firstPhoto(o.photos);
+
   return {
-    title: `${o.address} — ${publicMoney(lang, o.price, o.currency)}`,
-    description: `${o.deal_type === 'sale' ? d.sale : d.rent}: ${what}, ${o.address}.`,
+    title,
+    description,
     alternates: {
       canonical: `/${lang}/objects/${id}`,
       languages: Object.fromEntries(LANGS.map((l) => [l, `/${l}/objects/${id}`])),
+    },
+    // Превью при пересылке: фотография самого объекта говорит получателю
+    // больше любой нарисованной карточки. Если фотографии нет, ключ
+    // images не задаём — тогда подхватится общая карточка каталога из
+    // app/opengraph-image.tsx, а не пустое место.
+    openGraph: {
+      type: 'website',
+      url: `/${lang}/objects/${id}`,
+      title,
+      description,
+      ...(photo ? { images: [{ url: photo, alt: o.address }] } : {}),
     },
   };
 }
@@ -96,8 +112,17 @@ export default async function PublicObject({
     [d.published, dateIn(lang, o.published_at)],
   ];
 
+  // Разметка для поисковика. «<» внутри описания закрыл бы <script>
+  // раньше времени и оставил бы остаток JSON в вёрстке, поэтому экранируем
+  // его — это обязательная мера для любого JSON внутри тега, а не
+  // перестраховка.
+  const schema = JSON.stringify(
+    listingSchema(o, lang, `${o.address} — ${publicMoney(lang, o.price, o.currency)}`),
+  ).replace(/</g, '\\u003c');
+
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: schema }} />
       <CatalogHeader lang={lang} />
       <div className="wrap">
         <Link className="back" href={`/${lang}`}>{d.toAll}</Link>

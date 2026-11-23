@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useRef, useState, useTransition } from 'react';
 import type { FormResult } from './form-actions';
+import { draftDescription } from './form-actions';
 
 export type ObjectDraft = {
   id?: string;
@@ -44,13 +45,35 @@ export function ObjectForm({
     { error: null },
   );
 
+  // Описание — управляемое поле: черновик приходит с сервера и должен
+  // оказаться в том же поле, которое агент тут же правит руками.
+  const [description, setDescription] = useState(draft?.description ?? '');
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [drafting, startDrafting] = useTransition();
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Берём значения из самой формы, а не из состояния: поля, которые агент
+  // только что заполнил, ещё нигде, кроме формы, не записаны, а черновик
+  // без площади и этажа выйдет пустословным.
+  const draftIt = () => {
+    const form = formRef.current;
+    if (!form) return;
+    setDraftError(null);
+    const fd = new FormData(form);
+    startDrafting(async () => {
+      const r = await draftDescription(fd);
+      if (r.text) setDescription(r.text);
+      setDraftError(r.error);
+    });
+  };
+
   const photoLines = (draft?.photos ?? [])
     .map((p) => p?.url ?? '')
     .filter(Boolean)
     .join('\n');
 
   return (
-    <form action={formAction} className="stack">
+    <form ref={formRef} action={formAction} className="stack">
       {draft?.id ? <input type="hidden" name="id" value={draft.id} /> : null}
 
       <div className="grid2">
@@ -121,8 +144,19 @@ export function ObjectForm({
 
       <div className="field">
         <label className="key" htmlFor="description">Описание</label>
-        <textarea id="description" name="description" rows={3}
-                  defaultValue={draft?.description ?? ''} />
+        <textarea id="description" name="description" rows={4}
+                  value={description} onChange={(e) => setDescription(e.target.value)} />
+        <div className="actions">
+          <button type="button" className="ghost" onClick={draftIt} disabled={drafting}>
+            {drafting ? 'Пишу…' : 'Черновик по данным карточки'}
+          </button>
+        </div>
+        <p className="key">
+          Модель пишет только по заполненным полям и вашим заметкам в этом
+          поле — ничего не придумывает. Прочитайте и поправьте: под текстом
+          стоит ваше имя.
+        </p>
+        {draftError ? <p className="error">{draftError}</p> : null}
       </div>
 
       <div className="field">
