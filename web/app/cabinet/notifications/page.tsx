@@ -14,6 +14,9 @@ const KIND_LABEL: Record<string, string> = {
   showing_overdue: "без исхода",
   showing_clash: "две группы у двери",
   showing_changed: "поправка",
+  task_due: "срок задачи",
+  task_changed: "задача изменилась",
+  object_stale: "объект молчит",
 };
 
 /** Состояние определяет вид: очередь — ожидание, «не ушло» — тревога. */
@@ -92,13 +95,27 @@ function Rows({ items }: { items: Awaited<ReturnType<typeof notifications>> }) {
           <div className="row-main">
             <p className="note">{n.body}</p>
             <p className="row-meta">
-              <a href={`/cabinet/objects/${n.object_id}`}>{n.address}</a>
-              {" · показ "}
+              {/* Ссылка только когда есть куда вести: у напоминания о задаче
+                  объекта нет, и адрес вёл бы на /cabinet/objects/null. */}
+              {n.object_id ? (
+                <a href={`/cabinet/objects/${n.object_id}`}>{n.address}</a>
+              ) : (
+                <span>{n.address ?? "—"}</span>
+              )}
+              {/* Повод у разных видов разный: у показа это время встречи, у
+                  объекта — подтверждение, которое протухло. Подписывать и то
+                  и другое словом «показ» значит сообщать неправду в строке,
+                  которая существует ради точности. */}
+              {n.kind === "object_stale"
+                ? " · подтверждено "
+                : n.task_id
+                  ? " · срок "
+                  : " · показ "}
               {formatDateTime(n.about_at)}
               {/* Уведомление говорит о том времени, которое было на момент
                   выпуска. Если показ с тех пор переехал, строка обязана это
                   сказать — иначе она противоречит собственному тексту. */}
-              {n.moved_since && (
+              {n.moved_since && n.scheduled_at && (
                 <span className="act-err"> · сейчас {formatDateTime(n.scheduled_at)}</span>
               )}
             </p>

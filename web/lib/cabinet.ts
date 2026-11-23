@@ -1065,11 +1065,16 @@ export type Notification = {
   attempts: number;
   last_error: string | null;
   state: string;
-  showing_id: string;
-  scheduled_at: Date | string;
-  showing_status: string;
-  object_id: string;
-  address: string;
+  /* Предмет ровно один из трёх, поэтому пустыми бывают все три поля. Раньше
+     они были объявлены обязательными — тип врал ещё до уведомлений об
+     объектах: у напоминания о задаче показа нет и не было. */
+  showing_id: string | null;
+  scheduled_at: Date | string | null;
+  showing_status: string | null;
+  task_id: string | null;
+  task_title: string | null;
+  object_id: string | null;
+  address: string | null;
 };
 
 /**

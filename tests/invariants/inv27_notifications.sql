@@ -302,3 +302,160 @@ select test.eq(
 select test.ok(
   (select enabled from maintenance_jobs where job = 'produce_notifications'),
   'и включён');
+
+-- ===========================================================================
+-- 27ж. Объект, который давно не подтверждали (миграция 0055)
+-- ===========================================================================
+-- Владелец продукта решил предупреждать, а не снимать. Значит уведомление и
+-- есть весь механизм, и держаться оно должно на тех же трёх правилах, что
+-- остальные: один раз, тому, кому адресовано, и только пока правда.
+--
+-- Автоснятие при ПРОСРОЧЕННОМ ДОГОВОРЕ — другой механизм, он проверяется
+-- инвариантом 1: там договора нет, и показывать объявление не на чем.
+
+set role postgres;
+set request.jwt.claims = '{}';
+
+-- Давность задаётся ПРИ ВСТАВКЕ: назад actual_at не двигается ничем, так
+-- устроен инвариант 5.
+-- Завёл объект ОДИН агент, а договор ведёт ДРУГОЙ. Так бывает после
+-- передачи объекта и когда карточку заводит помощник. Разведены они нарочно:
+-- пока оба были Айбеком, проверка адресата не умела упасть — мутация
+-- «слать создателю вместо листинг-агента» её пережила.
+\set obj_quiet '00000000-0000-0000-0000-0000000fd001'
+insert into objects (id, kind, deal_type, address, zone, price, actual_at,
+                     created_by_agent_id)
+values (:'obj_quiet', 'flat', 'sale', 'Молчит сорок дней', 'Центр', 70000,
+        now() - interval '40 days', :'agent_bakyt');
+
+insert into object_ownerships (object_id, contact_id, role, share)
+values (:'obj_quiet', :'contact_owner', 'owner', 1.0);
+
+insert into mandates (object_id, kind, valid_from, start_price, listing_agent_id,
+                      contract_confirmed, status)
+values (:'obj_quiet', 'exclusive', current_date - 60, 70000,
+        :'agent_aibek', true, 'active');
+
+update objects set publication_state = 'published' where id = :'obj_quiet';
+
+create or replace function pg_temp.quiet_notices() returns integer
+  language sql stable as $$
+  select count(*)::integer from notifications
+   where object_id = '00000000-0000-0000-0000-0000000fd001'
+     and kind = 'object_stale' and voided_at is null
+$$;
+
+select test.eq(pg_temp.quiet_notices(), 0,
+  'уведомления об объекте пока нет: проверки ниже не вакуумны');
+
+select app.produce_notifications();
+
+select test.eq(pg_temp.quiet_notices(), 1,
+  'выпущено одно уведомление о давно не подтверждённом объекте');
+
+select test.eq(
+  (select agent_id from notifications
+    where object_id = :'obj_quiet' and kind = 'object_stale' and voided_at is null),
+  :'agent_aibek',
+  'адресовано listing-агенту договора, а не заводившему объект');
+
+select test.ok(
+  (select body from notifications
+    where object_id = :'obj_quiet' and kind = 'object_stale' and voided_at is null)
+    like '%Молчит сорок дней%',
+  'в тексте назван объект, а не только число дней');
+
+-- Один раз за одно протухание, а не каждую ночь. Расписание зовёт выпуск
+-- ежечасно; без этого агент получал бы одно и то же письмо до отпуска.
+select app.produce_notifications();
+select app.produce_notifications();
+select test.eq(pg_temp.quiet_notices(), 1,
+  'повторные прогоны выпуска второго уведомления не делают');
+
+-- Подтвердил — неотправленное гаснет. Письмо «не подтверждали 40 дней»,
+-- пришедшее через час после подтверждения, учит не верить уведомлениям.
+set role authenticated;
+set request.jwt.claims = :'claims_aibek';
+select app.confirm_actual(:'obj_quiet');
+
+set role postgres;
+set request.jwt.claims = '{}';
+select test.eq(pg_temp.quiet_notices(), 0,
+  'после подтверждения неотправленное уведомление погашено');
+
+select test.ok(
+  (select void_reason from notifications
+    where object_id = :'obj_quiet' and kind = 'object_stale') like '%подтверждён%',
+  'и сказано, почему оно погашено');
+
+-- И свежий объект нового повода не даёт.
+select app.produce_notifications();
+select test.eq(pg_temp.quiet_notices(), 0,
+  'у свежеподтверждённого объекта повода нет');
+
+-- А снятый с каталога не беспокоит вовсе, даже если молчит давно: он уже не
+-- обманывает никого.
+\set obj_gone '00000000-0000-0000-0000-0000000fd002'
+insert into objects (id, kind, deal_type, address, zone, price, actual_at,
+                     created_by_agent_id)
+values (:'obj_gone', 'flat', 'sale', 'Снят и молчит', 'Центр', 70000,
+        now() - interval '40 days', :'agent_aibek');
+insert into object_ownerships (object_id, contact_id, role, share)
+values (:'obj_gone', :'contact_owner', 'owner', 1.0);
+insert into mandates (object_id, kind, valid_from, start_price, listing_agent_id,
+                      contract_confirmed, status)
+values (:'obj_gone', 'exclusive', current_date - 60, 70000,
+        :'agent_aibek', true, 'active');
+
+select app.produce_notifications();
+select test.eq(
+  (select count(*)::int from notifications
+    where object_id = :'obj_gone' and kind = 'object_stale' and voided_at is null),
+  0,
+  'объект вне каталога уведомления не порождает');
+
+-- Уведомление обязано ДОЙТИ ДО ЭКРАНА агента, и с адресом.
+--
+-- Представление выводило объект только через показ: уведомление → показ →
+-- подбор → объект. У уведомления об объекте показа нет, и на экране оно
+-- было бы строкой без адреса — «что-то случилось, догадайтесь где».
+-- Читается ПОД АГЕНТОМ, а не под postgres: иначе проверка обходила бы тот
+-- самый путь, которым ходит кабинет.
+\set obj_quiet2 '00000000-0000-0000-0000-0000000fd003'
+set role postgres;
+set request.jwt.claims = '{}';
+insert into objects (id, kind, deal_type, address, zone, price, actual_at,
+                     created_by_agent_id)
+values (:'obj_quiet2', 'flat', 'sale', 'Виден на экране 7', 'Центр', 70000,
+        now() - interval '40 days', :'agent_bakyt');
+insert into object_ownerships (object_id, contact_id, role, share)
+values (:'obj_quiet2', :'contact_owner', 'owner', 1.0);
+insert into mandates (object_id, kind, valid_from, start_price, listing_agent_id,
+                      contract_confirmed, status)
+values (:'obj_quiet2', 'exclusive', current_date - 60, 70000,
+        :'agent_aibek', true, 'active');
+update objects set publication_state = 'published' where id = :'obj_quiet2';
+select app.produce_notifications();
+
+set role authenticated;
+set request.jwt.claims = :'claims_aibek';
+
+select test.eq(
+  (select count(*)::int from my_notifications_v
+    where object_id = :'obj_quiet2' and kind = 'object_stale'),
+  1,
+  'уведомление об объекте видно агенту на экране');
+
+select test.eq(
+  (select address from my_notifications_v
+    where object_id = :'obj_quiet2' and kind = 'object_stale'),
+  'Виден на экране 7',
+  'и адрес объекта на экране назван');
+
+-- Чужому агенту его не видно: политика таблицы, а не отбор в запросе.
+set request.jwt.claims = :'claims_chyngyz';
+select test.eq(
+  (select count(*)::int from my_notifications_v
+    where object_id = :'obj_quiet2' and kind = 'object_stale'),
+  0,
+  'чужому агенту это уведомление не видно');
