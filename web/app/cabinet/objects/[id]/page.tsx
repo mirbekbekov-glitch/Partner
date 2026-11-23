@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { channels as channelList, objectChannels, objectDetail } from "../../../../lib/cabinet";
-import { formatPrice, KIND_LABEL, freshness, formatDate, formatDateTime, formatArea, formatPhone, formatShare, PUBLICATION_LABEL } from "../../../../lib/format";
+import { plural, formatPrice, KIND_LABEL, freshness, formatDate, formatDateTime, formatArea, formatPhone, formatShare, PUBLICATION_LABEL } from "../../../../lib/format";
 import { gate } from "../../Gate";
 import { Photos } from "../../Photos";
 import { Channels } from "../../Channels";
@@ -102,6 +102,52 @@ export default async function ObjectPage({
         <ul className="reasons wide">
           {o.stale_reasons.map((r) => <li key={r}>{r}</li>)}
         </ul>
+      )}
+
+      {/* Экспозиция. Показывается только у опубликованного объекта: у
+          черновика её не бывает, и нули там означали бы не «не смотрят», а
+          «неоткуда смотреть».
+
+          Числа названы «на нашем каталоге» не из скромности. Площадка не
+          сообщает нам ни просмотров, ни звонков, и подписать эти числа просто
+          «просмотры» значило бы выдать свои за общие — то есть соврать
+          агенту, а через него собственнику. Та же мысль, что на экране
+          площадок про строчку «размещено». */}
+      {o.publication_state === "published" && (
+        <section className="exposure">
+          <h2>Экспозиция на нашем каталоге</h2>
+          <p className="stats">
+            <span><strong>{o.views_7}</strong> за неделю</span>
+            <span><strong>{o.views_30}</strong> за месяц</span>
+            <span><strong>{o.views_total}</strong> всего</span>
+            <span>
+              <strong>{o.inquiries_total}</strong>{" "}
+              {plural(o.inquiries_total, "обращение", "обращения", "обращений")}
+            </span>
+            {o.days_published !== null && (
+              <span><strong>{o.days_published}</strong>{" "}
+                {plural(o.days_published, "день", "дня", "дней")} в каталоге</span>
+            )}
+          </p>
+          {/* Совет даётся только там, где есть о чём говорить.
+              Первая версия писала «смотрят, но не обращаются» объекту,
+              опубликованному сегодня, по двум открытиям — то есть выдавала
+              догадку с уверенным лицом. Два числа это не наблюдение, а шум;
+              порог ниже выбран так, чтобы молчать, пока сказать нечего. */}
+          {o.views_total === 0 && (o.days_published ?? 0) >= 3 ? (
+            <p className="muted sm">
+              За {o.days_published}{" "}
+              {plural(o.days_published ?? 0, "день", "дня", "дней")} карточку
+              не открыли ни разу. Это про наш каталог: на площадках объект мог
+              и показываться — они нам этого не сообщают.
+            </p>
+          ) : o.inquiries_total === 0 && o.views_30 >= 10 ? (
+            <p className="muted sm">
+              Смотрят, но не обращаются. Обычно это разговор о цене или о
+              фотографиях, а не о том, что объект не видят.
+            </p>
+          ) : null}
+        </section>
       )}
 
       {data.canEditObject && (

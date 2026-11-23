@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ObjectCard } from "../../components";
-import { fetchObject, fetchSimilar } from "@/lib/catalog";
+import { fetchObject, fetchSimilar, noteObjectView } from "@/lib/catalog";
+import { headers } from "next/headers";
 import {
   DEAL_LABEL,
   KIND_LABEL,
@@ -38,6 +39,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ObjectPage({ params }: Props) {
   const { id } = await params;
   const object = await fetchObject(id);
+
+  // Открытие отмечается ЗДЕСЬ, а не в generateMetadata: та вызывается своим
+  // чередом, и считать в обеих значило бы считать каждое открытие дважды.
+  // Неопубликованный объект функция не считает сама — и отвечает так же, как
+  // на несуществующий, чтобы по ней нельзя было проверять существование.
+  if (object) {
+    await noteObjectView(id, (await headers()).get("user-agent"));
+  }
   if (!object) notFound();
 
   const fresh = freshness(object.actual_at);

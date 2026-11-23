@@ -1,4 +1,4 @@
-import { asCatalogRole } from "./db";
+import { asCatalogRole, asReportRole } from "./db";
 import type {
   CatalogFilters,
   CatalogObject,
@@ -218,4 +218,33 @@ export async function fetchSitemapRows(): Promise<
     );
     return rows;
   });
+}
+
+/**
+ * Отметить открытие карточки.
+ *
+ * Пишет через `asReportRole`: роль та же пониженная, что у каталога, но
+ * транзакция пишущая — ровно как у отчёта собственнику, который так же
+ * считает просмотры. Прав на таблицу у роли нет, функция security definer.
+ *
+ * ЧТО НЕ СЧИТАЕТСЯ. Явные роботы — поисковые обходчики и разворачиватели
+ * ссылок в мессенджерах. Их открытия ничего не говорят агенту о спросе, а
+ * счётчик с ними отвечал бы на вопрос «часто ли нас обходит Гугл».
+ * Заголовок при этом ЧИТАЕТСЯ, но не сохраняется: нам нужно решение, а не
+ * запись о посетителе.
+ *
+ * Ошибка подсчёта не должна ронять страницу: человек пришёл смотреть
+ * квартиру, а не наблюдать, как у нас не сложилась статистика.
+ */
+const ROBOTS = /bot\b|crawler|spider|slurp|facebookexternalhit|preview|embed/i;
+
+export async function noteObjectView(id: string, userAgent: string | null): Promise<void> {
+  if (userAgent && ROBOTS.test(userAgent)) return;
+  try {
+    await asReportRole(async (client) => {
+      await client.query("select app.note_object_view($1)", [id]);
+    });
+  } catch (error) {
+    console.error(`не удалось отметить открытие карточки ${id}: ${String(error)}`);
+  }
 }

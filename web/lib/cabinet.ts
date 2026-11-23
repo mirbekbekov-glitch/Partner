@@ -57,6 +57,16 @@ export type CabinetObject = {
   stale_reasons: string[] | null;
   severity: string | null;
   attention: number;
+  /**
+   * Экспозиция на НАШЕМ каталоге. Площадочных просмотров здесь нет и быть не
+   * может: площадка их не сообщает (миграция 0052).
+   */
+  days_published: number | null;
+  views_7: number;
+  views_30: number;
+  views_total: number;
+  last_view_day: Date | string | null;
+  inquiries_total: number;
 };
 
 /**
@@ -426,10 +436,13 @@ export async function objectDetail(id: string): Promise<ObjectDetail | null> {
               (m.listing_agent_id = app.current_agent_id()
                or (m.id is null and o.created_by_agent_id = app.current_agent_id()))
                              as is_mine,
-              s.reasons as stale_reasons, s.severity::text as severity
+              s.reasons as stale_reasons, s.severity::text as severity,
+              e.days_published, e.views_7, e.views_30, e.views_total,
+              e.last_view_day, e.inquiries_total
          from objects o
          left join mandates m on m.object_id = o.id and m.status = 'active'
          left join stale_objects_v s on s.object_id = o.id
+         left join object_exposure_v e on e.object_id = o.id
         where o.id = $1`,
       [id],
     );

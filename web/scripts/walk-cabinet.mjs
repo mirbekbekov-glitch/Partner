@@ -17,6 +17,18 @@ const pw = await import(process.env.PLAYWRIGHT ?? "playwright");
 const { chromium } = pw.default ?? pw;
 
 const SHOT = process.env.SHOT_DIR ?? "/tmp/partner-shots";
+
+/** Сколько открытий показывает карточка объекта в кабинете. */
+async function exposureOf(page, objId) {
+  await page.goto(`${page.url().split("/cabinet")[0]}/cabinet/objects/${objId}`, {
+    waitUntil: "networkidle",
+  });
+  const block = page.locator(".exposure .stats");
+  if ((await block.count()) === 0) return 0;
+  const text = await block.first().innerText();
+  // «N за неделю» — первое число блока.
+  return Number(text.match(/(\d+)\s+за неделю/)?.[1] ?? "0");
+}
 // Тот же обход нужен по двум стендам: обычный Next (порт 3000) и воркер
 // (порт 3001). Прошитый адрес означал бы, что воркер проверяется не этим
 // обходом, а похожим на него.
@@ -108,6 +120,30 @@ async function act(page, buttonText, scope) {
       }
     }
     await page.screenshot({ path: `${SHOT}/cab-attention.png`, fullPage: true });
+  }
+
+  // Экспозиция: открыть публичную карточку и увидеть это в кабинете.
+  // Проверяется сквозняком, потому что по частям оно сходится и без связи:
+  // функция считает, представление читает, страница рисует — а вызова со
+  // страницы может и не быть.
+  {
+    const pub = page.locator('.row:has(.chip.published) h3 a, .row h3 a').first();
+    const href = await pub.getAttribute("href");
+    const objId = href?.split("/").pop();
+    if (objId) {
+      const before = await exposureOf(page, objId);
+      const anon = await browser.newPage();
+      await anon.goto(`${BASE}/object/${objId}`, { waitUntil: "networkidle" });
+      await anon.goto(`${BASE}/object/${objId}`, { waitUntil: "networkidle" });
+      await anon.close();
+      const after = await exposureOf(page, objId);
+      log(`экспозиция: открытий было ${before}, стало ${after} после двух заходов`);
+      if (after !== before + 2) {
+        throw new Error(
+          `счётчик открытий не сошёлся: было ${before}, ожидалось ${before + 2}, стало ${after}`,
+        );
+      }
+    }
   }
 
   await page.goto(`${BASE}/cabinet/objects`, { waitUntil: "networkidle" });

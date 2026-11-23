@@ -999,6 +999,22 @@ button.link {
  * суффиксом -text выбрано нарочно: короткое `.warn` в этом файле уже
  * занято плашкой состояния, и один раз на этом уже обожглись. */
 .warn-text { color: var(--cab-warn); }
+
+/* Экспозиция объекта: несколько чисел в строку.
+ *
+ * Отдельные классы, а не «как-нибудь»: числа должны читаться как один блок,
+ * иначе «3 за неделю» и «0 обращений» на карточке выглядят как два
+ * независимых факта, тогда как смысл у них ровно в сопоставлении. */
+.exposure { margin: 1.25rem 0; }
+.exposure h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0 0 0.35rem;
+  color: #667085;
+}
+.stats strong { color: var(--fg); font-size: 1.15rem; margin-right: 0.3rem; }
 .opt { color: #98a2b3; font-weight: 400; }
 .hint { color: #667085; font-size: 0.85rem; margin: 0.35rem 0 0; }
 .back { margin: 1rem 0 0; }
