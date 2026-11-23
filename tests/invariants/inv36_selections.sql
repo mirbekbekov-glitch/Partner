@@ -141,17 +141,107 @@ set request.jwt.claims = :'claims_bakyt';
 select * from create_selection(:'req2', array[:'obj1'::uuid, :'obj2'::uuid]) \gset s2_
 select send_selection(:'s2_id') is not null as sent2 \gset
 
+-- Ожидаемое берётся ДО перехода в анонима: ему таблица агентов закрыта, и
+-- правильно. Проверка, которая для сравнения лезет туда, куда проверяемому
+-- нельзя, — это проверка другой программы.
+set role postgres;
+set request.jwt.claims = '{}';
+select full_name as sender_name, phone as sender_phone
+  from agents where id = :'agent_bakyt' \gset
+select full_name as lister_name from agents where id = :'agent_aibek' \gset
+
 set role anon;
 set request.jwt.claims = '{"role":"anon"}';
 select app.selection_page(:'s2_token') as page \gset
 
+-- Проверка точная, а не поиск подстроки.
+--
+-- Было: «в странице не встречается agent и не встречается +996». Эта форма
+-- держалась ровно до миграции 0056, которой владелец продукта разрешил
+-- назвать ОТПРАВИТЕЛЯ: как только на странице появился один законный агент и
+-- один законный телефон, поиск подстроки пришлось бы просто выбросить — и
+-- вместе с ним защиту от чужих.
+--
+-- Поэтому теперь спрашивается то, что и имелось в виду: комиссии нет вовсе,
+-- агент на странице ровно один — отправитель, и телефон ровно один — его же.
+-- Листинг-агента объекта здесь быть не должно: в мультилистинге объект ведёт
+-- другое агентство.
 select test.ok(
   (:'page'::jsonb)::text not like '%commission%'
-  and (:'page'::jsonb)::text not like '%agent%',
-  'ни комиссии, ни агентов в подборке нет');
+  and (:'page'::jsonb)::text not like '%комисси%',
+  'комиссии в подборке нет');
+
+-- Телефон на странице РОВНО ОДИН и он отправителя. Собираются все номера,
+-- какие есть в тексте страницы, и сравниваются с ожидаемым: так проверка не
+-- зависит от того, в каком ключе номер лежит, и поймает его появление где
+-- угодно — хоть в описании объекта, хоть в пометке клиента.
+select test.eq(
+  (select coalesce(string_agg(distinct m[1], ', ' order by m[1]), '—')
+     from regexp_matches((:'page'::jsonb)::text, '(\+996[0-9]+)', 'g') as m),
+  :'sender_phone',
+  'телефон на странице ровно один — отправителя');
+
+-- Отправитель назван.
+select test.eq(
+  ((:'page'::jsonb) -> 'sender' ->> 'agent_name'),
+  :'sender_name',
+  'отправитель назван по имени');
+
+-- А листинг-агента объекта — нет. obj1 и obj2 ведёт Айбек; в мультилистинге
+-- это вообще другое агентство, и называть его клиенту значит отдавать чужую
+-- работу вместе с контактом.
 select test.ok(
-  (:'page'::jsonb)::text not like '%+996%',
-  'и телефонов тоже');
+  (:'page'::jsonb)::text not like '%' || :'lister_name' || '%',
+  'листинг-агента объекта на странице нет');
+
+-- ---------------------------------------------------------------------------
+-- Агент ушёл: номер исчезает, агентство остаётся прежним
+-- ---------------------------------------------------------------------------
+-- Ради этого контакт и показывается ЖИВЫМ, а не снимком при отправке. Лист с
+-- личным номером живёт дольше, чем работа агента в агентстве: мёртвый номер
+-- на документе хуже, чем его отсутствие, потому что по нему позвонят.
+--
+-- А имя агентства, наоборот, снимок: уже отправленный лист не должен менять
+-- владельца вслед за переходом агента. Клиент держит в руках документ,
+-- которого новое агентство никогда не отправляло.
+
+set role postgres;
+set request.jwt.claims = '{}';
+
+select ((:'page'::jsonb) -> 'sender' ->> 'agency_name') as sender_agency \gset
+
+\set agency_other '00000000-0000-0000-0000-00000000ag01'
+insert into agencies (id, name, city, status)
+values ('00000000-0000-0000-0000-0000000a9001', 'Другое агентство', 'Бишкек', 'active');
+
+update agents set agency_id = '00000000-0000-0000-0000-0000000a9001'
+ where id = :'agent_bakyt';
+
+set role anon;
+set request.jwt.claims = '{"role":"anon"}';
+select app.selection_page(:'s2_token') as gone \gset
+
+select test.eq(
+  ((:'gone'::jsonb) -> 'sender' ->> 'agency_name'),
+  :'sender_agency',
+  'агентство на листе осталось тем, которое прислало');
+
+select test.ok(
+  ((:'gone'::jsonb) -> 'sender' ->> 'agent_phone') is null,
+  'телефон ушедшего агента со страницы исчез');
+
+select test.ok(
+  ((:'gone'::jsonb) -> 'sender' ->> 'agent_name') is null,
+  'и имя его тоже: звонить по этому листу больше некому, и лист об этом молчит');
+
+select test.ok(
+  (:'gone'::jsonb)::text not like '%+996%',
+  'ни одного телефона на странице не осталось');
+
+-- Вернуть на место: ниже в файле Бакыт ещё работает.
+set role postgres;
+update agents set agency_id = (select agency_id from agents where id = :'agent_aibek')
+ where id = :'agent_bakyt';
 select test.ok(
   ((:'page'::jsonb) -> 'objects' -> 0 ->> 'address') is not null,
   'а адрес и цена — есть: иначе это не подборка');

@@ -65,6 +65,11 @@ export default async function SelectionsPage({
   const access = await gate();
   if (!access.ok) return access.screen;
 
+  // Телефон в профиле необязателен, а подборка на него опирается: на листе
+  // клиента это единственное, по чему можно позвонить. Без предупреждения
+  // агент узнавал бы об этом от клиента, который не дозвонился.
+  const noPhone = !access.agent.phone;
+
   const { note, open, forr } = await searchParams;
   const [list, clients] = await Promise.all([selections(), requirements()]);
   // Свои и живые. Клиент, который купил или ушёл, в списке «для кого собрать»
@@ -90,6 +95,16 @@ export default async function SelectionsPage({
       </p>
 
       {note && <p className="ok-banner">{note}</p>}
+
+      {/* Без телефона в профиле подборка уходит клиенту без контакта: на
+          листе названы агентство и дата, а звонить некуда. Молчать об этом
+          нельзя — агент узнал бы от клиента, который не дозвонился. */}
+      {noPhone && (
+        <p className="warn-banner">
+          В вашем профиле нет телефона, и на подборках у клиента не будет
+          номера, по которому вам звонить. <a href="/cabinet/profile">Указать</a>.
+        </p>
+      )}
 
       {/* Собрать новую. Варианты не вводятся руками: их считает подбор в
           базе — тот же, что на карточке клиента. */}

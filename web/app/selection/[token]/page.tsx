@@ -6,6 +6,7 @@ import { formatDate,
   DEAL_LABEL,
   KIND_LABEL,
   formatArea,
+  formatPhone,
   formatPrice,
   formatRooms,
   plural,
@@ -32,8 +33,17 @@ type Item = {
 type Page = {
   note: string | null;
   sent_at: string;
-  /** Агентство отправителя — брендирование листа (миграция 0053). */
-  agency_name: string | null;
+  /**
+   * Кто прислал (миграции 0053 и 0056). Агентство — то, от имени которого
+   * подборка отправлена; имя и телефон агента приходят, только пока он в
+   * этом агентстве работает. Ушёл — приходит одно агентство, и звонить по
+   * листу некому. Это лучше мёртвого номера: по нему позвонят.
+   */
+  sender: {
+    agency_name: string | null;
+    agent_name: string | null;
+    agent_phone: string | null;
+  } | null;
   objects: Item[];
 };
 
@@ -80,9 +90,25 @@ export default async function SelectionPage({
           Дата здесь не украшение: подборка недвижимости без даты через месяц
           говорит неправду с тем же уверенным видом — цены стареют. */}
       <p className="sent-by">
-        {page.agency_name ? `${page.agency_name} · ` : ""}
+        {page.sender?.agent_name ? `${page.sender.agent_name}, ` : ""}
+        {page.sender?.agency_name ? `${page.sender.agency_name} · ` : ""}
         {formatDate(page.sent_at)}
       </p>
+
+      {/* Телефон отдельной строкой и ссылкой: с экрана по нему звонят в одно
+          касание, на листе он читается как обычный текст — правило печати
+          убирает подпись адреса у ссылок.
+
+          Если телефона нет (агент не заполнил профиль или ушёл из
+          агентства), строки нет вовсе. Пустая строка «телефон: —» на
+          документе выглядит как обещание, которого не сдержали. */}
+      {page.sender?.agent_phone && (
+        <p className="sent-by-call">
+          <a href={`tel:${page.sender.agent_phone}`}>
+            {formatPhone(page.sender.agent_phone)}
+          </a>
+        </p>
+      )}
 
       {page.note && <p className="lead">{page.note}</p>}
 
@@ -130,7 +156,8 @@ export default async function SelectionPage({
 
       <p className="report-note">
         Эта страница открыта по личной ссылке и в поиске не показывается. Что
-        понравилось, а что нет — скажите агенту: это и есть то, по чему он
+        понравилось, а что нет — скажите{" "}
+        {page.sender?.agent_name ?? "агенту"}: это и есть то, по чему он
         соберёт следующую подборку. Если вариант уже продан, он отсюда
         пропадёт сам.
       </p>

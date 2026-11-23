@@ -104,9 +104,30 @@ if (had2 !== had) log(`место освобождено: снимков ста�
 
 // --- загрузка трёх снимков --------------------------------------------------
 await page.locator('input[type="file"]').setInputFiles(files);
-await page.locator('form:has(input[type="file"]) button').click();
-await page.waitForSelector(".act-ok, .act-err", { timeout: 60000 });
-log("загрузка →", await page.locator(".act-ok, .act-err").first().innerText());
+// Ответ читается У САМОЙ ФОРМЫ ЗАГРУЗКИ, а не первый попавшийся на странице.
+// Прежняя редакция брала `.act-ok, .act-err` по всей карточке объекта и
+// печатала «включено, но объекта нет в каталоге» — ответ блока площадок. То
+// есть когда загрузка ломалась, обход показывал чужую строку, и причина
+// падения выглядела бессмыслицей.
+const uploadCard = page.locator('.card:has(input[type="file"])');
+await Promise.all([
+  page.waitForResponse((r) => r.request().method() === "POST" && r.status() < 400),
+  uploadCard.locator("form button").click(),
+]);
+// Ответ читается ДО перезагрузки: он живёт в состоянии действия, и
+// перечитанная страница о нём уже ничего не знает. В прошлой редакции
+// перезагрузка стояла раньше чтения, и обход честно печатал «ответа нет».
+await uploadCard.locator(".act-ok, .act-err").first().waitFor({ timeout: 60000 }).catch(() => {});
+// Отказ приходит У ФОРМЫ, успех — баннером страницы после возврата. Читаются
+// оба по месту: отказ нельзя брать по всей странице (там первым стоит
+// предупреждение блока площадок), а успех у формы искать бессмысленно.
+const uploadSaid =
+  (await uploadCard.locator(".act-err, .act-ok").first().innerText().catch(() => null)) ??
+  (await page.locator(".ok-banner").first().innerText().catch(() => null)) ??
+  "(ответа нет)";
+
+await page.goto(`${BASE}${href}`, { waitUntil: "networkidle" });
+log("загрузка →", uploadSaid.replace(/\n/g, " "));
 
 await page.goto(`${BASE}${href}`, { waitUntil: "networkidle" });
 const shots = await page.locator(".shot").count();
@@ -144,9 +165,18 @@ if (natural.w > 2000 || natural.h > 2000) {
 
 // --- не-изображение ---------------------------------------------------------
 await page.locator('input[type="file"]').setInputFiles([fake]);
-await page.locator('form:has(input[type="file"]) button').click();
-await page.waitForSelector(".act-err, .act-ok", { timeout: 30000 });
-const verdict = await page.locator(".act-err, .act-ok").first().innerText();
+// Ответ — у формы загрузки, а не первый на странице: см. выше, там же
+// объяснено, почему это важно.
+await Promise.all([
+  page.waitForResponse((r) => r.request().method() === "POST" && r.status() < 400),
+  page.locator('.card:has(input[type="file"]) form button').click(),
+]);
+const verdict = await page
+  .locator('.card:has(input[type="file"])')
+  .locator(".act-err, .act-ok")
+  .first()
+  .innerText()
+  .catch(() => "(ответа нет)");
 log("документ вместо фотографии →", verdict);
 // Проверяется не только текст, но и то, что в галерее ничего не прибавилось:
 // сообщение об отказе и отказ — разные вещи.
@@ -243,8 +273,13 @@ if (cab.status() !== 401) {
 // скопилось двадцать девять. Галерея из тридцати заглушек ничего не проверяет,
 // а у хранилища и у базы растёт мусор. Удаляются тем же путём, что у агента, —
 // кнопкой «Удалить», а не правкой таблицы.
+// Убирается ДО исходного числа, а не «три раза подряд». Счёт удалений
+// однажды разошёлся с загруженным — снимков стало на один меньше, чем было
+// до прогона, — и обход съел чужую фотографию. Условие по числу само себя
+// поправляет: сколько лишних осталось, столько и уберётся.
 await page.goto(`${BASE}${href}`, { waitUntil: "networkidle" });
-for (let k = 0; k < 3; k += 1) {
+for (let k = 0; k < 6; k += 1) {
+  if ((await page.locator(".shot").count()) <= had2) break;
   const del = page.locator('form:has(button:text("Удалить")) button').last();
   if ((await del.count()) === 0) break;
   await Promise.all([
