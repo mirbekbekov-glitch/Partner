@@ -13,9 +13,32 @@ import { readFileSync } from "node:fs";
 import pg from "pg";
 import pw from "/opt/node-tools/node_modules/playwright/index.js";
 
-for (const line of readFileSync(new URL("../.env", import.meta.url), "utf8").split("\n")) {
-  const m = line.match(/^([A-Z_]+)=(.*)$/);
-  if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+// Настройки берутся СНАЧАЛА из .dev.vars и только потом из .env, и порядок
+// здесь важнее, чем кажется.
+//
+// .dev.vars — это окружение воркера, то есть самого приложения; .env читают
+// скрипты. Когда приложение переехало на Cloudflare, файлов стало два, и они
+// разошлись: в .env стояло PHOTO_STORAGE=disk, в .dev.vars — s3. Заглушки
+// уходили на диск, приложение искало их в S3, и каталог показывал битые
+// картинки, ничего при этом не говоря.
+//
+// Комментарий ниже предупреждал ровно об этой беде — и был обойдён тем, что
+// файл настроек появился второй. Поэтому теперь читается тот, с которым
+// РАБОТАЕТ ПРИЛОЖЕНИЕ, а в конце печатается, куда легли байты.
+for (const file of ["../.dev.vars", "../.env"]) {
+  let text;
+  try {
+    text = readFileSync(new URL(file, import.meta.url), "utf8");
+  } catch {
+    continue; // файла может не быть — это не беда, беда была бы в тишине ниже
+  }
+  for (const line of text.split("\n")) {
+    // A-Z0-9_, а не A-Z_. Цифры в имени настройки бывают, и из-за их
+    // отсутствия здесь молча пропускались PHOTO_S3_ACCESS_KEY_ID и его
+    // собратья: скрипт видел PHOTO_STORAGE=s3, но не видел ключей к нему.
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+  }
 }
 
 // Заглушки кладутся через тот же слой, что и настоящие снимки: иначе при
@@ -104,4 +127,9 @@ for (const [i, obj] of objects.entries()) {
 await browser.close();
 await client.query("alter table object_photos enable trigger e_photo_touches_object");
 await client.end();
-console.log(`заглушек создано: ${made}`);
+console.log(
+  `заглушек создано: ${made}; хранилище: ${process.env.PHOTO_STORAGE ?? "не задано"}` +
+    (process.env.PHOTO_STORAGE === "s3"
+      ? ` (${process.env.PHOTO_S3_ENDPOINT ?? "адрес не задан"})`
+      : ""),
+);
