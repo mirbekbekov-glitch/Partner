@@ -972,3 +972,15 @@ main:has(.nav) { max-width: none; padding: 0; }
      остаётся пустая серая ячейка, и это выглядит поломкой. */
   .specs .spec:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
+
+/* Галерея посадочной страницы. Первый снимок во всю ширину — он решает,
+   станет ли человек смотреть дальше; остальные плиткой. */
+.gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding-top: 20px; }
+.gallery .shot { width: 100%; height: 100%; object-fit: cover; display: block;
+                 border-radius: var(--r-md); background: var(--sunk); aspect-ratio: 4 / 3; }
+.gallery .shot.lead { grid-column: 1 / -1; aspect-ratio: 16 / 9; }
+
+@media (max-width: 560px) {
+  .gallery { grid-template-columns: 1fr; }
+  .gallery .shot, .gallery .shot.lead { aspect-ratio: 4 / 3; }
+}

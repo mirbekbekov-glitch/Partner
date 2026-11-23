@@ -36,6 +36,29 @@ const SOURCE = 'chayka-qr';
 
 const REEL = 'https://www.instagram.com/reel/DfjNYukOWEl/';
 
+/** Объявление на Airbnb: подтверждение, что арендный бизнес не на словах. */
+const AIRBNB = 'https://www.airbnb.ru/rooms/1420997659375471402';
+
+/**
+ * Фотографии. Подписи описывают то, что на снимке, а не рекламируют: alt
+ * читает экранный диктор и показывает браузер, когда картинка не
+ * загрузилась, — приукрашивать тут некого и незачем.
+ *
+ * Размеры заданы явно: без них страница прыгает, пока грузятся снимки.
+ */
+const PHOTOS: { src: string; alt: string; w: number; h: number }[] = [
+  { src: '/chaika/dom-s-vysoty.webp', w: 1600, h: 863,
+    alt: 'Два дома комплекса с высоты, за ними полоса деревьев и пляж' },
+  { src: '/chaika/vid-na-ozero.webp', w: 973, h: 1319,
+    alt: 'Вид с балкона: деревья, пляж и озеро' },
+  { src: '/chaika/kompleks.webp', w: 1216, h: 969,
+    alt: 'Территория комплекса с высоты, на горизонте снежные горы' },
+  { src: '/chaika/plyazh.webp', w: 1200, h: 887,
+    alt: 'Пляж и бухта Иссык-Куля на закате' },
+  { src: '/chaika/raspolozhenie.webp', w: 1200, h: 644,
+    alt: 'Расположение комплекса относительно пляжа, с высоты' },
+];
+
 const TITLE = 'Дуплекс в Chaika Resort на Иссык-Куле — 550 000 $';
 const DESCRIPTION =
   'Премиальный дуплекс 178 м² на территории Chaika Resort: 7 комнат, '
@@ -51,6 +74,8 @@ export const metadata: Metadata = {
     url: siteUrl('/chaika-resort'),
     title: TITLE,
     description: DESCRIPTION,
+    images: [{ url: siteUrl('/chaika/og.jpg'), width: 1200, height: 630,
+               alt: 'Дом в Chaika Resort с высоты' }],
   },
 };
 
@@ -95,6 +120,18 @@ export default function ChaikaResortPage() {
       <div className="wrap">
         <div className="detail">
           <div>
+            <div className="gallery">
+              {PHOTOS.map((ph, i) => (
+                // Первый снимок грузится сразу, остальные по мере прокрутки:
+                // на телефоне их пять, и тянуть все разом незачем.
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img key={ph.src} src={ph.src} alt={ph.alt}
+                     width={ph.w} height={ph.h}
+                     loading={i === 0 ? 'eager' : 'lazy'}
+                     className={i === 0 ? 'shot lead' : 'shot'} />
+              ))}
+            </div>
+
             <div className="dhead">
               <h1>Дуплекс в Chaika Resort на Иссык-Куле</h1>
               <p className="sub">
