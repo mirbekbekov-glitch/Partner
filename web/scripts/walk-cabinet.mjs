@@ -80,6 +80,36 @@ async function act(page, buttonText, scope) {
   log("главная:", (await page.locator(".tile").allInnerTexts())
     .map((t) => t.split("\n").slice(0, 2).join(" ")).join(" | "));
 
+  // Плитка «требуют внимания срочно» должна вести ровно на то, что
+  // посчитала. Проверить это в базе нельзя: там обе цифры верны, а неверной
+  // была ССЫЛКА — раньше она вела на весь список, и агент щёлкал по «1»,
+  // получая девятнадцать непомеченных строк. Такое ловится только проходом.
+  const attentionTile = page.locator('.tile:has-text("требу")').first();
+  if ((await attentionTile.count()) > 0) {
+    const text = await attentionTile.innerText();
+    const expected = Number(text.match(/\d+/)?.[0] ?? "-1");
+    const href = await attentionTile.getAttribute("href");
+    await attentionTile.click();
+    await page.waitForLoadState("networkidle");
+    const shown = await page.locator(".row").count();
+    log(`плитка внимания: ${expected} → ${href} → строк ${shown}`);
+    // Сравнение и при нуле: плитка «0», ведущая на тридцать три строки, —
+    // такая же неправда, как «1», ведущая на тридцать три.
+    if (shown !== expected) {
+      throw new Error(
+        `плитка обещала ${expected}, а список показал ${shown}: ссылка ведёт не туда, что посчитала`,
+      );
+    }
+    // И у каждой строки должна быть названа причина, иначе список — тупик.
+    if (expected > 0) {
+      const reasons = await page.locator(".alarm-text, .warn-text").count();
+      if (reasons < expected) {
+        throw new Error(`причина названа у ${reasons} строк из ${expected}`);
+      }
+    }
+    await page.screenshot({ path: `${SHOT}/cab-attention.png`, fullPage: true });
+  }
+
   await page.goto(`${BASE}/cabinet/objects`, { waitUntil: "networkidle" });
   await page.screenshot({ path: `${SHOT}/cab-objects.png`, fullPage: true });
   const own = await page.locator('.row:has(button:text("Подтвердить актуальность"))').count();

@@ -1527,6 +1527,8 @@ export const SOURCE_LABEL: Record<ObjectSource, string> = {
 
 export type ObjectSearch = {
   source?: string;
+  /** critical | warning | any — см. `attention` у FoundObject. */
+  attention?: string;
   deal?: string;
   kind?: string;
   zone?: string;
@@ -1559,6 +1561,19 @@ export type FoundObject = {
   mandate_kind: string | null;
   contract_confirmed: boolean | null;
   valid_to: Date | string | null;
+  /**
+   * ТРИ состояния, а не два:
+   *
+   *   'critical' / 'warning' — знаем, что не так;
+   *   'ok'                   — знаем, что всё в порядке;
+   *   null                   — НЕ ЗНАЕМ: объект чужого агентства, его
+   *                            договор нам не виден.
+   *
+   * Последнее нельзя рисовать как «всё в порядке»: это разные вещи, и
+   * различие приходит из базы готовым (миграция 0050).
+   */
+  attention: "critical" | "warning" | "ok" | null;
+  attention_reasons: string[] | null;
 };
 
 /**
@@ -1591,6 +1606,11 @@ export async function searchObjects(q: ObjectSearch): Promise<FoundObject[]> {
     : null;
   const published =
     q.published === "yes" ? true : q.published === "no" ? false : null;
+  // Значение из адреса не доверяется на слово: неизвестное отбрасывается,
+  // иначе опечатка в ссылке молча показывала бы пустой список.
+  const attention = ["critical", "warning", "any"].includes(clean(q.attention) ?? "")
+    ? clean(q.attention)
+    : null;
 
   return asAgent(session, "read only", async (db) => {
     const { rows } = await db.query<FoundObject>(
@@ -1598,11 +1618,12 @@ export async function searchObjects(q: ObjectSearch): Promise<FoundObject[]> {
               area::text, floor, floors_total, price::text, currency,
               actual_at, publication_state::text, photos_count,
               source, agency_name, holder_agent_name,
-              has_mandate, mandate_kind::text, contract_confirmed, valid_to
+              has_mandate, mandate_kind::text, contract_confirmed, valid_to,
+              attention, attention_reasons
          from app.search_objects($1, $2::deal_type, $3::object_kind, $4,
-                                 $5::smallint[], $6, $7, $8, $9)`,
+                                 $5::smallint[], $6, $7, $8, $9, $10)`,
       [source, clean(q.deal), clean(q.kind), clean(q.zone), rooms,
-       num(q.priceMin), num(q.priceMax), published, clean(q.text)],
+       num(q.priceMin), num(q.priceMax), published, clean(q.text), attention],
     );
     return rows;
   });

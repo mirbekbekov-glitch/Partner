@@ -91,6 +91,19 @@ export default async function ObjectsPage({
           </select>
         </div>
 
+        {/* Внимание стоит сразу после источника, а не в конце формы:
+            по этому фильтру сюда приходят со сводки, и он должен быть на
+            виду, а не найден. */}
+        <div className="field">
+          <label htmlFor="attention">Внимание</label>
+          <select id="attention" name="attention" defaultValue={q.attention ?? ""}>
+            <option value="">Не важно</option>
+            <option value="critical">Срочно</option>
+            <option value="warning">Предупреждение</option>
+            <option value="any">Есть что-то</option>
+          </select>
+        </div>
+
         <div className="field">
           <label htmlFor="deal">Сделка</label>
           <select id="deal" name="deal" defaultValue={q.deal ?? ""}>
@@ -254,6 +267,19 @@ function ObjectRow({ o }: { o: FoundObject }) {
           {freshness(o.actual_at).label}
           {o.valid_to ? ` · договор до ${formatDate(o.valid_to)}` : ""}
         </p>
+        {/* Причина, по которой объект попал в список внимания.
+            Для `ok` и для null не рисуется ничего, и это сознательно: у
+            чужого объекта (null) договор нам не виден, и зелёная галочка
+            была бы утверждением, на которое у нас нет оснований. Молчание —
+            правдивый ответ, когда мы не знаем. */}
+        {(o.attention === "critical" || o.attention === "warning") &&
+          o.attention_reasons &&
+          o.attention_reasons.length > 0 && (
+            <p className={o.attention === "critical" ? "alarm-text sm" : "warn-text sm"}>
+              {o.attention === "critical" ? "Срочно: " : "Внимание: "}
+              {o.attention_reasons.join(" · ")}
+            </p>
+          )}
         {/* Чей объект — это не подпись, а условие работы. Своё названо
             «веду я», чужое агентство названо по имени: агенту важно знать,
             с кем договариваться о показе. */}
