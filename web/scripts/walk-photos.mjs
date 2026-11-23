@@ -70,6 +70,38 @@ const had = await page.locator(".shot").count();
 log("объект:", await page.locator("h1").innerText(), "| фотографий сейчас:", had);
 await page.screenshot({ path: `${SHOT}/photo-before.png`, fullPage: true });
 
+// --- место под три снимка -----------------------------------------------------
+// У объекта есть предел числа фотографий (инвариант 11, сегодня тридцать), и
+// на пределе форма загрузки не показывается вовсе — правильно, добавлять
+// некуда. Обход годами оставлял за собой по три снимка за прогон и однажды
+// упёрся в потолок: падал на том, что не находит поля выбора файла.
+//
+// Уборка в конце прогона это прекращает, но накопленное надо разобрать. Здесь
+// обход освобождает себе место тем же путём, что агент, — кнопкой «Удалить».
+// Сколько места осталось, страница говорит сама: «осталось место для N».
+// Читать это у неё правильнее, чем держать у себя копию предела: предел —
+// решение базы (app.max_photos_per_object()), и он может измениться.
+const freeSlots = async () => {
+  if ((await page.locator('input[type="file"]').count()) === 0) return 0;
+  const text = await page.locator("text=осталось место для").first().innerText();
+  return Number(text.match(/осталось место для (\d+)/)?.[1] ?? 0);
+};
+
+for (let guard = 0; guard < 12; guard += 1) {
+  if ((await freeSlots()) >= 3) break;
+  const del = page.locator('form:has(button:text("Удалить")) button').last();
+  if ((await del.count()) === 0) {
+    throw new Error("формы загрузки нет, и удалять нечего — смотрите экран сами");
+  }
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === "POST" && r.status() < 400),
+    del.click(),
+  ]);
+  await page.goto(`${BASE}${href}`, { waitUntil: "networkidle" });
+}
+const had2 = await page.locator(".shot").count();
+if (had2 !== had) log(`место освобождено: снимков стало ${had2} (было ${had})`);
+
 // --- загрузка трёх снимков --------------------------------------------------
 await page.locator('input[type="file"]').setInputFiles(files);
 await page.locator('form:has(input[type="file"]) button').click();
@@ -78,9 +110,9 @@ log("загрузка →", await page.locator(".act-ok, .act-err").first().inne
 
 await page.goto(`${BASE}${href}`, { waitUntil: "networkidle" });
 const shots = await page.locator(".shot").count();
-log("фотографий в галерее:", shots, `(было ${had}, загружено 3)`);
-if (shots !== had + 3) {
-  throw new Error(`в галерее ${shots} фотографий, а должно быть ${had + 3}`);
+log("фотографий в галерее:", shots, `(было ${had2}, загружено 3)`);
+if (shots !== had2 + 3) {
+  throw new Error(`в галерее ${shots} фотографий, а должно быть ${had2 + 3}`);
 }
 await page.screenshot({ path: `${SHOT}/photo-gallery.png`, fullPage: true });
 
@@ -205,6 +237,27 @@ log(`кабинетная ссылка без входа: HTTP ${cab.status()} (
 if (cab.status() !== 401) {
   throw new Error(`кабинетная ссылка без входа отдала HTTP ${cab.status()}`);
 }
+
+// --- убираем за собой ---------------------------------------------------------
+// Каждый прогон загружает три снимка, и они оставались: к этому дню на объекте
+// скопилось двадцать девять. Галерея из тридцати заглушек ничего не проверяет,
+// а у хранилища и у базы растёт мусор. Удаляются тем же путём, что у агента, —
+// кнопкой «Удалить», а не правкой таблицы.
+await page.goto(`${BASE}${href}`, { waitUntil: "networkidle" });
+for (let k = 0; k < 3; k += 1) {
+  const del = page.locator('form:has(button:text("Удалить")) button').last();
+  if ((await del.count()) === 0) break;
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === "POST" && r.status() < 400),
+    del.click(),
+  ]);
+  await page.goto(`${BASE}${href}`, { waitUntil: "networkidle" });
+}
+const left = await page.locator(".shot").count();
+if (left !== had2) {
+  throw new Error(`после уборки в галерее ${left} снимков, а было ${had2}`);
+}
+log("загруженное убрано: в галерее снова", left);
 
 await browser.close();
 log("проход завершён");

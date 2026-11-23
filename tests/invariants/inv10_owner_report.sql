@@ -189,3 +189,59 @@ set role anon;
 set request.jwt.claims = '{"role":"anon"}';
 select test.ok(app.owner_report('ffffffffffffffffffffffffffffffff') is null,
   'истёкший токен не открывает ничего');
+
+-- ---- 10м. Договор кончился — ссылка открывается, а не падает -------------
+-- Открытие ссылки ОБНОВЛЯЕТ строку: считается просмотр. Триггер выдачи
+-- срабатывал и на этом обновлении и переспрашивал «есть ли действующий
+-- договор» — то есть собственник, открывая свою ссылку после закрытия
+-- сделки, получал пятисотую ошибку вместо страницы. Миграция 0054.
+--
+-- Проверка смотрит на ОТВЕТ функции, а не на сам триггер: падал не триггер,
+-- а открытие ссылки, и чинить надо было именно его.
+set role postgres;
+set request.jwt.claims = '{}';
+
+\set obj_ended '00000000-0000-0000-0000-0000000fe010'
+insert into objects (id, kind, deal_type, address, zone, price, created_by_agent_id)
+values (:'obj_ended', 'flat', 'sale', 'Договор кончился 1', 'Центр', 60000, :'agent_aibek');
+
+insert into object_ownerships (object_id, contact_id, role, share)
+values (:'obj_ended', :'contact_owner', 'owner', 1.0);
+
+insert into mandates (object_id, kind, valid_from, start_price, listing_agent_id,
+                      contract_confirmed, status)
+values (:'obj_ended', 'exclusive', current_date - 30, 60000,
+        :'agent_aibek', true, 'active');
+
+insert into owner_access (object_id, contact_id, token, issued_by_agent_id)
+values (:'obj_ended', :'contact_owner', 'eeee0000eeee0000eeee0000eeee0000', :'agent_aibek');
+
+-- Пока договор действует, ссылка работает: проверка ниже не вакуумна.
+set role anon;
+set request.jwt.claims = '{"role":"anon"}';
+select test.ok(app.owner_report('eeee0000eeee0000eeee0000eeee0000') is not null,
+  'при действующем договоре ссылка открывается');
+
+-- А переписать выданную ссылку на другого агента нельзя: молчит проверка
+-- только там, где менять нечего. Стоит это ЗДЕСЬ, пока договор ещё
+-- действует, — иначе отказ приходил бы от правила «нет активного мандата», и
+-- проверка доказывала бы не то, что написано у неё в описании. Проверяется
+-- смена выдавшего, а не объекта: на смене объекта первым сработал бы
+-- уникальный индекс живых ссылок.
+set role postgres;
+set request.jwt.claims = '{}';
+select test.throws(
+  'update owner_access set issued_by_agent_id = ''' || :'agent_bakyt' || ''' where token = ''eeee0000eeee0000eeee0000eeee0000''',
+  'ссылку выдаёт listing-агент',
+  'переписать выданную ссылку на другого агента по-прежнему нельзя');
+
+-- Договор кончился. Так бывает каждый раз, когда сделка закрыта или вышел срок.
+set role postgres;
+set request.jwt.claims = '{}';
+update mandates set status = 'closed_by_deal' where object_id = :'obj_ended';
+
+set role anon;
+set request.jwt.claims = '{"role":"anon"}';
+select test.ok(app.owner_report('eeee0000eeee0000eeee0000eeee0000') is not null,
+  'после конца договора ссылка по-прежнему открывается, а не падает');
+
