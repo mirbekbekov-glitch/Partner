@@ -27,7 +27,22 @@ export type OtpTransport = "dev" | "email" | "whatsapp";
 export type LoginChannel = "email" | "whatsapp";
 
 export function transport(): OtpTransport {
-  const value = process.env.OTP_TRANSPORT ?? "dev";
+  const value = process.env.OTP_TRANSPORT;
+  // Значения по умолчанию здесь НЕТ, и это главное в этой функции.
+  //
+  // Раньше по умолчанию был `dev`, то есть самый опасный из вариантов: он
+  // показывает код входа прямо на странице. Значит выкладывание, в котором
+  // просто ЗАБЫЛИ настроить почту, открывало кабинет любому желающему —
+  // введи чужой адрес и прочитай код. Забывчивость не должна приводить к
+  // открытой двери, поэтому без явно заданного значения вход не работает
+  // вовсе.
+  if (!value) {
+    throw new Error(
+      "OTP_TRANSPORT не задан: вход не настроен. Смотрите web/.env.example — " +
+        "значения dev, email, whatsapp. Значения по умолчанию нет намеренно: " +
+        "dev показывает код на экране, и забытая настройка открыла бы кабинет.",
+    );
+  }
   if (value !== "dev" && value !== "email" && value !== "whatsapp") {
     throw new Error(`OTP_TRANSPORT должен быть dev, email или whatsapp, получено: ${value}`);
   }

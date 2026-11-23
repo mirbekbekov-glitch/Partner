@@ -18,6 +18,11 @@ import { join } from "node:path";
 import sharp from "sharp";
 
 const dir = await mkdtemp(join(tmpdir(), "photo-smoke-"));
+// Драйвер задаётся явно, а не берётся по умолчанию: у PHOTO_STORAGE значения
+// по умолчанию больше нет. Проверка, которая полагалась бы на него, проверяла
+// бы не то, что настроено в бою, — а этот урок в проекте уже записан про
+// права харнесса.
+process.env.PHOTO_STORAGE = "disk";
 process.env.PHOTO_DIR = dir;
 
 const { save, remove, MAX_UPLOAD_BYTES } = await import("../lib/photos.ts");

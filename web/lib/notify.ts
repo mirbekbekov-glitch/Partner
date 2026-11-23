@@ -28,7 +28,16 @@ export type Outgoing = {
 };
 
 export function transport(): NotifyTransport {
-  const value = process.env.NOTIFY_TRANSPORT ?? "dev";
+  const value = process.env.NOTIFY_TRANSPORT;
+  // Как и у входа, значения по умолчанию нет. `dev` ничего не отправляет, и
+  // забытая настройка означала бы, что уведомления о показах молча не уходят
+  // — а узнали бы об этом не мы, а агент, пропустивший показ.
+  if (!value) {
+    throw new Error(
+      "NOTIFY_TRANSPORT не задан: доставка уведомлений не настроена. " +
+        "Значения dev, telegram, whatsapp.",
+    );
+  }
   if (value !== "dev" && value !== "telegram" && value !== "whatsapp") {
     throw new Error(
       `NOTIFY_TRANSPORT должен быть dev, telegram или whatsapp, получено: ${value}`,

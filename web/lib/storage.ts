@@ -95,7 +95,18 @@ const r2 = deferred("R2", async () => (await import("./storage.r2.ts")).driver);
 const s3 = deferred("S3", async () => (await import("./storage.s3.ts")).driver);
 
 export function storage(): Storage {
-  const kind = process.env.PHOTO_STORAGE ?? "disk";
+  const kind = process.env.PHOTO_STORAGE;
+  // Значения по умолчанию нет по той же причине, что у входа и уведомлений.
+  // Раньше им был `disk`, то есть забытая настройка складывала фотографии на
+  // диск контейнера — и они исчезали при следующем выкладывании. Молча:
+  // загрузка проходила, карточка показывала снимок, а через сутки на его
+  // месте была битая картинка.
+  if (!kind) {
+    throw new Error(
+      "PHOTO_STORAGE не задан: хранилище фотографий не настроено. " +
+        "Значения disk (только разработка), r2, s3.",
+    );
+  }
   if (kind === "disk") return disk;
   if (kind === "r2") return r2;
   if (kind === "s3") return s3;
