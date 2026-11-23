@@ -50,6 +50,16 @@ export default async function AgentsPage({
 
       {note && <p className="ok-banner">{note}</p>}
 
+      {/* Тариф назван здесь, а не только в отказе базы: человек приходит на
+          этот экран именно затем, чтобы работать не одному. */}
+      {access.agent.agency_plan === "solo" && (
+        <p className="warn-banner">
+          Тариф агентства — бесплатный: в нём один агент. Объекты и клиенты
+          при этом не ограничены. Второй человек и выгрузка на чужие площадки
+          — на тарифе «команда».
+        </p>
+      )}
+
       {claims.length > 0 && (
         <section>
           <h2>Аттестация ТПП <span className="muted">({claims.length})</span></h2>

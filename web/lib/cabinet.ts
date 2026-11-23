@@ -22,6 +22,8 @@ export type Me = {
   directions: ("sale" | "rent")[];
   agency_id: string;
   agency_name: string;
+  /** Тариф агентства (инвариант 39). solo — один агент и без чужих площадок. */
+  agency_plan: "solo" | "team";
   is_admin: boolean;
   is_head: boolean;
   telegram_id: string | null;
@@ -85,7 +87,7 @@ export async function me(): Promise<Me | null> {
     const { rows } = await db.query<Me>(
       `select id, full_name, email, phone, phone_verified_at, role, status,
               directions::text[] as directions,
-              agency_id, agency_name, is_admin, is_head,
+              agency_id, agency_name, agency_plan, is_admin, is_head,
               telegram_id::text as telegram_id,
               avatar_key, certificate_no, certificate_issued_on,
               certificate_valid_to, certificate_confirmed_at, certificate_state
