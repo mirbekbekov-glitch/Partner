@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import type { SupabasePublicConfig } from '@/lib/supabase/public-config';
 import { searchTokens, tokenFilter } from '@/lib/catalog-params';
 import { t, type Lang } from '@/lib/i18n';
 
@@ -19,7 +20,15 @@ import { t, type Lang } from '@/lib/i18n';
  * Без JavaScript на кнопке остаётся «Показать», и форма работает как
  * работала: это надстройка, а не условие.
  */
-export function FindButton({ lang, deal }: { lang: Lang; deal: 'sale' | 'rent' }) {
+export function FindButton({
+  lang, deal, supabase,
+}: {
+  lang: Lang;
+  deal: 'sale' | 'rent';
+  // Координаты приходят с сервера: в клиентском коде их больше нет, потому
+  // что подстановка при сборке однажды оставила тут пустые строки.
+  supabase: SupabasePublicConfig;
+}) {
   const d = t(lang);
   const btn = useRef<HTMLButtonElement>(null);
   const [count, setCount] = useState<number | null>(null);
@@ -42,7 +51,7 @@ export function FindButton({ lang, deal }: { lang: Lang; deal: 'sale' | 'rent' }
         return Number.isFinite(v) && v > 0 ? v : null;
       };
 
-      let q = createClient()
+      let q = createClient(supabase.url, supabase.anonKey)
         .from('public_catalog_v')
         .select('id', { count: 'exact', head: true })
         .eq('deal_type', deal);
@@ -75,7 +84,9 @@ export function FindButton({ lang, deal }: { lang: Lang; deal: 'sale' | 'rent' }
       form.removeEventListener('input', onChange);
       form.removeEventListener('change', onChange);
     };
-  }, [deal]);
+    // Строки, а не объект: сравниваются по значению, поэтому эффект не
+    // перезапускается на каждой отрисовке из-за нового объекта с сервера.
+  }, [deal, supabase.url, supabase.anonKey]);
 
   return (
     <button className="go" type="submit" ref={btn}>
