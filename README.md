@@ -182,11 +182,22 @@ Project Settings → API.
 Боевой адрес: **https://liberterra.kg**
 
 Работает на Cloudflare Workers, Worker `partner`, аккаунт
-`Mirbekbekov@gmail.com's Account`. Домен обслуживают два маршрута —
-`liberterra.kg/*` и `www.liberterra.kg/*`. Рядом на том же домене живут
-маршруты `/qr/*` и `/chayka*` чужого Worker `qr-redirect`: они точнее, чем
-`/*`, поэтому Cloudflare отдаёт их ему, а не нам. Трогать их нельзя —
-на них ведут напечатанные QR-коды.
+`Mirbekbekov@gmail.com's Account`. Нам принадлежат маршруты
+`liberterra.kg/*` и `www.liberterra.kg/*`.
+
+**На домене живут и чужие маршруты.** Они точнее, чем `/*`, поэтому
+Cloudflare отдаёт эти пути им, а не нам. Трогать нельзя:
+
+| Путь | Чей Worker | Зачем |
+| --- | --- | --- |
+| `/qr/*`, `/chayka*` | `qr-redirect` | напечатанные QR-коды |
+| `/api/catalog-sync` | `hidden-pine-cbff` | выгрузка каталога старого сайта |
+| `/requests.html` | `hidden-pine-cbff` | страница заявок старого сайта |
+
+Последние два нашлись в журналах Worker уже после переключения домена:
+на них регулярно приходили запросы, и наше приложение отвечало 404.
+Если в журналах всплывёт ещё один чужой путь — лечится так же, маршрутом
+на нужный Worker.
 
 **Пуш в ветку выкатывает сайт.** Этим занят
 `.github/workflows/deploy-cloudflare.yml`: ставит зависимости, запрашивает
