@@ -30,7 +30,8 @@
     "build:vinext": "vite build",
     "start:vinext": "vite preview",
     "deploy:vinext": "vinext-cloudflare deploy",
-    "smoke:mail": "node --experimental-strip-types --no-warnings scripts/smoke-mail.mjs"
+    "smoke:mail": "node --experimental-strip-types --no-warnings scripts/smoke-mail.mjs",
+    "stub:s3": "node scripts/stub-s3.mjs 9000"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1175.0",

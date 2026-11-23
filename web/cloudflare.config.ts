@@ -44,9 +44,16 @@ export default defineConfig({
       // грузится: нативный модуль.
       IMAGES: bindings.images(),
 
-      // Бакет фотографий. Остаётся закрытым: публичный доступ обошёл бы
-      // проверку права в базе (инвариант 11).
-      R2: bindings.r2({ name: "liberterra-photos" }),
+      // Привязка R2 закомментирована намеренно: R2 на аккаунте не включён, а
+      // привязка к несуществующему бакету сорвала бы выкладывание. Байты
+      // лежат в Supabase Storage через драйвер s3 — см. PHOTO_S3_* ниже.
+      //
+      // Когда R2 включат, вернуть эту строку, создать бакет и поменять
+      // PHOTO_STORAGE на r2. Драйвер готов и проверен на местном бакете.
+      // Бакет обязан остаться ЗАКРЫТЫМ: публичный доступ обошёл бы проверку
+      // права в базе (инвариант 11).
+      //
+      // R2: bindings.r2({ name: "liberterra-photos" }),
 
       // Пул соединений к базе на стороне Cloudflare. Привязка закомментирована
       // потому, что `id` — это идентификатор конфигурации Hyperdrive на
@@ -104,6 +111,16 @@ export default defineConfig({
       // воркера переменную, которая ему никогда не понадобится, — значит
       // держать в списке обязательного то, что ни на что не влияет.
       PHOTO_STORAGE: bindings.secret(),
+
+      // Для PHOTO_STORAGE=s3. Supabase Storage живёт в том же проекте, что
+      // база: `https://<ref>.supabase.co/storage/v1/s3`, регион проекта.
+      // Ключи создаются в панели Supabase (Storage → S3 Access Keys) и
+      // кладутся в секреты воркера.
+      PHOTO_S3_BUCKET: bindings.secret(),
+      PHOTO_S3_ENDPOINT: bindings.secret(),
+      PHOTO_S3_REGION: bindings.secret(),
+      PHOTO_S3_ACCESS_KEY_ID: bindings.secret(),
+      PHOTO_S3_SECRET_ACCESS_KEY: bindings.secret(),
     },
   }),
 });
