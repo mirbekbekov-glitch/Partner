@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import type { SupabasePublicConfig } from '@/lib/supabase/public-config';
 
 /**
  * Вход по ссылке на почту (Supabase magic link).
@@ -10,7 +11,7 @@ import { createClient } from '@/lib/supabase/client';
  * смены — меньше поверхности и меньше кода. Если понадобится пароль, это
  * signInWithPassword плюс экран восстановления.
  */
-export function LoginForm({ next }: { next: string }) {
+export function LoginForm({ next, supabase: cfg }: { next: string; supabase: SupabasePublicConfig }) {
   const [email, setEmail] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +21,7 @@ export function LoginForm({ next }: { next: string }) {
     setError(null);
     setState('sending');
 
-    const supabase = createClient();
+    const supabase = createClient(cfg.url, cfg.anonKey);
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
