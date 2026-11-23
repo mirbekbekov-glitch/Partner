@@ -17,6 +17,7 @@
 //
 //   --check     только посмотреть, что в базе сейчас. Ничего не пишет;
 //   --apply     применить supabase/migrations/*.sql по порядку;
+//   --from NNNN применять не с начала, а начиная с этой миграции;
 //   --reset     ПЕРЕД применением снести схемы public и app целиком;
 //   --schedule  зарегистрировать плановые работы (db/install_schedule.sql);
 //   --verify    сверить устройство размещённой базы с местной.
@@ -25,6 +26,14 @@
 // выкладывания: та ли это схема, на которой проходят тесты. Сравниваются
 // отношения, столбцы, функции, политики RLS, триггеры и ограничения. Местная
 // база берётся из VERIFY_DB (по умолчанию partner) через psql.
+//
+// --from нужен, когда база уже живая. Миграции не идемпотентны: --apply с
+// начала падает на 0001 «тип contact_kind уже существует», а --reset --apply
+// сносит вместе со схемой и данные, которые в ней успели завестись. Какие
+// миграции уже применены, скрипт НЕ знает: учётной таблицы у нас нет, и
+// выдумывать её задним числом — значит записать в неё догадку. Поэтому
+// границу называет человек, а скрипт после этого обязан сверить итог: --from
+// без последующего --verify ничего не доказывает.
 //
 // `db/local_supabase_stub.sql` здесь НЕ применяется, и это важно: он
 // воспроизводит auth.uid() и роли Supabase для местного Postgres, а в
@@ -77,6 +86,14 @@ const APPLY = args.has("--apply");
 const RESET = args.has("--reset");
 const SCHEDULE = args.has("--schedule");
 const VERIFY = args.has("--verify");
+// --from NNNN: применять начиная с этой миграции. Сравнение по имени файла,
+// потому что имена и задают порядок.
+const fromIndex = process.argv.indexOf("--from");
+const FROM = fromIndex > 1 ? process.argv[fromIndex + 1] : null;
+if (fromIndex > 1 && !FROM) {
+  console.error("--from без значения: не названа миграция, с которой начинать.");
+  process.exit(1);
+}
 if (!CHECK && !APPLY && !SCHEDULE && !VERIFY) {
   console.error(
     "нужен --check, --apply, --schedule или --verify (и, возможно, --reset). Смотрите шапку файла.",
@@ -167,8 +184,17 @@ if (RESET) {
 // идемпотентны, и это не недостаток, а их устройство.
 if (APPLY) {
   const dir = join(ROOT, "supabase", "migrations");
-  const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
-  console.log(`применяю ${files.length} миграций`);
+  const all = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
+  const files = FROM ? all.filter((f) => f >= FROM) : all;
+  if (FROM && files.length === 0) {
+    console.error(`--from ${FROM}: под это не подходит ни одна миграция.`);
+    process.exit(1);
+  }
+  console.log(
+    FROM
+      ? `применяю ${files.length} миграций начиная с ${files[0]} (из ${all.length} всего)`
+      : `применяю ${files.length} миграций`,
+  );
 
   let done = 0;
   let perStatement = 0;
