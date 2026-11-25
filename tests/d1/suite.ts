@@ -843,8 +843,8 @@ export default {
     await loginAs(db, vera);
     const counters = await cabinetCounters();
     check('счётчики главной считают только своё',
-      (counters?.deals ?? 0) === 0 && (counters?.objects ?? 0) === 0,
-      `сделок ${counters?.deals}, объектов ${counters?.objects}`);
+      (counters?.open_deals ?? 0) === 0 && (counters?.objects ?? 0) === 0,
+      `сделок ${counters?.open_deals}, объектов ${counters?.objects}`);
 
     await loginAs(db, anna);
 

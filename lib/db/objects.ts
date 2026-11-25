@@ -427,6 +427,75 @@ export async function confirmActual(id: string): Promise<string> {
   return at;
 }
 
+export type ObjectTransferReport = {
+  object_id: string;
+  address: string;
+  mandate_moved: boolean;
+};
+
+/**
+ * Передать объект коллеге.
+ *
+ * Вместе с объектом переезжает listing-агент активного мандата, а с ним
+ * доля комиссии (инвариант 3). Иначе объект ведёт один, а деньги идут
+ * другому.
+ *
+ * При незавершённой сделке передача ЗАПРЕЩЕНА. Комиссия по идущей сделке
+ * принадлежит тем, кто её ведёт, и передача объекта не должна её
+ * переписывать. Сначала закройте сделку или отметьте срыв.
+ */
+export async function transferObject(
+  objectId: string,
+  toAgentId: string,
+): Promise<ObjectTransferReport> {
+  const agent = await requireAgent();
+
+  const object = await one<ObjectRow>('select * from objects where id = ?', objectId);
+  if (!object) throw new NotFound('Объект не найден');
+
+  if (!(await canEditObject(objectId))) {
+    throw new Forbidden(
+      'Передать объект может тот, кто его завёл, listing-агент активного '
+      + 'мандата или админ',
+    );
+  }
+
+  const target = await one<{ id: string }>(
+    `select id from agents where id = ? and status = 'approved'`, toAgentId,
+  );
+  if (!target) throw new NotFound('Коллега не найден или не одобрен');
+
+  const open = await one<{ n: number }>(
+    `select count(*) as n from deals
+      where object_id = ? and status not in ('closed', 'failed')`,
+    objectId,
+  );
+  if ((open?.n ?? 0) > 0) {
+    throw new Conflict(
+      'По объекту идут незавершённые сделки — сначала закройте их или '
+      + 'отметьте срыв. Комиссия по идущей сделке принадлежит тем, кто её '
+      + 'ведёт, поэтому передача их не переписывает.',
+    );
+  }
+
+  const mandateId = await activeMandateId(objectId);
+  const at = now();
+
+  await batch([
+    stmt('update objects set created_by_agent_id = ?, updated_at = ? where id = ?',
+      toAgentId, at, objectId),
+    ...(mandateId
+      ? [stmt('update mandates set listing_agent_id = ?, updated_at = ? where id = ?',
+          toAgentId, at, mandateId)]
+      : []),
+    auditStmt('objects', objectId, 'update', agent.id, {
+      created_by_agent_id: { from: object.created_by_agent_id, to: toAgentId },
+    }),
+  ]);
+
+  return { object_id: objectId, address: object.address, mandate_moved: mandateId !== null };
+}
+
 /** Пустая строка — это отсутствие значения, а не значение. */
 function blank(value: string | null | undefined): string | null {
   const text = (value ?? '').trim();

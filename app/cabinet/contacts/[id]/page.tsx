@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import {
+  activityFeed, contactCard, contactObjects, contactPhoneList, duplicatesOf,
+  linkableObjects, requirementList,
+} from '@/lib/db/cabinet';
+import { approvedColleagues } from '@/lib/db/agents';
 import { money } from '@/lib/list-params';
 import { Activities, type ActivityRow } from '../../Activities';
 import { TransferForm, type Colleague } from '../../TransferForm';
@@ -20,42 +24,27 @@ const REQ_STATUS_RU: Record<string, string> = {
 
 export default async function ContactCard({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
 
-  const [
-    { data: contact },
-    { data: phones },
-    { data: objects },
-    { data: requirements },
-    { data: activities },
-    { data: colleagues },
-    { data: duplicates },
-    { data: linkable },
-  ] = await Promise.all([
-    supabase.from('contact_list_v').select('*').eq('id', id).maybeSingle(),
-    supabase.from('contact_phones').select('id, phone, label, is_primary')
-      .eq('contact_id', id).order('is_primary', { ascending: false }),
-    supabase.from('contact_objects_v').select('*').eq('contact_id', id),
-    supabase.from('requirement_list_v').select('*').eq('contact_id', id)
-      .order('created_at', { ascending: false }),
-    supabase.from('activity_feed_v').select('*')
-      .eq('entity_type', 'contact').eq('entity_id', id)
-      .order('created_at', { ascending: false }),
-    supabase.from('transfer_targets_v').select('id, full_name, role').order('full_name'),
-    // Кандидаты в дубликаты. Представление security_invoker, поэтому пара
-    // приходит только если инвариант 4 отдаёт обе записи.
-    supabase.from('contact_duplicates_v')
-      .select('other_id, other_name, other_phones, other_requirements')
-      .eq('id', id),
-    // Объекты, за которые агент отвечает: предлагать чужие бессмысленно,
-    // связь всё равно не пройдёт.
-    supabase.from('linkable_objects_v')
-      .select('id, address, deal_type, price, currency').order('address'),
-  ]);
-
+  const contact = await contactCard(id);
   if (!contact) notFound();
 
-  const c = contact as {
+  const [phones, objects, requirements, activities, colleagues, duplicates, linkable] =
+    await Promise.all([
+      contactPhoneList(id),
+      contactObjects(id),
+      requirementList().then((rows) => rows.filter((r) => r.client_name === contact.name)),
+      activityFeed('contact', id),
+      approvedColleagues(),
+      // Кандидаты в дубликаты — только среди своих записей: объединять
+      // можно лишь обе свои, иначе объединение становится способом забрать
+      // чужого клиента.
+      duplicatesOf(id),
+      linkableObjects(),
+    ]);
+
+
+
+  const c = contact as unknown as {
     id: string; kind: string; name: string; telegram: string | null;
     source: string | null; roles: string[] | null; note: string | null;
     owner_name: string | null; mine: boolean;
@@ -81,7 +70,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
 
       <Phones
         contactId={c.id}
-        phones={(phones ?? []) as Phone[]}
+        phones={phones as unknown as Phone[]}
         canEdit={canEdit}
       />
 
@@ -139,7 +128,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
           <MergeForm
             keepId={c.id}
             keepName={c.name}
-            candidates={(duplicates ?? []) as DuplicateCandidate[]}
+            candidates={duplicates as unknown as DuplicateCandidate[]}
           />
 
           <h2>Передача</h2>

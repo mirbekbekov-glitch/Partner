@@ -1,16 +1,22 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import {
+  closeDeal as finishDeal, createDealFromMatch, failDeal as breakDeal,
+  setDealStatus,
+} from '@/lib/db/deals';
+import { toMinor } from '@/lib/db/money';
+import { attempt } from '@/lib/db/report';
 
 export type DealResult = { error: string | null };
 
-const num = (v: FormDataEntryValue | null) => {
-  const s = String(v ?? '').trim().replace(',', '.');
-  if (s === '') return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-};
+/**
+ * Цена из формы в минорные единицы.
+ *
+ * Человек вводит «38 000» или «38000,50», а в базе деньги целые: комиссия
+ * делится пополам, и дробная арифметика теряла бы копейку.
+ */
+const money = (v: FormDataEntryValue | null) => toMinor(String(v ?? ''));
 
 function touch(id?: string) {
   if (id) revalidatePath(`/cabinet/deals/${id}`);
@@ -22,50 +28,45 @@ function touch(id?: string) {
  * Создание сделки из подбора.
  *
  * Передаётся только match_id: объект, потребность, мандат и обе стороны
- * комиссии выводит база из подбора и активного мандата (инварианты 2 и 3).
+ * комиссии выводит слой доступа из подбора и активного мандата (инварианты
+ * 2 и 3). Передать стороны снаружи означало бы дать выписать комиссию на
+ * себя.
  */
 export async function startDeal(formData: FormData): Promise<DealResult> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('create_deal_from_match', {
-    p_match_id: String(formData.get('match_id') ?? ''),
-  });
+  const error = await attempt(() => createDealFromMatch(
+    String(formData.get('match_id') ?? ''),
+  ));
   touch();
   revalidatePath(`/cabinet/objects/${String(formData.get('object_id') ?? '')}`);
   revalidatePath(`/cabinet/requirements/${String(formData.get('requirement_id') ?? '')}`);
-  return { error: error ? error.message : null };
+  return { error };
 }
 
 export async function advanceDeal(formData: FormData): Promise<DealResult> {
-  const supabase = await createClient();
   const id = String(formData.get('id') ?? '');
-  const { error } = await supabase.rpc('set_deal_status', {
-    p_deal_id: id,
-    p_status: String(formData.get('status') ?? ''),
-  });
+  const error = await attempt(() => setDealStatus(
+    id,
+    String(formData.get('status') ?? '') as Parameters<typeof setDealStatus>[1],
+  ));
   touch(id);
-  return { error: error ? error.message : null };
+  return { error };
 }
 
 /** Закрытие фиксирует комиссию от финальной цены — это необратимо. */
 export async function closeDeal(formData: FormData): Promise<DealResult> {
-  const supabase = await createClient();
   const id = String(formData.get('id') ?? '');
-  const price = num(formData.get('final_price'));
+  const price = money(formData.get('final_price'));
 
   if (price === null) {
     return { error: 'Укажите финальную цену: от неё считается комиссия.' };
   }
 
-  const { error } = await supabase.rpc('close_deal', {
-    p_deal_id: id,
-    p_final_price: price,
-  });
+  const error = await attempt(() => finishDeal(id, price));
   touch(id);
-  return { error: error ? error.message : null };
+  return { error };
 }
 
 export async function failDeal(formData: FormData): Promise<DealResult> {
-  const supabase = await createClient();
   const id = String(formData.get('id') ?? '');
   const reason = String(formData.get('reason') ?? '').trim();
 
@@ -73,10 +74,7 @@ export async function failDeal(formData: FormData): Promise<DealResult> {
     return { error: 'Укажите причину срыва.' };
   }
 
-  const { error } = await supabase.rpc('fail_deal', {
-    p_deal_id: id,
-    p_reason: reason,
-  });
+  const error = await attempt(() => breakDeal(id, reason));
   touch(id);
-  return { error: error ? error.message : null };
+  return { error };
 }

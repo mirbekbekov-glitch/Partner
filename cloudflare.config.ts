@@ -1,8 +1,8 @@
 /**
  * Worker: что он такое, по какому расписанию просыпается и что ему доступно.
  *
- * Это замена vercel.json и панели переменных Vercel сразу: здесь и
- * расписание рассылки, и список секретов, которые Worker ждёт от платформы.
+ * Здесь всё, что платформа даёт Worker'у: база, хранилище снимков, модель,
+ * отправка писем, расписание и секреты.
  */
 import { bindings, defineConfig, defineWorker, triggers } from 'cf/config';
 
@@ -79,18 +79,13 @@ export default defineConfig({
       // обычным значением, а не секретом: одной ручной настройкой меньше.
       MAIL_FROM: bindings.text('cabinet@liberterra.kg'),
 
-      // Публичные значения Supabase. Анонимный ключ рассчитан на то, что
-      // данные защищены RLS, а не секретностью ключа, — но хранить его
-      // всё равно удобнее вместе с остальными.
-      NEXT_PUBLIC_SUPABASE_URL: bindings.secret(),
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: bindings.secret(),
-
       // Собственный адрес сайта: нужен карте сайта и превью при пересылке.
       NEXT_PUBLIC_SITE_URL: bindings.secret(),
 
-      // Секреты фоновых заданий. service_role обходит RLS, поэтому живёт
-      // только здесь и в app/api.
-      SUPABASE_SERVICE_ROLE_KEY: bindings.secret(),
+      // Секрет расписания. Маршрут рассылки ходит в базу без сессии агента,
+      // то есть мимо проверок прав, поэтому закрыт секретом. Незаданный
+      // секрет — ошибка настройки, и маршрут тогда отказывает, а не
+      // открывается.
       CRON_SECRET: bindings.secret(),
       TELEGRAM_BOT_TOKEN: bindings.secret(),
     },

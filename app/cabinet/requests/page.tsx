@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { requestFeed } from '@/lib/db/requests';
 import { KIND_LABEL } from '@/lib/request-labels';
 import { RequestActions } from './RequestActions';
 
@@ -24,7 +24,7 @@ type Row = {
   name: string | null;
   phone: string | null;
   wishes: string | null;
-  public_consent: boolean;
+  public_consent_flag: boolean;
   overdue: boolean;
   response_minutes: number;
 };
@@ -58,32 +58,23 @@ export default async function Requests({
   const one = (k: string) => (Array.isArray(sp[k]) ? sp[k][0] : sp[k]);
   const tab = TABS.some(([v]) => v === one('tab')) ? one('tab')! : 'open';
 
-  const supabase = await createClient();
+  // Что показывать, решает лента: чужие контакты она уже закрыла. Здесь
+  // только срез по вкладке.
+  let rows: Row[] = [];
+  let open: Row[] = [];
+  let error: string | null = null;
 
-  // Что показывать, решает лента: чужие контакты она уже закрыла, заявки
-  // не своего направления не отдала. Здесь только срез по вкладке.
-  let query = supabase
-    .from('request_feed_v')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(200);
+  try {
+    // Счётчик просроченных — главное число этой страницы, поэтому берём
+    // открытые заявки отдельно от среза вкладки.
+    [rows, open] = await Promise.all([
+      requestFeed(tab as 'open') as unknown as Promise<Row[]>,
+      requestFeed('all') as unknown as Promise<Row[]>,
+    ]);
+  } catch (e) {
+    error = e instanceof Error ? e.message : 'Не удалось загрузить заявки.';
+  }
 
-  if (tab === 'open')   query = query.eq('status', 'new');
-  if (tab === 'mine')   query = query.eq('mine_state', 'mine');
-  if (tab === 'all')    query = query.in('status', ['new', 'in_work']);
-  if (tab === 'closed') query = query.in('status', ['closed', 'expired']);
-
-  const { data, error } = await query;
-  const rows = (data ?? []) as Row[];
-
-  // Счётчик просроченных — главное число этой страницы. Заявка, пролежавшая
-  // час без ответа, обычно уже не нужна, и это надо видеть сразу.
-  const { data: waiting } = await supabase
-    .from('request_feed_v')
-    .select('overdue, mine_state, status')
-    .in('status', ['new', 'in_work'])
-    .limit(500);
-  const open = waiting ?? [];
   const overdue = open.filter((r) => r.overdue).length;
   const free = open.filter((r) => r.mine_state === 'available').length;
 
@@ -111,7 +102,7 @@ export default async function Requests({
         ))}
       </div>
 
-      {error ? <p className="error">{error.message}</p> : null}
+      {error ? <p className="error">{error}</p> : null}
 
       {rows.length === 0 ? (
         <p className="empty">
@@ -152,7 +143,7 @@ export default async function Requests({
               </p>
             ) : (
               <p className="key">
-                {r.public_consent
+                {r.public_consent_flag
                   ? 'Контакт закрыт: заявку ведёт другой агент.'
                   : 'Человек не разрешил показывать телефон.'}
               </p>

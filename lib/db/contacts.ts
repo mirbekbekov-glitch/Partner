@@ -305,16 +305,32 @@ export async function removePhone(phoneId: string): Promise<void> {
 // Передача коллеге
 // ---------------------------------------------------------------------------
 
+export type TransferReport = {
+  contact_id: string;
+  contact_name: string;
+  requirements: number;
+  matches: number;
+};
+
 /**
  * Передать контакт другому агенту.
  *
- * Это единственный законный способ отдать запись: вместе с ней уходит и
- * доступ к телефону, потому что инвариант 4 смотрит на owner_agent_id.
+ * Вместе с записью переезжают ЕЁ ОТКРЫТЫЕ ПОТРЕБНОСТИ И ПОДБОРЫ, и это не
+ * удобство, а инвариант 3: closing-агент подбора обязан совпадать с агентом
+ * потребности, потому что ему идёт половина комиссии. Передать клиента и
+ * оставить подборы за прежним агентом значит отдать работу одному, а деньги
+ * другому.
+ *
+ * Порядок важен: сперва потребности, потом подборы — подбор сверяется с УЖЕ
+ * новым агентом потребности.
+ *
+ * Закрытые и проигранные потребности не трогаем: это история, и переписывать
+ * её незачем.
  */
 export async function transferContact(
   contactId: string,
   toAgentId: string,
-): Promise<ContactView> {
+): Promise<TransferReport> {
   const agent = await requireAgent();
   const before = await requireOwnContact(contactId);
 
@@ -322,20 +338,54 @@ export async function transferContact(
     `select id from agents where id = ? and status = 'approved'`, toAgentId,
   );
   if (!target) throw new NotFound('Коллега не найден или не одобрен');
-  if (toAgentId === before.owner_agent_id) return view(before);
+
+  if (toAgentId === before.owner_agent_id) {
+    return {
+      contact_id: contactId, contact_name: before.name,
+      requirements: 0, matches: 0,
+    };
+  }
+
+  // Открытая сделка — не повод отказать в передаче контакта: сделку ведут
+  // её стороны, и смена владельца записи их не меняет. Считаем до переноса.
+  const counts = await one<{ reqs: number; matches: number }>(
+    `select
+       (select count(*) from requirements r
+         where r.contact_id = ?1 and r.status not in ('closed', 'lost')) as reqs,
+       (select count(*) from matches m
+         where exists (select 1 from requirements r
+                        where r.id = m.requirement_id and r.contact_id = ?1
+                          and r.status not in ('closed', 'lost'))) as matches`,
+    contactId,
+  );
 
   const at = now();
   await batch([
     stmt('update contacts set owner_agent_id = ?, updated_at = ? where id = ?',
       toAgentId, at, contactId),
+    stmt(
+      `update requirements set agent_id = ?, updated_at = ?
+        where contact_id = ? and status not in ('closed', 'lost')`,
+      toAgentId, at, contactId,
+    ),
+    stmt(
+      `update matches set closing_agent_id = ?, updated_at = ?
+        where exists (select 1 from requirements r
+                       where r.id = matches.requirement_id
+                         and r.contact_id = ? and r.agent_id = ?)`,
+      toAgentId, at, contactId, toAgentId,
+    ),
     auditStmt('contacts', contactId, 'update', agent.id, {
       owner_agent_id: { from: before.owner_agent_id, to: toAgentId },
     }),
   ]);
 
-  const row = await getContact(contactId);
-  if (!row) throw new NotFound('Контакт не найден');
-  return row;
+  return {
+    contact_id: contactId,
+    contact_name: before.name,
+    requirements: counts?.reqs ?? 0,
+    matches: counts?.matches ?? 0,
+  };
 }
 
 // ---------------------------------------------------------------------------

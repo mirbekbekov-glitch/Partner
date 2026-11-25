@@ -1,44 +1,37 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import {
+  clearMyOrganization, setMyOrganization, updateProfile,
+} from '@/lib/db/agents';
+import { explain } from '@/lib/db/report';
 
 export type ProfileResult = { error: string | null; saved: boolean };
 
 /**
  * Сохранение своего профиля.
  *
- * Обрезку, запрет пустого имени и привязку к своей строке делает
- * update_my_profile() в базе. Здесь только передача и показ ответа:
- * проверка в server action защищала бы лишь этот путь, а не прямой
- * запрос к PostgREST.
+ * Обрезку, запрет пустого имени и привязку к своей строке делает слой
+ * доступа. Он же не даёт протащить сюда роль или статус: updateProfile()
+ * принимает ровно три поля, и это главное свойство функции, а не деталь.
  */
 export async function saveProfile(formData: FormData): Promise<ProfileResult> {
-  const supabase = await createClient();
+  try {
+    await updateProfile({
+      full_name: String(formData.get('full_name') ?? ''),
+      phone: String(formData.get('phone') ?? ''),
+    });
 
-  const { error } = await supabase.rpc('update_my_profile', {
-    p_full_name: String(formData.get('full_name') ?? ''),
-    p_phone: String(formData.get('phone') ?? ''),
-  });
+    // Агентство — отдельной функцией: агент его ЗАЯВЛЯЕТ, а подтверждает
+    // админ, и смешивать это с правкой имени нельзя. «Частный агент» — это
+    // отсутствие организации, поэтому пустое поле снимает связь.
+    const org = String(formData.get('organization') ?? '').trim();
+    const solo = formData.get('solo') === 'on';
 
-  if (error) return { error: error.message, saved: false };
-
-  // Агентство — отдельной функцией: агент его ЗАЯВЛЯЕТ, а подтверждает
-  // админ, и смешивать это с правкой имени нельзя. «Частный агент» — это
-  // отсутствие организации, поэтому пустое поле снимает связь.
-  const org = String(formData.get('organization') ?? '').trim();
-  const solo = formData.get('solo') === 'on';
-  const orgCall = solo || org === ''
-    ? supabase.rpc('clear_my_organization')
-    : supabase.rpc('set_my_organization', { p_name: org });
-  const { error: orgError } = await orgCall;
-  if (orgError) {
-    return {
-      error: orgError.message.includes('BAD_INPUT')
-        ? 'Название агентства — от 2 до 120 символов.'
-        : orgError.message,
-      saved: false,
-    };
+    if (solo || org === '') await clearMyOrganization();
+    else await setMyOrganization(org);
+  } catch (e) {
+    return { error: explain(e), saved: false };
   }
 
   // Имя показывается в верхней полосе на каждой странице кабинета.

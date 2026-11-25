@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import {
+  activityFeed, matchableObjects, requirementCard, requirementMatches,
+} from '@/lib/db/cabinet';
+import { approvedColleagues } from '@/lib/db/agents';
 import { Activities, type ActivityRow } from '../../Activities';
 import type { RequirementMatch } from '@/lib/types';
 import { CreateMatchForm } from '../../CreateMatchForm';
@@ -18,52 +21,35 @@ const when = (v: string | null) =>
 
 export default async function RequirementCard({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
 
-  const [
-    { data: requirement },
-    { data: matches },
-    { data: objects },
-    { data: contact },
-    { data: colleagues },
-    { data: activities },
-  ] = await Promise.all([
-      supabase
-        .from('requirements')
-        .select('id, contact_id, deal_type, budget_min, budget_max, zones, rooms, deadline, requirements_text, status')
-        .eq('id', id)
-        .maybeSingle(),
-      supabase
-        .from('requirement_matches_v')
-        .select('*')
-        .eq('requirement_id', id)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('objects')
-        .select('id, deal_type, address, zone, rooms, price, currency, publication_state')
-        .eq('publication_state', 'published'),
-      // Контакт клиента: вернёт null, если инвариант 4 его не отдаёт.
-      supabase.from('requirements').select('contact_id, contacts(name)').eq('id', id).maybeSingle(),
-      supabase.from('transfer_targets_v').select('id, full_name, role').order('full_name'),
-      supabase.from('activity_feed_v').select('*')
-        .eq('entity_type', 'requirement').eq('entity_id', id)
-        .order('created_at', { ascending: false }),
-    ]);
-
+  const requirement = await requirementCard(id);
   if (!requirement) notFound();
 
-  const rows = (matches ?? []) as RequirementMatch[];
+  const [matches, objects, colleagues, activities] = await Promise.all([
+    requirementMatches(id),
+    // Объекты того же направления: подбор аренды к покупке бессмыслен, и
+    // слой доступа такой подбор всё равно отклонит.
+    matchableObjects(requirement.deal_type),
+    approvedColleagues(),
+    activityFeed('requirement', id),
+  ]);
+
+
+
+  const rows = matches as unknown as RequirementMatch[];
   const alreadyMatched = new Set(rows.map((r) => r.object_id));
 
-  const options = (objects ?? [])
-    .filter((o) => o.deal_type === requirement.deal_type && !alreadyMatched.has(o.id))
+  const options = objects
+    .filter((o) => !alreadyMatched.has(o.id))
     .map((o) => ({
       id: o.id,
       label: `${o.address} · ${money(o.price, o.currency)}${o.rooms ? ` · ${o.rooms} комн.` : ''}`,
     }));
 
-  const clientName =
-    (contact as { contacts?: { name: string } | null } | null)?.contacts?.name ?? null;
+  // Имя клиента отдаёт сам запрос карточки: null означает, что инвариант 4
+  // его не открывает, и страница обязана показать это как «контакт скрыт»,
+  // а не как пустое место.
+  const clientName = requirement.client_name;
 
   return (
     <>

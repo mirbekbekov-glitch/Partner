@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { dealList } from '@/lib/db/cabinet';
 import { money, day } from '@/lib/list-params';
 
 export const metadata = { title: 'Сделки' };
@@ -36,23 +36,18 @@ type Row = {
 };
 
 export default async function DealsList() {
-  const supabase = await createClient();
+  // Сделку видят только её стороны: предикат стоит в запросе. Суммы до
+  // закрытия индикативны и считаются на лету, после закрытия отдаются
+  // зафиксированные — записывать индикативные нельзя, записанные означали
+  // бы, что деньги уже поделены.
+  let rows: Row[] = [];
+  let error: string | null = null;
 
-  const { data, error } = await supabase
-    .from('deal_list_v')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    return (
-      <>
-        <h1>Сделки</h1>
-        <p className="error">{error.message}</p>
-      </>
-    );
+  try {
+    rows = await dealList() as unknown as Row[];
+  } catch (e) {
+    error = e instanceof Error ? e.message : 'Не удалось загрузить сделки.';
   }
-
-  const rows = (data ?? []) as Row[];
   const open = rows.filter((r) => r.status !== 'closed' && r.status !== 'failed');
   const done = rows.filter((r) => r.status === 'closed' || r.status === 'failed');
 

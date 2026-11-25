@@ -26,14 +26,35 @@ export async function getAgent(id: string): Promise<AgentRow | null> {
   return one<AgentRow>('select * from agents where id = ?', id);
 }
 
-/** Список агентов для экрана админа. */
-export async function listAgents(): Promise<Array<AgentRow & { org_name: string | null }>> {
+/**
+ * Список агентов для экрана админа.
+ *
+ * requireAdmin() стоит первой строкой, и это единственная защита: раньше
+ * экран опирался на представление с «where app.is_admin()» внутри, и не
+ * админу оно просто ничего не отдавало. Теперь такой подстраховки нет.
+ *
+ * Счётчики рядом с именем — чтобы перед блокировкой было видно, что за
+ * агентом записано: блокировка ничего не удаляет, но админ должен понимать
+ * объём.
+ */
+export async function listAgents(): Promise<Array<AgentRow & {
+  organization_name: string | null;
+  objects_count: number;
+  contacts_count: number;
+  requirements_count: number;
+}>> {
   await requireAdmin();
   return all(
-    `select a.*, o.name as org_name
+    `select a.*, o.name as organization_name,
+            (select count(*) from objects x where x.created_by_agent_id = a.id)
+              as objects_count,
+            (select count(*) from contacts x where x.owner_agent_id = a.id)
+              as contacts_count,
+            (select count(*) from requirements x where x.agent_id = a.id)
+              as requirements_count
        from agents a left join organizations o on o.id = a.organization_id
       order by case a.status when 'pending' then 0 when 'approved' then 1 else 2 end,
-               a.created_at`,
+               a.created_at desc`,
   );
 }
 

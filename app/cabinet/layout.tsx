@@ -4,7 +4,6 @@ import { sessionAgent } from '@/lib/db/session';
 import { getAgent, listOrganizations } from '@/lib/db/agents';
 import { SignOutButton } from './SignOutButton';
 import { ProfileForm } from './profile/ProfileForm';
-import { orgName } from '@/lib/agency';
 
 /**
  * Гейт кабинета.

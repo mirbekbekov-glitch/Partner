@@ -160,27 +160,54 @@ export async function submitRequest(input: NewRequest): Promise<string> {
  * работу. Это правило из задания: контакт принадлежит человеку, а не
  * первому агенту, который открыл ленту.
  */
-export type RequestFeedItem = Omit<RequestRow, 'phone' | 'phone_normalized'> & {
+export type RequestFeedItem = Omit<RequestRow, 'phone'> & {
   phone: string | null;
+  district: string | null;
   district_name: string | null;
+  agent_name: string | null;
+  mine_state: 'available' | 'mine' | 'other';
+  budget: number | null;
+  overdue: boolean;
+  response_minutes: number;
+  public_consent_flag: boolean;
 };
 
-export async function requestFeed(
-  status?: RequestRow['status'],
-): Promise<RequestFeedItem[]> {
+/**
+ * Лента заявок.
+ *
+ * Телефон закрыт, пока человек не дал согласия и пока заявку не взяли в
+ * работу. Это правило из задания: контакт принадлежит человеку, а не
+ * первому агенту, который открыл ленту.
+ *
+ * mine_state отвечает на вопрос страницы одним словом: заявка свободна,
+ * моя или чужая. Считать это на странице значило бы повторять правило в
+ * каждом месте, где показывается кнопка «Взять».
+ */
+export async function requestFeed(tab: 'open' | 'mine' | 'all' | 'closed' = 'open'):
+  Promise<RequestFeedItem[]> {
   const agent = await requireAgent();
   const admin = await isAdmin();
 
-  const params: (string | number)[] = [agent.id];
-  let filter = '';
-  if (status) { filter = 'and r.status = ?'; params.push(status); }
+  const where =
+    tab === 'open' ? `r.status = 'new'`
+    : tab === 'mine' ? 'r.agent_id = ?1'
+    : tab === 'all' ? `r.status in ('new', 'in_work')`
+    : `r.status in ('closed', 'expired')`;
 
-  const rows = await all<RequestRow & { district_name: string | null }>(
-    `select r.*, d.name as district_name
-       from requests r left join districts d on d.id = r.district_id
-      where 1 = 1 ${filter}
+  // Норматив первого ответа — час. Заявка, пролежавшая дольше, обычно уже
+  // не нужна, и это должно быть видно сразу.
+  const deadline = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  const rows = await all<RequestRow & {
+    district_name: string | null; agent_name: string | null;
+  }>(
+    `select r.*, d.name as district_name, ag.full_name as agent_name
+       from requests r
+       left join districts d on d.id = r.district_id
+       left join agents ag on ag.id = r.agent_id
+      where ${where}
       order by r.created_at desc limit 200`,
-    ...params.slice(1),
+    agent.id,
   );
 
   return rows.map((row) => ({
@@ -188,6 +215,19 @@ export async function requestFeed(
     phone: admin || row.agent_id === agent.id || row.public_consent === 1
       ? row.phone
       : null,
+    district: row.district_name,
+    mine_state: row.agent_id === null
+      ? 'available' as const
+      : row.agent_id === agent.id ? 'mine' as const : 'other' as const,
+    budget: row.budget_minor === null ? null : row.budget_minor / 100,
+    overdue: row.first_response_at === null
+      && row.status !== 'closed' && row.status !== 'expired'
+      && row.created_at < deadline,
+    response_minutes: Math.max(0, Math.round(
+      ((row.first_response_at ? Date.parse(row.first_response_at) : Date.now())
+        - Date.parse(row.created_at)) / 60000,
+    )),
+    public_consent_flag: row.public_consent === 1,
   }));
 }
 
@@ -273,6 +313,76 @@ export async function answerRequest(requestId: string): Promise<RequestRow> {
   const row = await one<RequestRow>('select * from requests where id = ?', requestId);
   if (!row) throw new NotFound('Заявка не найдена');
   return row;
+}
+
+/**
+ * Превратить заявку в клиента и потребность.
+ *
+ * Это момент, когда безымянный номер из ленты становится записью CRM: у
+ * него появляется карточка контакта и потребность, по которой дальше
+ * строятся подборы. Телефон при этом НЕ переносится: он уже есть в заявке,
+ * а дубль в контактах создал бы вторую запись того же человека и сломал
+ * правило «один человек — одна запись».
+ *
+ * Повтор безвреден: заявка помнит, во что превратилась, и второй вызов
+ * возвращает прежний контакт, а не заводит второй.
+ */
+export async function convertRequest(requestId: string): Promise<string> {
+  const agent = await requireAgent();
+  const admin = await isAdmin();
+
+  const row = await one<RequestRow>('select * from requests where id = ?', requestId);
+  if (!row) throw new NotFound('Заявка не найдена');
+
+  if (row.status !== 'in_work' || (row.agent_id !== agent.id && !admin)) {
+    throw new Forbidden('Превратить в клиента можно только свою заявку в работе');
+  }
+  if (row.contact_id) return row.contact_id;
+
+  const contactId = newId();
+  const requirementId = newId();
+  const at = now();
+
+  const districtName = row.district_id
+    ? (await one<{ name: string }>('select name from districts where id = ?',
+        row.district_id))?.name ?? null
+    : row.district_other;
+
+  const name = row.name
+    ?? `Заявка ${new Date(row.created_at).toLocaleString('ru-RU', {
+      timeZone: 'Asia/Bishkek', day: '2-digit', month: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    })}`;
+
+  await batch([
+    stmt(
+      `insert into contacts (id, kind, name, owner_agent_id, roles, source,
+                             created_at, updated_at)
+       values (?, 'person', ?, ?, ?, 'из заявки с сайта', ?, ?)`,
+      contactId, name, row.agent_id ?? agent.id,
+      JSON.stringify(row.deal === 'rent' ? ['tenant'] : ['buyer']), at, at,
+    ),
+    stmt(
+      `insert into requirements (id, contact_id, deal_type, budget_max_minor,
+                                 zones, rooms, requirements_text, agent_id,
+                                 status, created_at, updated_at)
+       values (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`,
+      requirementId, contactId, row.deal === 'rent' ? 'rent' : 'sale',
+      row.budget_minor,
+      JSON.stringify(districtName ? [districtName] : []),
+      JSON.stringify(row.rooms ? [row.rooms] : []),
+      row.wishes, row.agent_id ?? agent.id, at, at,
+    ),
+    stmt(
+      `update requests set contact_id = ?, requirement_id = ?, updated_at = ?
+        where id = ?`,
+      contactId, requirementId, at, requestId,
+    ),
+    auditStmt('requests', requestId, 'update', agent.id,
+      { contact_id: contactId, requirement_id: requirementId }),
+  ]);
+
+  return contactId;
 }
 
 export type CloseReason = 'deal' | 'found_self' | 'changed_mind' | 'no_answer'

@@ -1,7 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import {
+  createActivity, deleteActivity as removeActivity, setActivityDone,
+} from '@/lib/db/activities';
+import { attempt } from '@/lib/db/report';
 
 export type ActivityResult = { error: string | null };
 
@@ -22,45 +25,44 @@ function touch() {
 /**
  * Запись активности.
  *
- * agent_id не передаётся: у колонки серверное значение по умолчанию
- * app.current_agent_id(), и подарить активность другому агенту нечем —
- * колонка клиенту не выдана.
+ * Агент не передаётся: слой доступа ставит того, кто вошёл. Подарить
+ * активность другому нечем — параметр просто не принимается оттуда, где
+ * его мог бы подставить браузер.
  */
 export async function addActivity(formData: FormData): Promise<ActivityResult> {
-  const supabase = await createClient();
-
-  const { error } = await supabase.from('activities').insert({
-    kind: str(formData.get('kind')),
-    entity_type: str(formData.get('entity_type')),
-    entity_id: str(formData.get('entity_id')),
+  const error = await attempt(() => createActivity({
+    kind: String(formData.get('kind') ?? '') as 'call',
+    entity_type: String(formData.get('entity_type') ?? '') as 'object',
+    entity_id: String(formData.get('entity_id') ?? ''),
     body: str(formData.get('body')),
     due_at: str(formData.get('due_at')),
     is_shared: formData.get('is_shared') === 'on',
-  });
+  }));
 
   touch();
-  return { error: error ? error.message : null };
+  return { error };
 }
 
-/** Отметка выполнения. Дату выполнения ставит триггер, не этот код. */
+/**
+ * Отметка выполнения.
+ *
+ * Дату выполнения ставит слой доступа, а не этот код. Он же гасит
+ * напоминание тем же батчем: иначе выполненная задача всё равно дёрнула бы
+ * агента — напоминание уже стояло в очереди.
+ */
 export async function toggleActivity(formData: FormData): Promise<ActivityResult> {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from('activities')
-    .update({ done: formData.get('done') === 'true' })
-    .eq('id', String(formData.get('id') ?? ''));
+  const error = await attempt(() => setActivityDone(
+    String(formData.get('id') ?? ''),
+    formData.get('done') === 'true',
+  ));
 
   touch();
-  return { error: error ? error.message : null };
+  return { error };
 }
 
 export async function deleteActivity(formData: FormData): Promise<ActivityResult> {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from('activities')
-    .delete()
-    .eq('id', String(formData.get('id') ?? ''));
+  const error = await attempt(() => removeActivity(String(formData.get('id') ?? '')));
 
   touch();
-  return { error: error ? error.message : null };
+  return { error };
 }

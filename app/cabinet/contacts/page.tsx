@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { contactDuplicates, contactList } from '@/lib/db/cabinet';
 import { ROLE_RU } from './ContactForm';
 
 export const metadata = { title: 'Контакты' };
@@ -32,37 +32,34 @@ export default async function ContactsList({
   const q = one('q');
   const role = one('role');
 
-  const supabase = await createClient();
+  // Видимость стоит в самом запросе: чужие контакты закрыты инвариантом 4.
+  // Раньше их отсекала политика базы, и условия здесь не было.
+  let rows: Row[] = [];
+  let dupes: Array<{ a_id: string; b_id: string }> = [];
+  let error: string | null = null;
 
-  let query = supabase.from('contact_list_v').select('*', { count: 'exact' })
-    .order('name').limit(100);
-
-  if (q) query = query.ilike('name', `%${q}%`);
-  if (role && role in ROLE_RU) query = query.contains('roles', [role]);
-
-  const [{ data, count, error }, { data: dupes }] = await Promise.all([
-    query,
-    // Пары дубликатов, видимые агенту: пометить их в списке полезнее, чем
-    // ждать, пока кто-то зайдёт на карточку и заметит сам.
-    supabase.from('contact_duplicates_v').select('id, other_id'),
-  ]);
-
-  if (error) {
-    return (
-      <>
-        <h1>Контакты</h1>
-        <p className="error">{error.message}</p>
-      </>
-    );
+  try {
+    // Пары дубликатов — рядом со списком: пометить их полезнее, чем ждать,
+    // пока кто-то зайдёт на карточку и заметит сам.
+    [rows, dupes] = await Promise.all([
+      contactList(q) as unknown as Promise<Row[]>,
+      contactDuplicates(),
+    ]);
+  } catch (e) {
+    error = e instanceof Error ? e.message : 'Не удалось загрузить контакты.';
   }
 
-  const rows = (data ?? []) as Row[];
+  if (role && role in ROLE_RU) {
+    rows = rows.filter((r) => (r.roles ?? []).includes(role));
+  }
+
+  const count = rows.length;
 
   // Запись участвует в паре с любой стороны.
   const dupeIds = new Set<string>();
-  for (const d of (dupes ?? []) as { id: string; other_id: string }[]) {
-    dupeIds.add(d.id);
-    dupeIds.add(d.other_id);
+  for (const d of dupes) {
+    dupeIds.add(d.a_id);
+    dupeIds.add(d.b_id);
   }
 
   return (

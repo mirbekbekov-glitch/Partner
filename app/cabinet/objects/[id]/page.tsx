@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import {
+  activeMandateOf, activityFeed, objectCard, objectMatches, openRequirements,
+} from '@/lib/db/cabinet';
+import { approvedColleagues } from '@/lib/db/agents';
+import { canEditObject } from '@/lib/db/access';
 import { Activities, type ActivityRow } from '../../Activities';
 import type { ObjectMatch } from '@/lib/types';
 import { CreateMatchForm } from '../../CreateMatchForm';
@@ -14,64 +18,48 @@ import { transferObject } from '../../transfer-actions';
 const money = (v: number | null, c = 'USD') =>
   v == null ? '—' : `${new Intl.NumberFormat('ru-RU').format(v)} ${c}`;
 
+/** Зоны потребности лежат JSON-строкой: в базе нет типа массива. */
+const zonesOf = (v: string | null): string[] => {
+  try {
+    const parsed: unknown = JSON.parse(v ?? '[]');
+    return Array.isArray(parsed) ? parsed as string[] : [];
+  } catch {
+    return [];
+  }
+};
+
 const when = (v: string | null) =>
   v == null ? '—' : new Date(v).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 
 export default async function ObjectCard({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
 
-  const [
-    { data: object },
-    { data: matches },
-    { data: requirements },
-    { data: mandate },
-    { data: canEdit },
-    { data: colleagues },
-    { data: activities },
-  ] = await Promise.all([
-      supabase
-        .from('objects')
-        .select('id, kind, deal_type, address, zone, rooms, area, floor, price, currency, publication_state, published_at, actual_at')
-        .eq('id', id)
-        .maybeSingle(),
-      supabase
-        .from('object_matches_v')
-        .select('*')
-        .eq('object_id', id)
-        .order('created_at', { ascending: false }),
-      // Открытые потребности для кнопки «создать подбор». Тип сделки сверяет
-      // база, но незачем показывать заведомо негодные варианты.
-      supabase
-        .from('requirements')
-        .select('id, deal_type, budget_min, budget_max, zones')
-        .not('status', 'in', '("closed","lost")'),
-      supabase
-        .from('mandates')
-        .select('id, kind, contract_confirmed, valid_to')
-        .eq('object_id', id)
-        .eq('status', 'active')
-        .maybeSingle(),
-      // Право на правку знает только база: про listing-агента активного
+  const [object, matches, requirements, mandate, canEdit, colleagues, activities] =
+    await Promise.all([
+      objectCard(id),
+      objectMatches(id),
+      // Открытые потребности для кнопки «создать подбор». Направление
+      // сверяет слой доступа, но незачем показывать заведомо негодные.
+      openRequirements(),
+      activeMandateOf(id),
+      // Право на правку считает предикат: про listing-агента активного
       // мандата и про админа в коде страницы судить нечем.
-      supabase.rpc('can_edit_object', { p_object_id: id }),
-      supabase.from('transfer_targets_v').select('id, full_name, role').order('full_name'),
-      supabase.from('activity_feed_v').select('*')
-        .eq('entity_type', 'object').eq('entity_id', id)
-        .order('created_at', { ascending: false }),
+      canEditObject(id),
+      approvedColleagues(),
+      activityFeed('object', id),
     ]);
 
   if (!object) notFound();
 
-  const rows = (matches ?? []) as ObjectMatch[];
+  const rows = matches as unknown as ObjectMatch[];
   const alreadyMatched = new Set(rows.map((r) => r.requirement_id));
 
-  const options = (requirements ?? [])
+  const options = requirements
     .filter((r) => r.deal_type === object.deal_type && !alreadyMatched.has(r.id))
     .map((r) => ({
       id: r.id,
       label: `${money(r.budget_min, object.currency)} – ${money(r.budget_max, object.currency)}${
-        r.zones?.length ? ` · ${r.zones.join(', ')}` : ''
+        zonesOf(r.zones).length ? ` · ${zonesOf(r.zones).join(', ')}` : ''
       }`,
     }));
 

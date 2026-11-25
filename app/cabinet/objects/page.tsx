@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { objectList } from '@/lib/db/cabinet';
+import { approvedColleagues } from '@/lib/db/agents';
+import { currentAgent } from '@/lib/db/session';
 import { PAGE_SIZE, parseFilters, money, day } from '@/lib/list-params';
 import { Pager } from '../Pager';
 
@@ -42,68 +44,38 @@ export default async function ObjectsList({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const f = parseFilters(await searchParams);
-  const supabase = await createClient();
+  // Кто я — нужно для «моих» и «моей организации».
+  const me = await currentAgent();
 
-  // Кто я и в каком агентстве — нужно для «моих» и «моей организации».
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: me } = await supabase
-    .from('agents')
-    .select('id, organization_id')
-    .eq('auth_user_id', user?.id ?? '')
-    .maybeSingle();
-
-  // Список коллег для выбора конкретного агента. Политика agents_read
-  // отдаёт их любому одобренному агенту, поэтому отдельной проверки нет.
-  const { data: colleagues } = await supabase
-    .from('agents')
-    .select('id, full_name, organization_id')
-    .eq('status', 'approved')
-    .order('full_name');
-
-  let query = supabase
-    .from('object_list_v')
-    .select('*', { count: 'exact' })
-    .order('actual_at', { ascending: false })
-    .range((f.page - 1) * PAGE_SIZE, f.page * PAGE_SIZE - 1);
-
-  if (f.deal) query = query.eq('deal_type', f.deal);
-  if (f.state) query = query.eq('publication_state', f.state);
-  if (f.zone) query = query.eq('zone', f.zone);
-  // Поиск по адресу. ilike, а не полнотекст: адреса короткие и пишутся
-  // по-разному, подстрока здесь полезнее стеммера.
-  if (f.q) query = query.ilike('address', `%${f.q}%`);
+  // Список коллег для выбора конкретного агента. Видят его все одобренные:
+  // это не чувствительные данные, а имена для фильтра.
+  const colleagues = await approvedColleagues().catch(() => []);
 
   // Источник. «Другие» — это не «все, кроме меня»: объект коллеги по моему
   // же агентству остаётся своим.
-  if (f.src === 'me' && me) {
-    query = query.eq('responsible_agent_id', me.id);
-  } else if (f.src === 'org' && me?.organization_id) {
-    query = query.eq('responsible_org_id', me.organization_id);
-  } else if (f.src === 'other' && me) {
-    query = query.not('responsible_agent_id', 'eq', me.id);
-    if (me.organization_id) {
-      query = query.or(
-        `responsible_org_id.is.null,responsible_org_id.neq.${me.organization_id}`,
-      );
-    }
-  } else if (f.src && f.src.includes('-')) {
-    // Конкретный агент: идентификатор приходит из формы, но доверять ему не
-    // нужно — фильтр ничего не открывает, видимость решают политики.
-    query = query.eq('responsible_agent_id', f.src);
+  const source = f.src === 'me' ? 'mine'
+    : f.src === 'org' ? 'org'
+    : f.src === 'other' ? 'others'
+    : 'all';
+
+  // Конкретный агент: идентификатор приходит из формы, но доверять ему не
+  // нужно — фильтр ничего не открывает, видимость решает предикат внутри
+  // запроса.
+  const agentId = f.src && f.src.includes('-') ? f.src : null;
+
+  let rows: Row[] = [];
+  let error: string | null = null;
+
+  try {
+    rows = await objectList({
+      state: f.state, deal: f.deal, zone: f.zone, q: f.q,
+      source, agentId,
+    }) as unknown as Row[];
+  } catch (e) {
+    error = e instanceof Error ? e.message : 'Не удалось загрузить объекты.';
   }
 
-  const { data, count, error } = await query;
-
-  if (error) {
-    return (
-      <>
-        <h1>Объекты</h1>
-        <p className="error">{error.message}</p>
-      </>
-    );
-  }
-
-  const rows = (data ?? []) as Row[];
+  const count = rows.length;
 
   return (
     <>
