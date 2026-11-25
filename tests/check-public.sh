@@ -23,7 +23,12 @@ mapfile -t PUB < <(find "$ROOT/app" -name '*.tsx' -o -name '*.ts' \
   | grep -v '/app/auth/' | grep -v '/app/api/' | sort)
 
 # Модули слоя доступа, которые публичной части разрешены.
-ALLOWED='lib/db/catalog|lib/db/leads|lib/db/requests|lib/db/errors|lib/db/money|lib/db/normalize'
+#
+# lib/db/photos здесь потому, что снимки публичны по существу: они в
+# объявлениях, и требовать для них входа значило бы показывать каталог без
+# картинок. Модуль к базе не обращается вовсе — только к хранилищу, — а
+# маршрут отдачи берёт из него одну функцию чтения.
+ALLOWED='lib/db/catalog|lib/db/leads|lib/db/requests|lib/db/photos|lib/db/errors|lib/db/money|lib/db/normalize'
 
 bad=0
 for f in "${PUB[@]}"; do

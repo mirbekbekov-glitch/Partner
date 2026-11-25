@@ -26,6 +26,9 @@ import { createActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import { catalogObject, catalogPage, catalogZones } from '@/lib/db/catalog';
 import {
+  deletePhoto, listPhotos, photoKey, photoUrl, putPhoto, readPhoto, sniff,
+} from '@/lib/db/photos';
+import {
   cabinetCounters, contactList, contactObjects, dealList, objectList,
   requirementList,
 } from '@/lib/db/cabinet';
@@ -92,7 +95,10 @@ async function loginAs(db: D1Database, agentId: string) {
 }
 
 export default {
-  async fetch(_request: Request, env: { DB: D1Database }): Promise<Response> {
+  async fetch(
+    _request: Request,
+    env: { DB: D1Database; PHOTOS: R2Bucket },
+  ): Promise<Response> {
     setEnv(env as unknown as Record<string, unknown>);
     results.length = 0;
 
@@ -847,6 +853,87 @@ export default {
       `сделок ${counters?.open_deals}, объектов ${counters?.objects}`);
 
     await loginAs(db, anna);
+
+    // -----------------------------------------------------------------
+    // Снимки объектов
+    // -----------------------------------------------------------------
+    // Хранилище здесь настоящее: Miniflare держит R2 в памяти. Проверять
+    // загрузку по заглушке бессмысленно — вся суть в том, что именно
+    // принимает и отвергает хранилище.
+    await loginAs(db, anna);
+    const withPhotos = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Фотографическая 1',
+      price_minor: 3_000_000,
+    });
+
+    // Настоящий JPEG: три байта подписи и немного содержимого.
+    const jpeg = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4])]);
+    const shot = await putPhoto(withPhotos.id, jpeg);
+
+    check('снимок загружается', shot.url.startsWith('/photos/objects/'));
+    check('тип определён по содержимому', shot.type === 'image/jpeg');
+    check('путь относительный, без домена', !shot.url.includes('://'));
+
+    const back = await readPhoto(shot.key);
+    check('снимок читается обратно', back?.type === 'image/jpeg');
+    check('путь и ключ переводятся друг в друга',
+      photoKey(photoUrl(shot.key)) === shot.key);
+
+    // Главное: тип берётся из содержимого, а НЕ из того, что сказал браузер.
+    // Иначе чужой файл с подделанным типом мы бы отдали посетителю от
+    // своего имени.
+    const notAnImage = new Blob(['<?php echo "привет"; ?>'], { type: 'image/jpeg' });
+    await throws('файл не-картинка отвергается, даже если назвался картинкой',
+      () => putPhoto(withPhotos.id, notAnImage), Invalid);
+
+    await throws('пустой файл отвергается',
+      () => putPhoto(withPhotos.id, new Blob([])), Invalid);
+
+    // Чужой объект — чужие снимки.
+    await loginAs(db, vera);
+    await throws('в чужой объект снимок не загрузить',
+      () => putPhoto(withPhotos.id, jpeg), Forbidden);
+    await throws('чужой снимок не удалить',
+      () => deletePhoto(withPhotos.id, shot.key), Forbidden);
+
+    await loginAs(db, anna);
+    check('снимок на месте', (await listPhotos(withPhotos.id)).length === 1);
+
+    // Ключ обязан принадлежать объекту: иначе удалением чужого ключа можно
+    // вычистить снимки соседнего объекта.
+    await throws('ключ от другого объекта не принимается',
+      () => deletePhoto(withPhotos.id, `objects/${shown.id}/подделка.jpg`), Invalid);
+
+    await deletePhoto(withPhotos.id, shot.key);
+    check('снимок удаляется', (await listPhotos(withPhotos.id)).length === 0);
+    check('удалённый снимок не читается', (await readPhoto(shot.key)) === null);
+
+    // Отдаём только ключи СВОЕГО вида, и это проверяется честно: кладём в
+    // хранилище ключ чужого вида прямо, мимо putPhoto, и убеждаемся, что
+    // маршрут отдачи его не отдаст.
+    //
+    // Проверять «не нашлось» бессмысленно: ненайденный ключ вернёт null и
+    // без всякой проверки — именно так эта проверка однажды и оказалась
+    // пустой.
+    await env.PHOTOS.put('secrets/ключи.txt', 'не для посетителя');
+    await env.PHOTOS.put('objects/../побег.txt', 'тоже не для него');
+
+    check('ключ чужого вида не отдаётся, хотя он в хранилище есть',
+      (await readPhoto('secrets/ключи.txt')) === null
+      && (await env.PHOTOS.get('secrets/ключи.txt')) !== null);
+    check('путь с «..» не отдаётся, хотя он в хранилище есть',
+      (await readPhoto('objects/../побег.txt')) === null
+      && (await env.PHOTOS.get('objects/../побег.txt')) !== null);
+
+    // Распознавание форматов.
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10]);
+    const webp = new Uint8Array([
+      0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
+    ]);
+    check('PNG распознаётся', sniff(png)?.type === 'image/png');
+    check('WebP распознаётся', sniff(webp)?.type === 'image/webp');
+    check('текст картинкой не считается',
+      sniff(new TextEncoder().encode('не картинка')) === null);
 
     // -----------------------------------------------------------------
     // Инвариант 7: журнал

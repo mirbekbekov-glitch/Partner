@@ -66,7 +66,13 @@ const mf = new Miniflare({
           'suite.mjs': { type: 'esm', contents: readFileSync(resolve(out, 'suite.mjs'), 'utf8') },
         },
       },
-      env: { DB: { type: 'd1', id: 'test-db' } },
+      env: {
+        DB: { type: 'd1', id: 'test-db' },
+        // Хранилище снимков: в прогоне оно настоящее, Miniflare держит его
+        // в памяти. Проверять загрузку по заглушке бессмысленно — вся суть
+        // в том, что именно принимает и отвергает хранилище.
+        PHOTOS: { type: 'r2', name: 'test-photos' },
+      },
     },
   }],
 });

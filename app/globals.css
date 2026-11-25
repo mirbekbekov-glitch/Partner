@@ -994,3 +994,42 @@ main:has(.nav) { max-width: none; padding: 0; }
 .gallery .shot:last-child:nth-child(odd) { grid-column: 1 / -1; aspect-ratio: 16 / 9; }
 .block .gallery { padding-top: 0; }
 .block p.after { margin-top: 10px; }
+
+/* --- Снимки объекта в форме ------------------------------------------------
+   Список, а не сетка: порядок здесь — смысл, первый снимок становится
+   обложкой в каталоге, и это должно быть видно строкой, а не угадываться
+   по положению в сетке. */
+.photolist {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.photolist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-100);
+}
+
+.photolist img {
+  width: 72px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex: none;
+}
+
+/* Подпись забирает свободное место, кнопки прижимаются вправо. */
+.photolist .key { flex: 1; }
+
+.photolist button {
+  padding: 4px 10px;
+  font-size: 13px;
+}

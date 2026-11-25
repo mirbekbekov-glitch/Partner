@@ -94,11 +94,26 @@ export const hasAnyFilter = (f: CatalogFilters) =>
  * сюда же стекается защита от мусора: пустого массива, элемента без url и
  * ссылки не по http.
  */
+/**
+ * Что считается ссылкой на снимок.
+ *
+ * Кроме чужих адресов принимается собственный путь «/photos/…»: снимки,
+ * загруженные в наше хранилище, лежат там, и записывать их абсолютным
+ * адресом нельзя — сменится домен, и все объявления покажут пустоту.
+ *
+ * Всё остальное отбрасывается молча: в этом поле могла оказаться строка
+ * из старых данных, и падать из-за неё страница не должна.
+ */
+function isPhotoUrl(url: unknown): url is string {
+  return typeof url === 'string'
+    && (/^https?:\/\//i.test(url) || url.startsWith('/photos/'));
+}
+
 export function firstPhoto(photos: unknown): string | null {
   if (!Array.isArray(photos)) return null;
   for (const p of photos) {
     const url = typeof p === 'string' ? p : (p as { url?: unknown })?.url;
-    if (typeof url === 'string' && /^https?:\/\//i.test(url)) return url;
+    if (isPhotoUrl(url)) return url;
   }
   return null;
 }
@@ -107,7 +122,7 @@ export function allPhotos(photos: unknown): string[] {
   if (!Array.isArray(photos)) return [];
   return photos
     .map((p) => (typeof p === 'string' ? p : (p as { url?: unknown })?.url))
-    .filter((u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u));
+    .filter(isPhotoUrl);
 }
 
 /**
