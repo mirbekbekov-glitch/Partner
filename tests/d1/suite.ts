@@ -21,6 +21,11 @@ import { createMandate, expireMandates, terminateMandate } from '@/lib/db/mandat
 import { canSeeContact } from '@/lib/db/access';
 import { createRequirement } from '@/lib/db/requirements';
 import { createActivity, setActivityDone } from '@/lib/db/activities';
+import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
+import {
+  approveAgent, blockAgent, clearMyOrganization, confirmAgentOrganization,
+  ensureAgentByEmail, getAgent, setAgentRole, setMyOrganization, updateProfile,
+} from '@/lib/db/agents';
 import {
   claimNotifications, enqueueDueReminders, markNotification,
 } from '@/lib/db/notifications';
@@ -35,7 +40,7 @@ import {
 } from '@/lib/db/contacts';
 import { commissionShares, commissionTotal } from '@/lib/db/commission';
 import { normalizePhone } from '@/lib/db/normalize';
-import { Conflict, Forbidden } from '@/lib/db/errors';
+import { Conflict, Forbidden, Invalid, NotFound } from '@/lib/db/errors';
 
 type Result = { name: string; ok: boolean; note?: string };
 const results: Result[] = [];
@@ -416,6 +421,164 @@ export default {
     check('неудача возвращает в очередь и считает попытку',
       retried?.status === 'pending' && retried?.attempts === 1,
       `статус ${retried?.status}, попыток ${retried?.attempts}`);
+
+    // -----------------------------------------------------------------
+    // Заявки с сайта: единственная запись от неизвестного
+    // -----------------------------------------------------------------
+    await loginAs(db, anna);
+    const forLeads = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Манаса 40', price_minor: 2_500_000,
+    });
+    await createMandate({ object_id: forLeads.id, kind: 'non_exclusive' });
+    await publishObject(forLeads.id);
+
+    const draft = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Черновик 1', price_minor: 1_000_000,
+    });
+
+    const leadId = await submitLead({
+      object_id: forLeads.id, name: 'Азамат', phone: '0555 00 11 22',
+      message: 'когда можно посмотреть?',
+    });
+    check('заявка принимается по опубликованному объекту', Boolean(leadId));
+
+    await throws('по черновику заявка не принимается',
+      () => submitLead({ object_id: draft.id, name: 'Х', phone: '0555 00 11 23' }),
+      NotFound);
+    await throws('по несуществующему объекту — тот же ответ, что по черновику',
+      () => submitLead({ object_id: crypto.randomUUID(), name: 'Х', phone: '0555 00 11 24' }),
+      NotFound);
+
+    // Повтор той же пары за сутки отдаёт прежнюю заявку: человек нажал
+    // дважды, агент не должен звонить дважды.
+    const again2 = await submitLead({
+      object_id: forLeads.id, name: 'Азамат', phone: '+996555001122',
+    });
+    check('повтор за сутки возвращает прежнюю заявку', again2 === leadId);
+
+    // Приманка: отвечаем как при успехе, но в базу ничего не идёт.
+    const leadsBefore = await db.prepare('select count(*) as n from leads').first<{ n: number }>();
+    await submitLead({
+      object_id: forLeads.id, name: 'Бот', phone: '0700 99 99 99', trap: 'я бот',
+    });
+    const leadsAfter = await db.prepare('select count(*) as n from leads').first<{ n: number }>();
+    check('заполненная приманка не пишет в базу',
+      leadsBefore?.n === leadsAfter?.n,
+      `было ${leadsBefore?.n}, стало ${leadsAfter?.n}`);
+
+    await throws('телефон не похож на номер — отказ',
+      () => submitLead({ object_id: forLeads.id, name: 'Х', phone: '12' }), Invalid);
+    await throws('пустое имя — отказ',
+      () => submitLead({ object_id: forLeads.id, name: '  ', phone: '0555 77 88 99' }),
+      Invalid);
+
+    // По заявке заведена задача тому, кто ведёт объект.
+    const leadRow = await db.prepare('select * from leads where id = ?')
+      .bind(leadId).first<{ activity_id: string | null; status: string }>();
+    check('по заявке заведена задача', leadRow?.activity_id !== null);
+
+    const mine = await listLeads();
+    check('агент видит заявки по своим объектам', mine.some((l) => l.id === leadId));
+
+    await loginAs(db, vera);
+    const hers2 = await listLeads();
+    check('посторонний агент чужих заявок не видит',
+      !hers2.some((l) => l.id === leadId));
+    await throws('посторонний не ведёт чужую заявку',
+      () => setLeadStatus(leadId, 'done'), Forbidden);
+
+    await loginAs(db, anna);
+    await setLeadStatus(leadId, 'done');
+    const doneTask = await db.prepare('select done from activities where id = ?')
+      .bind(leadRow?.activity_id ?? '').first<{ done: number }>();
+    check('отработанная заявка закрывает свою задачу', doneTask?.done === 1);
+
+    // -----------------------------------------------------------------
+    // Агенты: повысить себя нельзя
+    // -----------------------------------------------------------------
+    const newcomer = await ensureAgentByEmail('novichok@example.kg', 'Новичок');
+    check('новый агент рождается в ожидании', newcomer.status === 'pending');
+
+    const again3 = await ensureAgentByEmail('novichok@example.kg');
+    check('инв.6: повторный вход не плодит вторую запись', again3.id === newcomer.id);
+
+    await throws('агент не может одобрить сам себя',
+      () => approveAgent(newcomer.id), Forbidden);
+    await throws('агент не может выдать себе админа',
+      () => setAgentRole(anna, 'admin'), Forbidden);
+
+    // Правка профиля трогает только имя и телефон. Проверяем не тем, что
+    // честный вызов ничего лишнего не сломал, а тем, что НЕЧЕСТНЫЙ не
+    // проходит: подсовываем роль и статус прямо в правку профиля — ровно
+    // так эта дыра и выглядела на Postgres, где политика «правь свои
+    // строки» означала «правь любую колонку своих строк».
+    await updateProfile({
+      full_name: 'Анна Петрова',
+      phone: '0700 12 34 56',
+      role: 'admin',
+      status: 'approved',
+      email: 'other@example.kg',
+    } as unknown as { full_name: string });
+
+    const annaRow = await getAgent(anna);
+    check('правка профиля меняет имя', annaRow?.full_name === 'Анна Петрова');
+    check('через правку профиля роль не выдаётся',
+      annaRow?.role === 'agent', `роль стала ${annaRow?.role}`);
+    check('через правку профиля статус не меняется',
+      annaRow?.status === 'approved', `статус стал ${annaRow?.status}`);
+    check('через правку профиля почта не подменяется',
+      annaRow?.email === 'anna@example.kg', `почта стала ${annaRow?.email}`);
+
+    // Админ может всё это, и последнего админа не разжаловать.
+    await db.prepare(`update agents set role = 'admin' where id = ?`).bind(anna).run();
+    await loginAs(db, anna);
+    const approved = await approveAgent(newcomer.id);
+    check('админ одобряет агента', approved.status === 'approved');
+
+    await throws('последнего админа не разжаловать',
+      () => setAgentRole(anna, 'agent'), Conflict);
+    await throws('последнего админа не заблокировать',
+      () => blockAgent(anna), Conflict);
+
+    // Блокировка выбрасывает чужие сессии.
+    await blockAgent(boris);
+    const borisSessions = await db.prepare(
+      'select count(*) as n from sessions where agent_id = ?',
+    ).bind(boris).first<{ n: number }>();
+    check('блокировка снимает сессии агента', (borisSessions?.n ?? 0) === 0);
+
+    // -----------------------------------------------------------------
+    // Агентство: агент заявляет, админ подтверждает
+    // -----------------------------------------------------------------
+    await loginAs(db, vera);
+    const claimed = await setMyOrganization('Этажи');
+    check('агент заявляет агентство', claimed.organization_id !== null);
+    check('заявленное агентство не подтверждено', claimed.org_confirmed === 0);
+
+    await throws('подтвердить своё агентство агент не может',
+      () => confirmAgentOrganization(vera, true), Forbidden);
+
+    // Название уникально по нормализованному виду.
+    await loginAs(db, anna);
+    await setMyOrganization('ЭТАЖИ  ');
+    const annaOrg = await getAgent(anna);
+    check('«Этажи» и «ЭТАЖИ» — одно агентство',
+      annaOrg?.organization_id === claimed.organization_id);
+
+    const orgCount = await db.prepare('select count(*) as n from organizations')
+      .first<{ n: number }>();
+    check('второго агентства с тем же названием не завелось',
+      (orgCount?.n ?? 0) === 1, `агентств: ${orgCount?.n}`);
+
+    const confirmed2 = await confirmAgentOrganization(vera, true);
+    check('админ подтверждает агентство', confirmed2.org_confirmed === 1);
+
+    await loginAs(db, vera);
+    const quit = await clearMyOrganization();
+    check('уйти из агентства агент может сам',
+      quit.organization_id === null && quit.org_confirmed === 0);
+
+    await loginAs(db, anna);
 
     // -----------------------------------------------------------------
     // Инвариант 7: журнал
