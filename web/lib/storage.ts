@@ -20,8 +20,14 @@
  *
  *   disk (по умолчанию) — каталог `PHOTO_DIR`. Разработка и тесты;
  *   r2                  — привязка R2 (`env.R2`). Продакшн на Cloudflare;
- *   s3                  — любое S3-совместимое: Supabase Storage, MinIO, сам
- *                         S3, и R2 тоже, если приложение живёт не в воркере.
+ *   s3                  — любое S3-совместимое: MinIO, сам S3, и R2 тоже,
+ *                         если приложение живёт не в воркере;
+ *   supabase            — Supabase Storage по его СОБСТВЕННОМУ интерфейсу.
+ *                         Нужен потому, что по S3-протоколу Supabase требует
+ *                         отдельные ключи доступа, а завести их можно только
+ *                         руками в панели: в управляющем API такого нет. REST
+ *                         же принимает служебный ключ проекта, и выкладывание
+ *                         перестаёт ждать чужих рук.
  *
  * Почему r2 и s3 — разные драйверы, хотя R2 говорит и на S3. Привязка не
  * ходит по сети наружу и ничего не подписывает: воркер обращается к бакету
@@ -93,6 +99,10 @@ function deferred(name: string, load: () => Promise<Driver>): Storage {
 const disk = deferred("диск", async () => (await import("./storage.disk.ts")).driver);
 const r2 = deferred("R2", async () => (await import("./storage.r2.ts")).driver);
 const s3 = deferred("S3", async () => (await import("./storage.s3.ts")).driver);
+const supabase = deferred(
+  "Supabase Storage",
+  async () => (await import("./storage.supabase.ts")).driver,
+);
 
 export function storage(): Storage {
   const kind = process.env.PHOTO_STORAGE;
@@ -110,7 +120,8 @@ export function storage(): Storage {
   if (kind === "disk") return disk;
   if (kind === "r2") return r2;
   if (kind === "s3") return s3;
+  if (kind === "supabase") return supabase;
   throw new Error(
-    `PHOTO_STORAGE=${kind} не поддерживается: ожидается disk, r2 или s3.`,
+    `PHOTO_STORAGE=${kind} не поддерживается: ожидается disk, r2, s3 или supabase.`,
   );
 }

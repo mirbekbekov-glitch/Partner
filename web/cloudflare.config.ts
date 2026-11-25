@@ -112,15 +112,23 @@ export default defineConfig({
       // держать в списке обязательного то, что ни на что не влияет.
       PHOTO_STORAGE: bindings.secret(),
 
-      // Для PHOTO_STORAGE=s3. Supabase Storage живёт в том же проекте, что
-      // база: `https://<ref>.supabase.co/storage/v1/s3`, регион проекта.
-      // Ключи создаются в панели Supabase (Storage → S3 Access Keys) и
-      // кладутся в секреты воркера.
-      PHOTO_S3_BUCKET: bindings.secret(),
-      PHOTO_S3_ENDPOINT: bindings.secret(),
-      PHOTO_S3_REGION: bindings.secret(),
-      PHOTO_S3_ACCESS_KEY_ID: bindings.secret(),
-      PHOTO_S3_SECRET_ACCESS_KEY: bindings.secret(),
+      // Для PHOTO_STORAGE=supabase: Supabase Storage по его собственному
+      // интерфейсу, а не по S3.
+      //
+      // Почему не s3, хотя драйвер есть и работает. По S3-протоколу Supabase
+      // требует отдельные ключи доступа, а завести их можно ТОЛЬКО руками в
+      // панели: в управляющем API такой возможности нет. То есть выкладывание
+      // упиралось бы в действие, которое нельзя сделать за владельца.
+      // REST-интерфейс хранилища принимает служебный ключ проекта, который
+      // управляющий API отдаёт, — и упор исчезает.
+      //
+      // Переменных PHOTO_S3_* здесь больше нет: воркер ими не пользуется, а
+      // держать в списке обязательного то, что ни на что не влияет, значит
+      // врать списком. Драйвер s3 остаётся в коде для выкладываний вне
+      // Cloudflare и для проверок.
+      SUPABASE_URL: bindings.secret(),
+      SUPABASE_SERVICE_KEY: bindings.secret(),
+      PHOTO_BUCKET: bindings.secret(),
     },
   }),
 });
