@@ -107,3 +107,14 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Схема базы. Выкладка заводит пустую D1, таблиц в ней нет, и первый
+      # же запрос упёрся бы в «no such table».
+      #
+      # После выкладки, а не до: база появляется вместе с привязкой, то
+      # есть в предыдущем шаге.
+      - name: Схема D1
+        run: node db/d1/apply-remote.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

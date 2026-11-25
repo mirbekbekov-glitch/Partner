@@ -11,6 +11,7 @@
 import { build } from 'vite';
 import { Miniflare } from '../../node_modules/cf/node_modules/miniflare/dist/src/index.js';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { statementsOf } from '../../db/d1/statements.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -69,22 +70,12 @@ const mf = new Miniflare({
 const db = await mf.getD1Database('DB');
 const schema = readFileSync(resolve(root, 'db/d1/0001_schema.sql'), 'utf8');
 
-// D1 принимает по одному запросу за раз, поэтому схема разбирается на
-// отдельные команды.
-//
-// Комментарии снимаются ДО разбиения, а не после. В пояснениях встречается
-// точка с запятой («роли это флаги одной записи; на этом держится…»), и
-// разбиение по ней резало команду посередине — на этом упал второй прогон.
-const statements = schema
-  .split('\n')
-  .filter((line) => !line.trim().startsWith('--'))
-  .join('\n')
-  .split(';');
-
-for (const piece of statements) {
-  const sql = piece.trim();
-  if (!sql) continue;
-  await db.exec(sql.replace(/\n/g, ' '));
+// D1 принимает по одному запросу за раз. Разбор — общий с тем, которым
+// схема применяется в боевую базу (db/d1/statements.mjs): резать её
+// одинаково обязательно, иначе проверенное здесь и выложенное наружу
+// разойдутся.
+for (const sql of statementsOf(schema)) {
+  await db.exec(sql);
 }
 
 // 3. Прогнать.
