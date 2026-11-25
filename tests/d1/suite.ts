@@ -19,6 +19,12 @@ import {
 } from '@/lib/db/objects';
 import { createMandate, expireMandates, terminateMandate } from '@/lib/db/mandates';
 import { canSeeContact } from '@/lib/db/access';
+import { createRequirement } from '@/lib/db/requirements';
+import { createMatch, setMatchStatus } from '@/lib/db/matches';
+import {
+  closeDeal, createDealFromMatch, failDeal, getDeal,
+  indicativeCommission, setDealStatus,
+} from '@/lib/db/deals';
 import {
   addPhone, contactPhones, createContact, findContactByPhone,
   mergeContacts, removeObjectOwnership, setObjectOwnership, transferContact,
@@ -259,6 +265,99 @@ export default {
     ).bind(shared.id).first<{ n: number }>();
     check('связь собственности снимается, когда сделки нет', (left?.n ?? 0) === 1,
       `осталось связей: ${left?.n}`);
+
+    // -----------------------------------------------------------------
+    // Инварианты 2 и 3: сделка только из подбора, комиссия не захватывается
+    // -----------------------------------------------------------------
+    await loginAs(db, anna);
+    const forSale = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Токтогула 15',
+      price_minor: 40_000_000, owner_name: 'Хозяин', owner_phone: '0700 55 44 33',
+    });
+    const saleMandate = await createMandate({ object_id: forSale.id, kind: 'exclusive' });
+    await publishObject(forSale.id);
+
+    // Потребность ведёт Борис: по инварианту 3 доля closing достаётся ему,
+    // кто бы подбор ни создал.
+    await loginAs(db, boris);
+    const need = await createRequirement({
+      deal_type: 'sale', client_name: 'Покупатель', client_phone: '0701 10 10 10',
+      budget_max_minor: 45_000_000,
+    });
+
+    await loginAs(db, anna);
+    const match = await createMatch(forSale.id, need.id);
+    check('инв.3: closing-агент берётся из потребности, а не из того, кто нажал',
+      match.closing_agent_id === boris,
+      `вышло ${match.closing_agent_id === anna ? 'Анна' : match.closing_agent_id}`);
+
+    await throws('инв.2: «в сделке» руками не ставится',
+      () => setMatchStatus(match.id, 'in_deal'), Conflict);
+
+    const deal = await createDealFromMatch(match.id);
+    check('инв.2: сделка заводится из подбора', deal.match_id === match.id);
+    check('инв.2: объект и потребность взяты из подбора',
+      deal.object_id === forSale.id && deal.requirement_id === need.id);
+    check('инв.3: listing-агент взят из мандата',
+      deal.listing_agent_id === saleMandate.listing_agent_id);
+    check('инв.3: closing-агент взят из подбора',
+      deal.closing_agent_id === boris);
+
+    const matchNow = await db.prepare('select status from matches where id = ?')
+      .bind(match.id).first<{ status: string }>();
+    check('инв.2: подбор перешёл в сделку', matchNow?.status === 'in_deal');
+
+    // До закрытия суммы индикативны и в базе не лежат.
+    const before = await indicativeCommission(deal.id);
+    const storedBefore = await getDeal(deal.id);
+    check('инв.3: до закрытия комиссия не зафиксирована',
+      storedBefore?.commission_total_minor === null);
+    check('инв.3: до закрытия комиссия считается от цены объекта',
+      before.total === 800_000, `вышло ${before.total}`);
+
+    await setDealStatus(deal.id, 'documents');
+
+    // Посторонний закрыть сделку не может.
+    const vera = await seedAgent(db, 'vera');
+    await loginAs(db, vera);
+    await throws('закрыть сделку может только её сторона',
+      () => closeDeal(deal.id, 38_000_000), Forbidden);
+
+    await loginAs(db, anna);
+    const closed = await closeDeal(deal.id, 38_000_001);
+    check('инв.3: комиссия считается от финальной цены',
+      closed.commission_total_minor === 760_000, `вышло ${closed.commission_total_minor}`);
+    check('инв.3: доли складываются ровно в итог',
+      (closed.listing_share_minor ?? 0) + (closed.closing_share_minor ?? 0)
+        === closed.commission_total_minor);
+
+    const mandateAfter = await db.prepare('select status from mandates where id = ?')
+      .bind(saleMandate.id).first<{ status: string }>();
+    const needAfter = await db.prepare('select status from requirements where id = ?')
+      .bind(need.id).first<{ status: string }>();
+    check('инв.2: закрытие закрывает мандат',
+      mandateAfter?.status === 'closed_by_deal', `статус ${mandateAfter?.status}`);
+    check('инв.2: закрытие закрывает потребность',
+      needAfter?.status === 'closed', `статус ${needAfter?.status}`);
+
+    await throws('закрытую сделку второй раз не закрыть',
+      () => closeDeal(deal.id, 1), Conflict);
+
+    // Срыв: мандат и потребность НЕ закрываются, работа продолжается.
+    const obj2 = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Жибек Жолу 3', price_minor: 3_000_000,
+    });
+    await createMandate({ object_id: obj2.id, kind: 'non_exclusive' });
+    const need2 = await createRequirement({ deal_type: 'rent', client_name: 'Арендатор' });
+    const match2 = await createMatch(obj2.id, need2.id);
+    const deal2 = await createDealFromMatch(match2.id);
+    const failed = await failDeal(deal2.id, 'клиент передумал');
+    const need2After = await db.prepare('select status from requirements where id = ?')
+      .bind(need2.id).first<{ status: string }>();
+
+    check('срыв не закрывает потребность', need2After?.status === 'qualified',
+      `статус ${need2After?.status}`);
+    check('срыв требует причины', failed.failure_reason === 'клиент передумал');
 
     // -----------------------------------------------------------------
     // Инвариант 7: журнал
