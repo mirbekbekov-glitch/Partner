@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { deletePhoto, putPhoto } from '@/lib/db/photos';
+import { Forbidden } from '@/lib/db/errors';
 import { explain } from '@/lib/db/report';
 
 /**
@@ -9,6 +10,21 @@ import { explain } from '@/lib/db/report';
  * сама, без ожидания отрисовки. Права проверяет слой доступа — тот же
  * предикат, что и на правку объекта.
  */
+
+/**
+ * Код ответа по ТИПУ отказа, а не по тексту сообщения.
+ *
+ * Сперва я различал их по подстроке в тексте, и это неверно: стоит
+ * переформулировать фразу — и отказ в правах начинает отвечать «400,
+ * поправьте файл», а человек правит файл, который ни при чём.
+ *
+ * 403 браузеру незачем повторять, 400 человек исправит, выбрав другой
+ * снимок.
+ */
+function fail(e: unknown): Response {
+  const status = e instanceof Forbidden ? 403 : 400;
+  return NextResponse.json({ error: explain(e) }, { status });
+}
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
@@ -27,11 +43,7 @@ export async function POST(request: Request) {
     const stored = await putPhoto(objectId, file);
     return NextResponse.json(stored);
   } catch (e) {
-    // Отказ по правам отличаем от неверного файла: 403 браузеру незачем
-    // повторять, а 400 человек исправит, выбрав другой снимок.
-    const message = explain(e);
-    const status = message.includes('может тот, кто') ? 403 : 400;
-    return NextResponse.json({ error: message }, { status });
+    return fail(e);
   }
 }
 
@@ -48,8 +60,6 @@ export async function DELETE(request: Request) {
     await deletePhoto(objectId, key);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const message = explain(e);
-    const status = message.includes('может тот, кто') ? 403 : 400;
-    return NextResponse.json({ error: message }, { status });
+    return fail(e);
   }
 }
