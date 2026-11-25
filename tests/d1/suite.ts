@@ -12,7 +12,9 @@
 import { setEnv } from './stubs/cloudflare-workers';
 import { resetCookies, setCookie } from './stubs/next-headers';
 
-import { SESSION_COOKIE } from '@/lib/db/session';
+import { SESSION_COOKIE, currentAgent, endSession, sessionAgent } from '@/lib/db/session';
+import { completeLogin, requestLogin, revokePendingLinks } from '@/lib/db/login';
+import { outbox, tokenFromLastLetter } from './stubs/email';
 import {
   confirmActual, createObject, getObject, publishObject,
   updateObject, withdrawObject,
@@ -577,6 +579,108 @@ export default {
     const quit = await clearMyOrganization();
     check('уйти из агентства агент может сам',
       quit.organization_id === null && quit.org_confirmed === 0);
+
+    await loginAs(db, anna);
+
+    // -----------------------------------------------------------------
+    // Вход по ссылке на почту
+    // -----------------------------------------------------------------
+    resetCookies();
+    outbox.length = 0;
+
+    await requestLogin({
+      email: ' Novichok@Example.KG ', origin: 'https://liberterra.kg',
+      redirect_to: '/cabinet/objects',
+    });
+    check('письмо со ссылкой отправлено', outbox.length === 1);
+    check('адрес приведён к нижнему регистру и обрезан',
+      outbox[0]?.to === 'novichok@example.kg', `ушло на ${outbox[0]?.to}`);
+
+    const linkToken = tokenFromLastLetter();
+    check('в письме есть токен', Boolean(linkToken));
+
+    // В базе лежит ХЭШ, а не сам токен: утечка таблицы не даёт войти.
+    const stored = await db.prepare('select token_hash from login_tokens where email = ?')
+      .bind('novichok@example.kg').first<{ token_hash: string }>();
+    check('в базе лежит не сам токен, а его хэш',
+      Boolean(stored) && stored?.token_hash !== linkToken);
+
+    const entered = await completeLogin(linkToken ?? '');
+    check('вход по ссылке заводит сессию', entered.agent.email === 'novichok@example.kg');
+    check('возврат идёт на запрошенную страницу',
+      entered.redirect_to === '/cabinet/objects');
+
+    const who = await sessionAgent();
+    check('после входа сессия видна', who?.id === entered.agent.id);
+
+    await throws('ссылка срабатывает ровно один раз',
+      () => completeLogin(linkToken ?? ''), Forbidden);
+    await throws('выдуманная ссылка не пускает',
+      () => completeLogin('deadbeef'), Forbidden);
+
+    // Истёкшая ссылка отвечает так же, как использованная.
+    await requestLogin({ email: 'novichok@example.kg', origin: 'https://liberterra.kg' });
+    const expiring = tokenFromLastLetter();
+    await db.prepare('update login_tokens set expires_at = ? where used_at is null')
+      .bind('2000-01-01T00:00:00.000Z').run();
+    await throws('протухшая ссылка не пускает',
+      () => completeLogin(expiring ?? ''), Forbidden);
+
+    // Открытое перенаправление: ссылка из письма не уводит на чужой сайт.
+    await requestLogin({
+      email: 'novichok@example.kg', origin: 'https://liberterra.kg',
+      redirect_to: '//evil.example.com/hack',
+    });
+    const safeToken = tokenFromLastLetter();
+    const safeEntry = await completeLogin(safeToken ?? '');
+    check('ссылка не уводит на чужой сайт',
+      safeEntry.redirect_to === '/cabinet', `повела на ${safeEntry.redirect_to}`);
+
+    // Непроверенный агент в кабинет не попадает, хотя сессия у него есть.
+    await db.prepare(`update agents set status = 'pending' where email = ?`)
+      .bind('novichok@example.kg').run();
+    check('сессия есть и у неодобренного', (await sessionAgent()) !== null);
+    check('но кабинет ему закрыт', (await currentAgent()) === null);
+
+    // Заблокированного не пускают вовсе.
+    await db.prepare(`update agents set status = 'blocked' where email = ?`)
+      .bind('novichok@example.kg').run();
+    await requestLogin({ email: 'novichok@example.kg', origin: 'https://liberterra.kg' });
+    await throws('заблокированного не пускают',
+      () => completeLogin(tokenFromLastLetter() ?? ''), Forbidden);
+
+    // Частота: перебор и заваливание чужого ящика.
+    outbox.length = 0;
+    await db.prepare('delete from login_tokens').run();
+    for (let i = 0; i < 5; i++) {
+      await requestLogin({ email: 'flood@example.kg', origin: 'https://liberterra.kg' });
+    }
+    await throws('шестая попытка входа за час отклонена',
+      () => requestLogin({ email: 'flood@example.kg', origin: 'https://liberterra.kg' }),
+      Invalid);
+    check('писем ушло ровно пять', outbox.length === 5, `ушло ${outbox.length}`);
+
+    await throws('это не похоже на почту — отказ',
+      () => requestLogin({ email: 'не почта', origin: 'https://liberterra.kg' }), Invalid);
+
+    // Выход снимает сессию и в браузере, и в базе.
+    await db.prepare(`update agents set status = 'approved' where email = ?`)
+      .bind('novichok@example.kg').run();
+    await requestLogin({ email: 'novichok@example.kg', origin: 'https://liberterra.kg' });
+    const last = await completeLogin(tokenFromLastLetter() ?? '');
+    const before2 = await db.prepare('select count(*) as n from sessions where agent_id = ?')
+      .bind(last.agent.id).first<{ n: number }>();
+    await endSession();
+    const after2 = await db.prepare('select count(*) as n from sessions where agent_id = ?')
+      .bind(last.agent.id).first<{ n: number }>();
+    // Выход снимает ровно ОДНУ сессию — ту, из которой вышли. Выходить на
+    // одном устройстве и терять вход на остальных человек не ожидает, а
+    // «выйти везде» — отдельное действие, и его здесь нет.
+    check('выход снимает ровно одну сессию',
+      (before2?.n ?? 0) - (after2?.n ?? 0) === 1,
+      `было ${before2?.n}, стало ${after2?.n}`);
+    check('прочие сессии агента остались', (after2?.n ?? 0) > 0);
+    check('после выхода агента нет', (await sessionAgent()) === null);
 
     await loginAs(db, anna);
 

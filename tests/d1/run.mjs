@@ -32,6 +32,10 @@ await build({
       'server-only': resolve(root, 'tests/d1/stubs/empty.ts'),
       'cloudflare:workers': resolve(root, 'tests/d1/stubs/cloudflare-workers.ts'),
       'next/headers': resolve(root, 'tests/d1/stubs/next-headers.ts'),
+      // Отправка писем — единственное в слое входа, что нельзя выполнить вне
+      // Worker: она идёт через привязку Cloudflare. Подменяется ровно этот
+      // модуль, вся остальная логика входа проходит настоящая.
+      '@/lib/db/email': resolve(root, 'tests/d1/stubs/email.ts'),
       '@': root,
     },
   },
