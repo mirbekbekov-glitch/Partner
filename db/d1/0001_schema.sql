@@ -207,6 +207,11 @@ create table if not exists objects (
   photos              text not null default '[]' check (json_valid(photos)),
   description         text,
   source              text,
+  -- Адрес и район в виде, пригодном для поиска: нижний регистр, кыргызские
+  -- буквы сведены к русским. Отдельной колонкой, потому что lower() в
+  -- SQLite работает только с латиницей — «Чүй» он не меняет вовсе.
+  -- Заполняет код, как и phone_normalized.
+  search_text         text not null default '',
 
   -- Публикация это СОСТОЯНИЕ объекта, а не выгрузка во вторую систему.
   publication_state   text not null default 'draft'

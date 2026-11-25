@@ -33,3 +33,27 @@ export function normalizePhone(phone: string | null | undefined): string {
 export function normalizeName(name: string | null | undefined): string {
   return (name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
+
+/**
+ * Текст для поиска: нижний регистр и кыргызские буквы, сведённые к русским.
+ *
+ * Нужно потому, что lower() в SQLite работает ТОЛЬКО с латиницей: «Чүй»
+ * после него остаётся «Чүй», и поиск по-русски не находит ничего. Поэтому
+ * приводим текст заранее и храним отдельной колонкой — тот же приём, что у
+ * телефонов.
+ *
+ * «ү» → «у», «ө» → «о», «ң» → «н»: человек набирает на русской раскладке,
+ * а в адресе стоит кыргызская буква. Обратное направление не нужно —
+ * запрос приводится этой же функцией.
+ */
+export function searchText(...parts: Array<string | null | undefined>): string {
+  return parts
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+    .replace(/ү/g, 'у')
+    .replace(/ө/g, 'о')
+    .replace(/ң/g, 'н')
+    .replace(/\s+/g, ' ')
+    .trim();
+}

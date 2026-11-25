@@ -10,7 +10,7 @@
  */
 import { build } from 'vite';
 import { Miniflare } from '../../node_modules/cf/node_modules/miniflare/dist/src/index.js';
-import { readFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { statementsOf } from '../../db/d1/statements.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -72,14 +72,25 @@ const mf = new Miniflare({
 });
 
 const db = await mf.getD1Database('DB');
-const schema = readFileSync(resolve(root, 'db/d1/0001_schema.sql'), 'utf8');
+const schemaDir = resolve(root, 'db/d1');
+const schemaFiles = readdirSync(schemaDir)
+  .filter((f) => /^\d+_.*\.sql$/.test(f)).sort();
 
-// D1 принимает по одному запросу за раз. Разбор — общий с тем, которым
-// схема применяется в боевую базу (db/d1/statements.mjs): резать её
-// одинаково обязательно, иначе проверенное здесь и выложенное наружу
-// разойдутся.
-for (const sql of statementsOf(schema)) {
-  await db.exec(sql);
+// Файлы схемы по порядку имён. Разбор — общий с боевым применением
+// (db/d1/statements.mjs): резать её одинаково обязательно, иначе
+// проверенное здесь и выложенное наружу разойдутся.
+//
+// «duplicate column name» пропускается ровно по той же причине, что и в
+// боевом применении: ALTER в SQLite не умеет IF NOT EXISTS.
+for (const file of schemaFiles) {
+  const text = readFileSync(resolve(schemaDir, file), 'utf8');
+  for (const sql of statementsOf(text)) {
+    try {
+      await db.exec(sql);
+    } catch (e) {
+      if (!/duplicate column name/i.test(String(e))) throw e;
+    }
+  }
 }
 
 // 3. Прогнать.

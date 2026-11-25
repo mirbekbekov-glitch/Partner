@@ -24,6 +24,7 @@ import { canSeeContact } from '@/lib/db/access';
 import { createRequirement } from '@/lib/db/requirements';
 import { createActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
+import { catalogObject, catalogPage, catalogZones } from '@/lib/db/catalog';
 import {
   approveAgent, blockAgent, clearMyOrganization, confirmAgentOrganization,
   ensureAgentByEmail, getAgent, setAgentRole, setMyOrganization, updateProfile,
@@ -683,6 +684,90 @@ export default {
     check('после выхода агента нет', (await sessionAgent()) === null);
 
     await loginAs(db, anna);
+
+    // -----------------------------------------------------------------
+    // Публичный каталог: чего в витрине быть не должно
+    // -----------------------------------------------------------------
+    await loginAs(db, anna);
+    const shown = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Чүй 200', zone: 'Центр',
+      rooms: 3, area: 78, price_minor: 7_000_000,
+      owner_name: 'Собственник витрины', owner_phone: '0555 12 13 14',
+    });
+    await createMandate({ object_id: shown.id, kind: 'non_exclusive' });
+    await publishObject(shown.id);
+
+    const hidden = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Тайная 1', price_minor: 1_000_000,
+    });
+
+    const page = await catalogPage({});
+    const card = page.items.find((i) => i.id === shown.id);
+    check('опубликованный объект в витрине есть', Boolean(card));
+    check('черновика в витрине нет', !page.items.some((i) => i.id === hidden.id));
+
+    // Состав выдачи. Это та самая проверка, которая на Postgres роняла
+    // прогон при попытке добавить в витрину колонку «ведёт».
+    const forbidden = [
+      'created_by_agent_id', 'agent_id', 'listing_agent_id', 'closing_agent_id',
+      'owner_agent_id', 'organization_id', 'commission_total_minor',
+      'commission_rule', 'publication_state', 'contact_id', 'phone',
+    ];
+    const leaked = forbidden.filter((k) => card !== undefined && k in card);
+    check('в витрине нет ни агента, ни комиссии, ни контактов',
+      leaked.length === 0, `просочилось: ${leaked.join(', ')}`);
+
+    const whole = await db.prepare('select * from objects where id = ?')
+      .bind(shown.id).first<Record<string, unknown>>();
+    check('а в самой таблице эти колонки есть — значит проверка не пустая',
+      Boolean(whole) && 'created_by_agent_id' in (whole ?? {}));
+
+    // Черновик по прямой ссылке — ничего, а не устаревшая цена.
+    check('черновик по прямой ссылке не отдаётся',
+      (await catalogObject(hidden.id)) === null);
+    check('опубликованный по прямой ссылке отдаётся',
+      (await catalogObject(shown.id))?.id === shown.id);
+
+    // Поиск: кыргызские буквы в обоих написаниях.
+    const byKg = await catalogPage({ q: 'Чүй' });
+    const byRu = await catalogPage({ q: 'чуй' });
+    check('«чуй» находит «Чүй»',
+      byRu.items.some((i) => i.id === shown.id)
+      && byKg.items.some((i) => i.id === shown.id));
+
+    // Запятая в запросе не должна ничего ронять.
+    const comma = await catalogPage({ q: 'Чүй, кв' });
+    check('запятая в поиске не роняет запрос', Array.isArray(comma.items));
+
+    // Фильтры.
+    const byRooms = await catalogPage({ rooms: 3 });
+    check('фильтр по комнатам работает',
+      byRooms.items.every((i) => i.rooms === 3)
+      && byRooms.items.some((i) => i.id === shown.id));
+
+    const byPrice = await catalogPage({ priceMax: 100_000 });
+    check('фильтр по цене считает в основных единицах, а не в минорных',
+      byPrice.items.some((i) => i.id === shown.id),
+      `нашлось ${byPrice.items.length}`);
+
+    check('зоны витрины перечисляются', (await catalogZones()).includes('Центр'));
+
+    // Правка адреса меняет и то, по чему объект находится. Иначе он
+    // остаётся найденным по прежнему адресу и не находится по новому —
+    // ошибка тихая, видна только человеку, который ищет и не находит.
+    await updateObject(shown.id, { address: 'Ибраимова 45' });
+    const byNew = await catalogPage({ q: 'ибраимова' });
+    const byOld = await catalogPage({ q: 'Чүй 200' });
+    check('после правки объект находится по новому адресу',
+      byNew.items.some((i) => i.id === shown.id));
+    check('и больше не находится по старому',
+      !byOld.items.some((i) => i.id === shown.id));
+
+    // Снятый с публикации уходит из витрины.
+    await withdrawObject(shown.id);
+    check('снятый объект из витрины уходит',
+      (await catalogObject(shown.id)) === null);
+    await publishObject(shown.id);
 
     // -----------------------------------------------------------------
     // Инвариант 7: журнал

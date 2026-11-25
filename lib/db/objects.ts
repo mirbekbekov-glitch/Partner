@@ -3,7 +3,7 @@ import { all, batch, flag, jsonArray, newId, now, one, stmt, toJson } from './sq
 import { auditStmt, diffOf } from './audit';
 import { requireAgent } from './session';
 import { canEditObject } from './access';
-import { normalizePhone } from './normalize';
+import { normalizePhone, searchText } from './normalize';
 import { Conflict, Forbidden, Invalid, NotFound } from './errors';
 
 /**
@@ -34,6 +34,7 @@ export type ObjectRow = {
   photos: string;
   description: string | null;
   source: string | null;
+  search_text: string;
   publication_state: 'draft' | 'published' | 'withdrawn';
   published_at: string | null;
   actual_at: string;
@@ -165,15 +166,16 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
   writes.push(stmt(
     `insert into objects (
        id, kind, deal_type, address, zone, rooms, area, floor, floors_total,
-       price_minor, currency, photos, description, source,
+       price_minor, currency, photos, description, source, search_text,
        publication_state, published_at, actual_at,
        created_by_agent_id, created_at, updated_at)
-     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', null, ?, ?, ?, ?)`,
+     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', null, ?, ?, ?, ?)`,
     id, input.kind, input.deal_type, address,
     blank(input.zone), input.rooms ?? null, input.area ?? null,
     input.floor ?? null, input.floors_total ?? null,
     input.price_minor, (input.currency || 'USD').trim().toUpperCase(),
     photos, blank(input.description), blank(input.source),
+    searchText(address, input.zone),
     at, agent.id, at, at,
   ));
   writes.push(auditStmt('objects', id, 'insert', agent.id, {
@@ -281,6 +283,15 @@ export async function updateObject(id: string, patch: ObjectPatch): Promise<Obje
     throw new Invalid('Цена должна быть больше нуля');
   }
   if (Object.keys(next).length === 0) return view(before);
+
+  // Текст поиска пересобирается при каждой правке адреса или района:
+  // иначе объект находился бы по прежнему адресу и не находился по новому.
+  if (next.address !== undefined || next.zone !== undefined) {
+    next.search_text = searchText(
+      (next.address as string) ?? before.address,
+      (next.zone as string | null) ?? before.zone,
+    );
+  }
 
   const at = now();
   const stamps = stampTimestamps(before, next as Partial<ObjectRow>, at);

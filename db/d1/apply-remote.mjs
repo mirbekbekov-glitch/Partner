@@ -16,6 +16,7 @@
 import { statementsOfFile } from './statements.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { readdirSync } from 'node:fs';
 
 const DATABASE = 'partner';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -64,7 +65,7 @@ if (!database) {
 // схеме стоит ради локального прогона, где база поднимается напрямую.
 const statements = statementsOfFile(resolve(here, '0001_schema.sql'))
   .filter((sql) => !/^pragma\b/i.test(sql));
-console.log(`База ${DATABASE}: применяю ${statements.length} команд.`);
+
 
 let applied = 0;
 for (const sql of statements) {
@@ -96,5 +97,5 @@ const tables = await call(
 );
 
 const names = (tables?.[0]?.results ?? []).map((r) => r.name);
-console.log(`Применено команд: ${applied}.`);
+console.log(`Применено команд: ${applied}, пропущено как уже применённые: ${skipped}.`);
 console.log(`Таблиц в базе: ${names.length} — ${names.join(', ')}`);
