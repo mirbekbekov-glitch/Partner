@@ -1,79 +1,63 @@
 'use client';
 
-import { useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import type { SupabasePublicConfig } from '@/lib/supabase/public-config';
+import { useActionState } from 'react';
+import { requestLoginLink, type LoginState } from './actions';
 
 /**
- * Вход по ссылке на почту (Supabase magic link).
+ * Вход по ссылке на почту.
  *
- * Пароля нет сознательно: нет ни его хранения, ни восстановления, ни экранов
- * смены — меньше поверхности и меньше кода. Если понадобится пароль, это
- * signInWithPassword плюс экран восстановления.
+ * Пароля нет сознательно: нет ни его хранения, ни восстановления, ни
+ * экранов смены — меньше поверхности и меньше кода. Восстановление пароля
+ * всё равно шло бы через почту, то есть почта осталась бы ключом, только
+ * с лишним звеном.
+ *
+ * Форма работает без JavaScript: useActionState отправляет её обычным
+ * POST. Раньше отправка шла из браузера прямо в Supabase, и без скриптов
+ * кнопка была мёртвой.
  */
-export function LoginForm({ next, supabase: cfg }: { next: string; supabase: SupabasePublicConfig }) {
-  const [email, setEmail] = useState('');
-  const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
-  const [error, setError] = useState<string | null>(null);
+export function LoginForm({ next }: { next: string }) {
+  const [state, action, pending] = useActionState<LoginState | null, FormData>(
+    requestLoginLink,
+    null,
+  );
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setState('sending');
-
-    const supabase = createClient(cfg.url, cfg.anonKey);
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
-    });
-
-    if (error) {
-      setError(error.message);
-      setState('idle');
-      return;
-    }
-    setState('sent');
-  }
-
-  if (state === 'sent') {
+  if (state?.sent) {
     return (
       <div className="card">
         <p>
-          Ссылка для входа отправлена на <strong>{email}</strong>.
+          Если такая почта заведена, ссылка для входа отправлена на{' '}
+          <strong>{state.email}</strong>.
         </p>
         <p className="key">
-          Откройте её на этом же устройстве. Ссылка одноразовая и действует
-          ограниченное время.
+          Ссылка одноразовая и действует 15 минут. Откройте её на этом же
+          устройстве.
         </p>
       </div>
     );
   }
 
   return (
-    <form onSubmit={submit}>
+    <form action={action}>
+      <input type="hidden" name="next" value={next} />
       <div className="row">
-        <label className="key" htmlFor="email">
-          Рабочая почта
-        </label>
+        <label className="key" htmlFor="email">Рабочая почта</label>
       </div>
       <div className="inline" style={{ marginTop: 6 }}>
         <input
           id="email"
+          name="email"
           type="email"
           required
           autoComplete="email"
           placeholder="agent@example.kg"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          defaultValue={state?.email ?? ''}
           style={{ minWidth: 240 }}
         />
-        <button type="submit" disabled={state === 'sending'}>
-          {state === 'sending' ? 'Отправляем…' : 'Получить ссылку'}
+        <button type="submit" disabled={pending}>
+          {pending ? 'Отправляем…' : 'Получить ссылку'}
         </button>
       </div>
-      {error ? <p className="error">{error}</p> : null}
+      {state?.error ? <p className="error">{state.error}</p> : null}
     </form>
   );
 }

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { sessionAgent } from '@/lib/db/session';
+import { getAgent, listOrganizations } from '@/lib/db/agents';
 import { SignOutButton } from './SignOutButton';
 import { ProfileForm } from './profile/ProfileForm';
 import { orgName } from '@/lib/agency';
@@ -8,45 +9,33 @@ import { orgName } from '@/lib/agency';
 /**
  * Гейт кабинета.
  *
- * Сессию проверил middleware, здесь решается допуск по статусу агента.
- * Это удобство UI, не защита: настоящая защита — RLS. Даже отрисуй мы
- * страницы неодобренному агенту, политики не отдали бы ему ни строки.
+ * Middleware отсеял тех, у кого нет cookie вовсе. ЗДЕСЬ сессия впервые
+ * сверяется с базой, и здесь же решается допуск по статусу агента.
  *
- * Статус читается благодаря политике agents_read_self (0013): до неё
- * неодобренный агент не видел даже себя, и «строки нет» было не отличить
- * от «ждёт одобрения» — оба случая получали один экран.
+ * Это не единственная защита и не главная. Каждое действие слоя доступа
+ * само зовёт requireAgent(), поэтому даже отрисуй мы страницы
+ * неодобренному агенту, ни одна кнопка на них не сработала бы. Гейт нужен,
+ * чтобы человек видел понятный экран, а не набор отказов.
  */
 // Кабинет из поиска закрыт. Раньше это делал общий noindex в корневом
 // макете, но он закрывал заодно и публичный каталог.
 export const metadata = { robots: { index: false, follow: false } };
 
 export default async function CabinetLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // sessionAgent(), а не currentAgent(): неодобренному агенту нужно
+  // показать экран ожидания, а не выставить его на улицу. Это разные
+  // состояния, и человек должен понимать, в каком он.
+  const agent = await sessionAgent();
 
-  if (!user) redirect('/login?next=/cabinet');
+  if (!agent) redirect('/login?next=/cabinet');
 
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('id, full_name, phone, email, role, status, org_confirmed, organizations!agents_organization_id_fkey(name)')
-    .eq('auth_user_id', user.id)
-    .maybeSingle();
-
-  // Строки нет: ensure_agent() при входе не сработал.
-  if (!agent) {
-    return (
-      <Shell email={user.email}>
-        <h1>Аккаунт не найден</h1>
-        <p className="error">
-          Запись агента не создалась при входе. Выйдите и войдите заново.
-        </p>
-      </Shell>
-    );
-  }
+  const organization = agent.organization_id
+    ? (await listOrganizations()).find((o) => o.id === agent.organization_id) ?? null
+    : null;
 
   if (agent.status === 'blocked') {
     return (
-      <Shell email={agent.email ?? user.email}>
+      <Shell email={agent.email}>
         <h1>Доступ отозван</h1>
         <div className="card">
           <p>Ваш доступ к CRM закрыт администратором.</p>
@@ -60,13 +49,9 @@ export default async function CabinetLayout({ children }: { children: React.Reac
   }
 
   if (agent.status === 'pending') {
-    const { data: orgs } = await supabase
-      .from('organization_list_v')
-      .select('name')
-      .limit(200);
-    const knownOrgs = (orgs ?? []).map((o) => o.name as string);
+    const knownOrgs = (await listOrganizations()).map((o) => o.name);
     return (
-      <Shell email={agent.email ?? user.email}>
+      <Shell email={agent.email}>
         <h1>Заявка на доступ отправлена</h1>
         <div className="card">
           <p>Кабинет откроется, когда администратор одобрит ваш аккаунт.</p>
@@ -81,8 +66,8 @@ export default async function CabinetLayout({ children }: { children: React.Reac
             fullName={agent.full_name}
             phone={agent.phone}
             email={agent.email}
-            organization={orgName(agent.organizations)}
-            orgConfirmed={agent.org_confirmed}
+            organization={organization?.name ?? null}
+            orgConfirmed={agent.org_confirmed === 1}
             knownOrgs={knownOrgs}
             hint="Это можно заполнить, не дожидаясь одобрения. Агентство подтвердит администратор."
           />
