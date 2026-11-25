@@ -1,6 +1,7 @@
 import 'server-only';
 import { all, holders, jsonArray, one } from './sql';
 import { searchText } from './normalize';
+import { fromMinor } from './money';
 
 /**
  * Публичный каталог — витрина.
@@ -46,10 +47,25 @@ export type CatalogRow = {
   actual_at: string;
 };
 
-export type CatalogItem = Omit<CatalogRow, 'photos'> & { photos: string[] };
+/**
+ * Карточка витрины для страницы.
+ *
+ * Кроме колонок базы здесь есть `price` — та же цена в основных единицах.
+ * В базе деньги целые и минорные (см. money.ts), а в разметке цену
+ * показывают человеку, и переводить её в каждом месте значило бы
+ * размножить одно и то же деление по всем страницам.
+ */
+export type CatalogItem = Omit<CatalogRow, 'photos'> & {
+  photos: string[];
+  price: number;
+};
 
 function view(row: CatalogRow): CatalogItem {
-  return { ...row, photos: jsonArray<string>(row.photos) };
+  return {
+    ...row,
+    photos: jsonArray<string>(row.photos),
+    price: fromMinor(row.price_minor) ?? 0,
+  };
 }
 
 export type CatalogQuery = {
@@ -96,8 +112,14 @@ function searchTerms(q: string): string[] {
 
 export type CatalogPage = { items: CatalogItem[]; total: number };
 
-/** Список объектов витрины. */
-export async function catalogPage(query: CatalogQuery = {}): Promise<CatalogPage> {
+/**
+ * Условия выборки — одни и те же для выдачи и для счётчика.
+ *
+ * Имена колонок берутся из кода, значения уходят параметрами. Подставлять
+ * пришедшее снаружи в текст запроса нельзя даже «своё»: ровно так
+ * появляются внедрения SQL.
+ */
+function conditions(query: CatalogQuery): { clause: string; params: (string | number)[] } {
   const where: string[] = [`o.publication_state = 'published'`];
   const params: (string | number)[] = [];
 
@@ -121,7 +143,12 @@ export async function catalogPage(query: CatalogQuery = {}): Promise<CatalogPage
     }
   }
 
-  const clause = where.join(' and ');
+  return { clause: where.join(' and '), params };
+}
+
+/** Список объектов витрины. */
+export async function catalogPage(query: CatalogQuery = {}): Promise<CatalogPage> {
+  const { clause, params } = conditions(query);
   const order = SORTS[query.sort ?? 'fresh'] ?? SORTS.fresh;
 
   const size = Math.min(Math.max(query.pageSize ?? 12, 1), 60);
@@ -138,6 +165,22 @@ export async function catalogPage(query: CatalogQuery = {}): Promise<CatalogPage
   );
 
   return { items: rows.map(view), total: counted?.n ?? 0 };
+}
+
+/**
+ * Сколько объектов найдётся по этим условиям.
+ *
+ * Отдельно от catalogPage(), потому что считает ТЕ ЖЕ условия, но не тянет
+ * строки: число на кнопке «Найти 12» нужно до выдачи. Условия собираются
+ * одной функцией с выдачей — иначе число на кнопке разошлось бы с тем, что
+ * человек увидит, а это хуже, чем отсутствие числа.
+ */
+export async function catalogCount(query: CatalogQuery = {}): Promise<number> {
+  const { clause, params } = conditions(query);
+  const counted = await one<{ n: number }>(
+    `select count(*) as n from objects o where ${clause}`, ...params,
+  );
+  return counted?.n ?? 0;
 }
 
 /**
@@ -168,6 +211,27 @@ export async function publishedIds(): Promise<Array<{ id: string; actual_at: str
 export async function districts(): Promise<Array<{ id: string; name: string }>> {
   return all(
     `select id, name from districts where active = 1 order by sort, name`,
+  );
+}
+
+/**
+ * Районы с числом объектов — для строки районов под поиском.
+ *
+ * Пустой район показывать нельзя: нажатие на него обманет человека и
+ * приведёт в пустой каталог. Поэтому считаем, а не перечисляем.
+ */
+export async function catalogZoneCounts(
+  deal?: 'rent' | 'sale' | null,
+): Promise<Array<{ zone: string; n: number }>> {
+  const params: (string | number)[] = [];
+  let filter = '';
+  if (deal) { filter = 'and o.deal_type = ?'; params.push(deal); }
+
+  return all<{ zone: string; n: number }>(
+    `select o.zone as zone, count(*) as n from objects o
+      where o.publication_state = 'published' and o.zone is not null ${filter}
+      group by o.zone order by n desc, o.zone`,
+    ...params,
   );
 }
 

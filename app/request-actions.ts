@@ -1,6 +1,8 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { submitRequest as acceptRequest } from '@/lib/db/requests';
+import { Invalid } from '@/lib/db/errors';
+import { toMinor } from '@/lib/db/money';
 
 /**
  * Код причины, а не готовая фраза: язык страницы знает форма, а не сервер.
@@ -11,9 +13,10 @@ export type RequestResult = { ok: boolean; code: RequestError | null };
 /**
  * Приём заявки «что я ищу» с публичной страницы.
  *
- * Здесь ничего не решается: всё проверяет submit_request() в базе. Форму
- * обойти тривиально — запрос уходит прямо в PostgREST, — и проверка,
- * живущая только в этом файле, не значила бы ничего.
+ * Здесь ничего не решается: все проверки живут в слое доступа
+ * (lib/db/requests.ts) — границы полей, нормализация телефона, склейка
+ * повторов, частота. Форма это удобство, а не защита, и проверка, живущая
+ * только в этом файле, не значила бы ничего.
  *
  * Подпись с первым аргументом — требование useActionState. Благодаря ей
  * форма отправляется как POST и БЕЗ JavaScript: раньше при неудачной
@@ -24,13 +27,6 @@ export async function submitRequest(
   _prev: RequestResult | null,
   formData: FormData,
 ): Promise<RequestResult> {
-  // Приманка для ботов: поле скрыто от человека, но живо в разметке.
-  // Заполнено — значит заполнял не человек. Отвечаем как при успехе,
-  // чтобы бот не знал, по какому признаку его отличили.
-  if (String(formData.get('website') ?? '').trim() !== '') {
-    return { ok: true, code: null };
-  }
-
   const str = (k: string) => {
     const v = String(formData.get(k) ?? '').trim();
     return v === '' ? null : v;
@@ -40,35 +36,34 @@ export async function submitRequest(
     return Number.isFinite(v) && v > 0 ? v : null;
   };
 
-  const source = str('source');
-
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('submit_request', {
-    p_phone: String(formData.get('phone') ?? ''),
-    p_name: str('name'),
-    p_deal: str('deal'),
-    p_housing_type: str('housing_type'),
-    p_rooms: num('rooms'),
-    p_district: str('district'),
-    p_budget: num('budget'),
-    p_budget_currency: str('budget_currency') ?? 'USD',
-    p_wishes: str('wishes'),
-    p_consent: formData.get('consent') === 'on',
-    // Метка источника добавляется, только когда форма её прислала.
-    //
-    // Это не украшение, а защита от порядка выкладки. PostgREST выбирает
-    // функцию по именам переданных параметров: пока миграция 0032 не
-    // применена, в базе лежит прежняя подпись без p_source, и запрос с
-    // лишним параметром упал бы. Формы без метки — то есть все прежние —
-    // продолжают работать при любом порядке событий.
-    ...(source === null ? {} : { p_source: source }),
-  });
-
-  if (!error) return { ok: true, code: null };
-
-  const m = error.message ?? '';
-  for (const code of ['BAD_PHONE', 'BAD_INPUT', 'TOO_MANY'] as const) {
-    if (m.includes(code)) return { ok: false, code };
+  try {
+    await acceptRequest({
+      phone: String(formData.get('phone') ?? ''),
+      name: str('name'),
+      deal: str('deal'),
+      housing_type: str('housing_type'),
+      rooms: num('rooms'),
+      district: str('district'),
+      // Человек вводит бюджет в долларах или сомах, а в базе деньги целые
+      // и минорные — перевод здесь, на границе формы.
+      budget_minor: toMinor(str('budget')),
+      budget_currency: str('budget_currency') ?? 'USD',
+      wishes: str('wishes'),
+      consent: formData.get('consent') === 'on',
+      source: str('source'),
+      // Приманка для ботов: поле скрыто от человека, но живо в разметке.
+      // Заполнено — значит заполнял не человек. Слой доступа ответит как
+      // при успехе, чтобы бот не знал, по какому признаку его отличили.
+      trap: String(formData.get('website') ?? ''),
+    });
+    return { ok: true, code: null };
+  } catch (e) {
+    if (e instanceof Invalid) {
+      const text = e.message;
+      if (text.includes('номер телефона')) return { ok: false, code: 'BAD_PHONE' };
+      if (text.includes('Слишком много')) return { ok: false, code: 'TOO_MANY' };
+      return { ok: false, code: 'BAD_INPUT' };
+    }
+    return { ok: false, code: 'OTHER' };
   }
-  return { ok: false, code: 'OTHER' };
 }

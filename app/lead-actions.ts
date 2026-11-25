@@ -1,6 +1,7 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { submitLead as acceptLead } from '@/lib/db/leads';
+import { Invalid, NotFound } from '@/lib/db/errors';
 
 /**
  * Код причины, а не готовая фраза: язык страницы знает форма, а не сервер.
@@ -12,12 +13,17 @@ export type LeadResult = { ok: boolean; code: LeadError | null };
 /**
  * Приём заявки с публичной страницы объекта.
  *
- * Сюда заявка приходит от анонима, поэтому здесь ничего не решается: всё
- * проверяет submit_lead() в базе. Форму обойти тривиально — запрос уходит
- * прямо в PostgREST, — и проверка, живущая только в этом файле, не значила
- * бы ничего.
+ * Сюда заявка приходит от анонима, поэтому здесь ничего не решается: все
+ * проверки живут в слое доступа (lib/db/leads.ts) — опубликован ли объект,
+ * границы полей, нормализация телефона, повторы и частота.
  *
- * Задача этого кода — свести ответ базы к одному из известных кодов.
+ * Раньше это объяснялось тем, что форму обойти тривиально: запрос уходил
+ * прямо в PostgREST. Теперь до базы мимо Worker не добраться вовсе, но
+ * правило осталось прежним — проверять на сервере, потому что форма это
+ * удобство, а не защита.
+ *
+ * Задача этого кода — свести ответ слоя доступа к одному из известных
+ * кодов.
  *
  * Подпись с первым аргументом — требование useActionState. Благодаря ей
  * форма уходит POST-ом и без JavaScript: иначе браузер отправлял бы её
@@ -27,31 +33,34 @@ export async function submitLead(
   _prev: LeadResult | null,
   formData: FormData,
 ): Promise<LeadResult> {
-  // Приманка для ботов: поле скрыто от человека, но живо в разметке.
-  // Заполнено — значит заполнял не человек. Отвечаем как при успехе,
-  // чтобы бот не знал, по какому признаку его отличили.
-  if (String(formData.get('website') ?? '').trim() !== '') {
-    return { ok: true, code: null };
-  }
-
   const objectId = String(formData.get('object_id') ?? '');
   const name = String(formData.get('name') ?? '').trim();
   const phone = String(formData.get('phone') ?? '').trim();
   const message = String(formData.get('message') ?? '').trim();
 
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('submit_lead', {
-    p_object_id: objectId,
-    p_name: name,
-    p_phone: phone,
-    p_message: message === '' ? null : message,
-  });
+  try {
+    await acceptLead({
+      object_id: objectId,
+      name,
+      phone,
+      message: message === '' ? null : message,
+      // Приманка для ботов: поле скрыто от человека, но живо в разметке.
+      // Заполнено — значит заполнял не человек. Слой доступа ответит как
+      // при успехе, чтобы бот не знал, по какому признаку его отличили.
+      trap: String(formData.get('website') ?? ''),
+    });
+    return { ok: true, code: null };
+  } catch (e) {
+    // Коды, а не тексты: язык страницы знает форма, а не сервер.
+    if (e instanceof NotFound) return { ok: false, code: 'NOT_FOUND' };
 
-  if (!error) return { ok: true, code: null };
+    if (e instanceof Invalid) {
+      const text = e.message;
+      if (text.includes('Телефон')) return { ok: false, code: 'BAD_PHONE' };
+      if (text.includes('Слишком много')) return { ok: false, code: 'TOO_MANY' };
+      return { ok: false, code: 'BAD_INPUT' };
+    }
 
-  const m = error.message ?? '';
-  for (const code of ['BAD_PHONE', 'BAD_INPUT', 'TOO_MANY', 'NOT_FOUND'] as const) {
-    if (m.includes(code)) return { ok: false, code };
+    return { ok: false, code: 'OTHER' };
   }
-  return { ok: false, code: 'OTHER' };
 }

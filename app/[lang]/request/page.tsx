@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { createClient } from '@/lib/supabase/server';
+import { districts as loadDistricts } from '@/lib/db/catalog';
 import { t, isLang, LANGS, type Lang } from '@/lib/i18n';
 import { CatalogHeader } from '../../CatalogHeader';
 import { CatalogFooter } from '../../CatalogFooter';
@@ -32,13 +32,9 @@ export default async function RequestPage({
 
   // Районы из справочника. Свободное поле на прежнем сайте дало 271
   // написание на 280 заявок — фильтровать по такому полю нельзя.
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from('districts')
-    .select('name')
-    .eq('active', true)
-    .order('sort');
-  const districts = (data ?? []).map((r) => r.name as string);
+  // Справочник публичен по составу: те же названия стоят в адресах
+  // объявлений.
+  const districts = (await loadDistricts()).map((r) => r.name);
 
   return (
     <>

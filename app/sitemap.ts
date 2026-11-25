@@ -17,7 +17,7 @@
  * ровно то, что открыто посетителю.
  */
 import type { MetadataRoute } from 'next';
-import { createClient } from '@/lib/supabase/server';
+import { publishedIds } from '@/lib/db/catalog';
 import { LANGS } from '@/lib/i18n';
 import { siteUrl } from '@/lib/site';
 
@@ -43,18 +43,10 @@ type Row = { id: string; actual_at: string };
 
 async function objects(): Promise<Row[]> {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('public_catalog_v')
-      .select('id, actual_at')
-      .order('actual_at', { ascending: false })
-      .limit(MAX_OBJECTS);
-
+    return (await publishedIds()).slice(0, MAX_OBJECTS);
+  } catch {
     // База недоступна — отдаём карту со статическими страницами, а не 500.
     // Пустой sitemap.xml поисковик перечитает; ошибку он запомнит надолго.
-    if (error) return [];
-    return (data as Row[] | null) ?? [];
-  } catch {
     return [];
   }
 }
