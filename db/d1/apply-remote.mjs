@@ -59,27 +59,45 @@ if (!database) {
   process.exit(1);
 }
 
-// 2. Применить схему.
-// PRAGMA через REST API не проходит: D1 управляет настройками соединения
-// сама и чужих не принимает. Внешние ключи у неё и так включены — строка в
-// схеме стоит ради локального прогона, где база поднимается напрямую.
-const statements = statementsOfFile(resolve(here, '0001_schema.sql'))
-  .filter((sql) => !/^pragma\b/i.test(sql));
+// 2. Применить схему: все файлы по порядку имён.
+//
+// PRAGMA через REST не проходит: D1 управляет настройками соединения сама.
+// Внешние ключи у неё и так включены — строка в схеме стоит ради
+// локального прогона, где база поднимается напрямую.
+const files = readdirSync(here).filter((f) => /^\d+_.*\.sql$/.test(f)).sort();
 
+/**
+ * Единственная ошибка, которую пропускаем.
+ *
+ * CREATE написаны через IF NOT EXISTS, а ALTER в SQLite так не умеет:
+ * повторный прогон отвечает «duplicate column name». Это и есть
+ * идемпотентность для ALTER. Любая другая ошибка роняет выкладку.
+ */
+const ALREADY_APPLIED = /duplicate column name/i;
 
 let applied = 0;
-for (const sql of statements) {
-  try {
-    await call(`/accounts/${account}/d1/database/${database.uuid}/query`, {
-      method: 'POST',
-      body: JSON.stringify({ sql }),
-    });
-    applied++;
-  } catch (e) {
-    // Имя команды в сообщении помогает понять, на чём встало, а текста
-    // данных здесь нет вовсе — только DDL.
-    console.error(`Не применилось: ${sql.slice(0, 80)}…`);
-    throw e;
+let skipped = 0;
+
+for (const file of files) {
+  const statements = statementsOfFile(resolve(here, file))
+    .filter((sql) => !/^pragma\b/i.test(sql));
+
+  console.log(`${file}: ${statements.length} команд.`);
+
+  for (const sql of statements) {
+    try {
+      await call(`/accounts/${account}/d1/database/${database.uuid}/query`, {
+        method: 'POST',
+        body: JSON.stringify({ sql }),
+      });
+      applied++;
+    } catch (e) {
+      if (ALREADY_APPLIED.test(String(e.message))) { skipped++; continue; }
+      // Имя команды помогает понять, на чём встало; данных здесь нет
+      // вовсе — только DDL.
+      console.error(`Не применилось: ${sql.slice(0, 80)}…`);
+      throw e;
+    }
   }
 }
 
