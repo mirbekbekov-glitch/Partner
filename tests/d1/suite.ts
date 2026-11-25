@@ -26,6 +26,10 @@ import { createActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import { catalogObject, catalogPage, catalogZones } from '@/lib/db/catalog';
 import {
+  cabinetCounters, contactList, contactObjects, dealList, objectList,
+  requirementList,
+} from '@/lib/db/cabinet';
+import {
   approveAgent, blockAgent, clearMyOrganization, confirmAgentOrganization,
   ensureAgentByEmail, getAgent, setAgentRole, setMyOrganization, updateProfile,
 } from '@/lib/db/agents';
@@ -768,6 +772,81 @@ export default {
     check('снятый объект из витрины уходит',
       (await catalogObject(shown.id)) === null);
     await publishObject(shown.id);
+
+    // -----------------------------------------------------------------
+    // Кабинет: то, что раньше держала RLS
+    // -----------------------------------------------------------------
+    // Это главная проверка всего переезда. В Postgres списки фильтровала
+    // политика: забудь страница условие — база всё равно не отдала бы
+    // чужую строку. Здесь страховки нет, условие живёт в запросе, и
+    // проверять его надо прицельно.
+    await loginAs(db, anna);
+    const annaContact = await createContact({ name: 'Клиент Анны-2', phone: '0500 11 22 33' });
+    const annaObject = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Анны 1', price_minor: 5_000_000,
+      owner_contact_id: annaContact.id,
+    });
+
+    await loginAs(db, vera);
+    const veraContact = await createContact({ name: 'Клиент Веры', phone: '0500 44 55 66' });
+
+    const veraSees = await contactList();
+    check('чужих контактов в списке нет',
+      !veraSees.some((c) => c.id === annaContact.id),
+      `видно ${veraSees.length} контактов`);
+    check('свои контакты в списке есть',
+      veraSees.some((c) => c.id === veraContact.id));
+
+    // Объект виден всем — его ведёт коллега, это нормально, — но имя
+    // собственника и право правки нет.
+    const veraObjects = await objectList();
+    const foreign = veraObjects.find((o) => o.id === annaObject.id);
+    check('чужой объект в списке виден', Boolean(foreign));
+    check('имя собственника чужого объекта закрыто',
+      foreign?.owner_name === null, `показано: ${foreign?.owner_name}`);
+    check('править чужой объект нельзя', foreign?.can_edit === false);
+
+    await loginAs(db, anna);
+    const annaObjects = await objectList();
+    const own = annaObjects.find((o) => o.id === annaObject.id);
+    check('своего собственника видно', own?.owner_name === 'Клиент Анны-2');
+    check('свой объект править можно', own?.can_edit === true);
+
+    check('объекты контакта видны владельцу записи',
+      (await contactObjects(annaContact.id)).length === 1);
+    await loginAs(db, vera);
+    check('объекты чужого контакта не видны',
+      (await contactObjects(annaContact.id)).length === 0);
+
+    // Сделки: видит только сторона.
+    await loginAs(db, anna);
+    const annaDeals = await dealList();
+    check('сторона сделки свои сделки видит', annaDeals.length > 0);
+
+    await loginAs(db, vera);
+    const veraDeals = await dealList();
+    check('посторонний чужих сделок не видит',
+      veraDeals.length === 0, `видно ${veraDeals.length}`);
+
+    // Потребности: клиент закрыт, сама потребность видна.
+    await loginAs(db, boris);
+    await db.prepare(`update agents set status = 'approved' where id = ?`).bind(boris).run();
+    await loginAs(db, boris);
+    const needs = await requirementList();
+    const someoneElse = needs.find((r) => r.agent_id !== boris);
+    check('чужая потребность видна',
+      needs.length > 0 && someoneElse !== undefined);
+    check('имя клиента чужой потребности закрыто',
+      someoneElse?.client_name === null, `показано: ${someoneElse?.client_name}`);
+
+    // Счётчики главной считают своё, а не всё подряд.
+    await loginAs(db, vera);
+    const counters = await cabinetCounters();
+    check('счётчики главной считают только своё',
+      (counters?.deals ?? 0) === 0 && (counters?.objects ?? 0) === 0,
+      `сделок ${counters?.deals}, объектов ${counters?.objects}`);
+
+    await loginAs(db, anna);
 
     // -----------------------------------------------------------------
     // Инвариант 7: журнал
