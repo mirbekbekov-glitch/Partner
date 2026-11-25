@@ -40,7 +40,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Файл не пришёл.' }, { status: 400 });
     }
 
-    const stored = await putPhoto(objectId, file);
+    // Миниатюра необязательна: старый браузер её не сделает, и это не
+    // причина отказывать в загрузке снимка.
+    const thumb = form.get('thumb');
+
+    const stored = await putPhoto(objectId, file, thumb instanceof Blob ? thumb : null);
     return NextResponse.json(stored);
   } catch (e) {
     return fail(e);

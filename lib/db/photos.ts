@@ -4,6 +4,7 @@ import { newId } from './sql';
 import { requireAgent } from './session';
 import { canEditObject } from './access';
 import { Forbidden, Invalid, NotFound } from './errors';
+import { fullKeyOf, thumbKey } from '../photo-url';
 
 /**
  * Снимки объектов в R2.
@@ -94,12 +95,29 @@ export function photoKey(url: string): string | null {
 export type Stored = { key: string; url: string; type: string; size: number };
 
 /**
+ * Миниатюра кладётся рядом с полным снимком по известному правилу:
+ * `…/abc.jpg` → `…/abc@thumb.webp`. Правило — в lib/photo-url.ts, им же
+ * пользуется каталог, чтобы вывести адрес миниатюры без обращения к базе.
+ *
+ * Миниатюра НЕ считается снимком: она не попадает в listPhotos, не
+ * расходует лимит в двадцать штук и не показывается агенту отдельной
+ * карточкой. Иначе агент загрузил бы десять снимков и увидел двадцать.
+ */
+function isThumb(key: string): boolean {
+  return key.endsWith('@thumb.webp');
+}
+
+/**
  * Положить снимок.
  *
  * Права те же, что на правку объекта: снимок — часть объявления, и кто
  * правит объявление, тот и меняет снимки.
  */
-export async function putPhoto(objectId: string, file: Blob): Promise<Stored> {
+export async function putPhoto(
+  objectId: string,
+  file: Blob,
+  thumb?: Blob | null,
+): Promise<Stored> {
   await requireAgent();
 
   if (!(await canEditObject(objectId))) {
@@ -133,13 +151,32 @@ export async function putPhoto(objectId: string, file: Blob): Promise<Stored> {
     },
   });
 
+  // Миниатюра — отдельный файл, и её тоже проверяем по содержимому: она
+  // приходит тем же запросом из браузера, то есть снаружи, и доверия ей
+  // ровно столько же, сколько самому снимку.
+  if (thumb && thumb.size > 0 && thumb.size <= MAX_BYTES) {
+    const thumbBytes = new Uint8Array(await thumb.arrayBuffer());
+    const thumbKind = sniff(thumbBytes);
+
+    // Не картинка — просто не кладём. Терять из-за этого сам снимок нельзя:
+    // без миниатюры каталог обойдётся, без снимка объявление — нет.
+    if (thumbKind) {
+      await bucket().put(thumbKey(key), thumbBytes, {
+        httpMetadata: {
+          contentType: thumbKind.type,
+          cacheControl: 'public, max-age=31536000, immutable',
+        },
+      });
+    }
+  }
+
   return { key, url: photoUrl(key), type: kind.type, size: bytes.length };
 }
 
 /** Снимки объекта — то, что реально лежит в хранилище. */
 export async function listPhotos(objectId: string): Promise<string[]> {
   const listed = await bucket().list({ prefix: `objects/${objectId}/` });
-  return listed.objects.map((o) => o.key);
+  return listed.objects.map((o) => o.key).filter((k) => !isThumb(k));
 }
 
 /** Убрать снимок. Ключ обязан принадлежать этому объекту — иначе чужой. */
@@ -153,7 +190,10 @@ export async function deletePhoto(objectId: string, key: string): Promise<void> 
     throw new Invalid('Снимок не от этого объекта');
   }
 
-  await bucket().delete(key);
+  // Миниатюра уходит вместе со снимком. Останься она — в хранилище
+  // накопился бы мусор, который никто никогда не найдёт: на него нет
+  // ссылок, и увидеть его можно только в списке ведра.
+  await bucket().delete([key, thumbKey(key)]);
 }
 
 /** Отдать снимок посетителю. */
@@ -162,9 +202,22 @@ export async function readPhoto(key: string): Promise<{
 } | null> {
   // Ключ приходит из адреса, то есть снаружи. Пускаем только тот вид, который
   // выдаём сами: иначе «../» и прочие игры с путём.
-  if (!/^objects\/[0-9a-f-]+\/[0-9a-f-]+\.[a-z]+$/i.test(key)) return null;
+  if (!/^objects\/[0-9a-f-]+\/[0-9a-f-]+\.[a-z]+(@thumb\.webp)?$/i.test(key)) return null;
 
-  const object = await bucket().get(key);
+  let object = await bucket().get(key);
+
+  // Миниатюры нет — отдаём полный снимок.
+  //
+  // Это не запас на всякий случай, а единственный путь для снимков,
+  // загруженных до появления сжатия, и для тех, чей браузер сжать не смог.
+  // Адрес миниатюры каталог выводит по правилу, не спрашивая хранилище, —
+  // значит он попросит её и там, где её нет. Без этой подстановки в таких
+  // карточках была бы дырка вместо фотографии.
+  if (!object) {
+    const full = fullKeyOf(key);
+    if (full) object = await bucket().get(full);
+  }
+
   if (!object) return null;
 
   return {

@@ -28,6 +28,7 @@ import { catalogObject, catalogPage, catalogZones } from '@/lib/db/catalog';
 import {
   deletePhoto, listPhotos, photoKey, photoUrl, putPhoto, readPhoto, sniff,
 } from '@/lib/db/photos';
+import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import {
   cabinetCounters, contactList, contactObjects, dealList, objectList,
   requirementList,
@@ -903,6 +904,62 @@ export default {
     // вычистить снимки соседнего объекта.
     await throws('ключ от другого объекта не принимается',
       () => deletePhoto(withPhotos.id, `objects/${shown.id}/подделка.jpg`), Invalid);
+
+    // -----------------------------------------------------------------
+    // Миниатюры
+    // -----------------------------------------------------------------
+    // Сжатие происходит в браузере, и проверить его здесь нечем: ни
+    // холста, ни createImageBitmap в Worker'е нет. Зато проверяемо
+    // главное — что миниатюра сохраняется, отдаётся, не считается
+    // отдельным снимком и уходит вместе со снимком.
+
+    const webpThumb = new Blob([new Uint8Array([
+      0x52, 0x49, 0x46, 0x46, 20, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 1, 2, 3, 4,
+    ])]);
+    const withThumb = await putPhoto(withPhotos.id, jpeg, webpThumb);
+
+    check('миниатюра сохраняется рядом',
+      (await readPhoto(thumbKey(withThumb.key)))?.type === 'image/webp');
+
+    // Главное про лимит: миниатюра — не снимок. Иначе агент загрузил бы
+    // десять снимков и исчерпал лимит в двадцать.
+    check('миниатюра не считается снимком',
+      (await listPhotos(withPhotos.id)).filter((k) => k.includes('@thumb')).length === 0);
+    check('снимков ровно два, а файлов больше',
+      (await listPhotos(withPhotos.id)).length === 2
+      && (await env.PHOTOS.list({ prefix: `objects/${withPhotos.id}/` })).objects.length === 3);
+
+    // Правило вывода адреса обратимо: иначе по имени миниатюры не
+    // восстановить полный снимок, а маршрут отдачи делает именно это.
+    check('правило адреса миниатюры обратимо',
+      fullKeyOf(thumbKey(withThumb.key)) === withThumb.key);
+    check('адрес миниатюры выводится из адреса снимка',
+      thumbOf(withThumb.url) === photoUrl(thumbKey(withThumb.key)));
+    check('чужая ссылка миниатюры не получает',
+      thumbOf('https://чужой.хостинг/1.jpg') === 'https://чужой.хостинг/1.jpg'
+      && !isOwnPhoto('https://чужой.хостинг/1.jpg'));
+
+    // Запасной путь. Снимки, загруженные до появления сжатия, миниатюры не
+    // имеют, а каталог всё равно попросит её — адрес он выводит по правилу,
+    // не спрашивая хранилище. Без подстановки в карточке была бы дырка.
+    check('без миниатюры отдаётся полный снимок',
+      (await readPhoto(thumbKey(shot.key)))?.type === 'image/jpeg');
+
+    // Миниатюра тоже приходит снаружи, тем же запросом: проверяется по
+    // содержимому, как и снимок. Подделку кладём молча — терять из-за неё
+    // сам снимок нельзя.
+    const fakeThumb = new Blob(['<?php echo "и я картинка"; ?>']);
+    const noThumb = await putPhoto(withPhotos.id, jpeg, fakeThumb);
+    check('снимок принят, а миниатюра-подделка не положена',
+      (await env.PHOTOS.get(noThumb.key)) !== null
+      && (await env.PHOTOS.get(thumbKey(noThumb.key))) === null);
+    check('вместо непринятой миниатюры отдаётся снимок',
+      (await readPhoto(thumbKey(noThumb.key)))?.type === 'image/jpeg');
+
+    await deletePhoto(withPhotos.id, withThumb.key);
+    check('миниатюра удаляется вместе со снимком',
+      (await env.PHOTOS.get(thumbKey(withThumb.key))) === null);
+    await deletePhoto(withPhotos.id, noThumb.key);
 
     await deletePhoto(withPhotos.id, shot.key);
     check('снимок удаляется', (await listPhotos(withPhotos.id)).length === 0);

@@ -1,6 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { prepare, size } from '@/lib/photo-resize';
+import { thumbOf } from '@/lib/photo-url';
 
 /**
  * Загрузка снимков объекта.
@@ -15,6 +17,17 @@ import { useRef, useState } from 'react';
  *
  * Порядок снимков — порядок в списке: первый становится обложкой в
  * каталоге. Поэтому у каждого есть стрелка «вверх».
+ *
+ * Сжатие происходит ЗДЕСЬ, до отправки. Снимок с телефона — это восемь
+ * мегабайт, и отправлять их, чтобы потом показывать посетителю картинку
+ * шириной в тысячу точек, незачем. Выигрывает прежде всего сам агент: он
+ * загружает объект с телефона, часто с мобильного интернета, и разница
+ * между восемью мегабайтами и четырьмястами килобайтами — это разница
+ * между «висит» и «готово».
+ *
+ * Вместе со снимком уходит миниатюра для списка. Делать её на сервере
+ * нечем: преобразование изображений у Cloudflare — платная услуга, а в
+ * Worker'е нет библиотеки изображений.
  */
 type Photo = { url: string; key?: string };
 
@@ -28,6 +41,7 @@ export function PhotoUpload({
   const [photos, setPhotos] = useState<Photo[]>(initial.map((url) => ({ url })));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   async function upload(files: FileList) {
@@ -38,9 +52,23 @@ export function PhotoUpload({
     // По одному, а не разом: Worker принимает тело ограниченного размера,
     // и десять снимков по пять мегабайт одним запросом в него не влезут.
     for (const file of Array.from(files)) {
+      setStage(`${file.name}: сжимаем…`);
+
+      // Сжатие идёт до отправки, и его видно: на телефоне большой снимок
+      // обрабатывается заметную долю секунды, и без подписи это выглядит
+      // как подвисшая страница.
+      const ready = await prepare(file);
+
       const body = new FormData();
       body.set('object_id', objectId);
-      body.set('file', file);
+      body.set('file', ready.full, file.name);
+      if (ready.thumb) body.set('thumb', ready.thumb, 'thumb.webp');
+
+      setStage(
+        ready.after < ready.before
+          ? `${file.name}: отправляем ${size(ready.after)} вместо ${size(ready.before)}`
+          : `${file.name}: отправляем ${size(ready.after)}`,
+      );
 
       try {
         const response = await fetch('/api/photos', { method: 'POST', body });
@@ -59,6 +87,7 @@ export function PhotoUpload({
     }
 
     setBusy(false);
+    setStage(null);
     if (input.current) input.current.value = '';
   }
 
@@ -99,7 +128,10 @@ export function PhotoUpload({
           {photos.map((p, i) => (
             <li key={p.url}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.url} alt="" loading="lazy" />
+              {/* В списке — миниатюра. Десяток полных снимков по
+                  две тысячи точек здесь не нужен никому: каждый
+                  отрисовывается размером с ноготь. */}
+              <img src={thumbOf(p.url)} alt="" loading="lazy" />
               <span className="key">{i === 0 ? 'обложка' : `${i + 1}`}</span>
               <button type="button" onClick={() => moveUp(i)} disabled={i === 0}>
                 вверх
@@ -122,8 +154,10 @@ export function PhotoUpload({
           />
           <p className="key">
             {busy
-              ? 'Загружаем…'
-              : 'JPEG, PNG, WebP или AVIF, до 10 МБ каждый. Первый снимок — обложка в каталоге.'}
+              ? (stage ?? 'Загружаем…')
+              : 'JPEG, PNG, WebP или AVIF. Снимки сжимаются в браузере — '
+                + 'отправлять полный файл с телефона не нужно. '
+                + 'Первый снимок — обложка в каталоге.'}
           </p>
         </>
       ) : (

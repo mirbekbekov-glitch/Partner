@@ -6,6 +6,7 @@ import {
   firstPhoto, daysSince,
   SORTS, publicMoney, type CatalogFilters,
 } from '@/lib/catalog-params';
+import { thumbOf } from '@/lib/photo-url';
 import { t, kindName, freshWordIn, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { CatalogHeader } from '../CatalogHeader';
 import { HeroArt } from '../HeroArt';
@@ -257,7 +258,11 @@ export default async function Catalog({
             <p className="none">{hasAnyFilter(f) ? d.nothingFound : d.nothingYet}</p>
           ) : (
             rows.map((o, i) => {
-              const photo = firstPhoto(o.photos);
+              // В списке — миниатюра. Карточка показывает снимок размером
+              // с ладонь, а на странице каталога их десяток: полные
+              // снимки стоили бы посетителю мегабайты за то, чего он не
+              // увидит. На странице самого объекта берётся полный.
+              const photo = thumbOf(firstPhoto(o.photos) ?? '') || null;
               const days = daysSince(o.actual_at);
               const fresh = freshWordIn(lang, days);
               const facade = <Facade o={o} alt={d.drawingAlt} />;
