@@ -12,3 +12,6 @@ next-env.d.ts
 .cloudflare/
 .dev.vars
 cf-secrets.json
+
+# Сборка тестового Worker: пересоздаётся прогоном.
+.test-build/

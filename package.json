@@ -12,7 +12,8 @@
     "test:db": "./tests/run.sh",
     "test:rpc": "./tests/check-rpc.sh",
     "test:forms": "./tests/check-forms.sh",
-    "test:svc": "./tests/check-service-key.sh"
+    "test:svc": "./tests/check-service-key.sh",
+    "test:d1": "node tests/d1/run.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.8.0",
