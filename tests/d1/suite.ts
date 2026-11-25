@@ -19,6 +19,10 @@ import {
 } from '@/lib/db/objects';
 import { createMandate, expireMandates, terminateMandate } from '@/lib/db/mandates';
 import { canSeeContact } from '@/lib/db/access';
+import {
+  addPhone, contactPhones, createContact, findContactByPhone,
+  mergeContacts, removeObjectOwnership, setObjectOwnership, transferContact,
+} from '@/lib/db/contacts';
 import { commissionShares, commissionTotal } from '@/lib/db/commission';
 import { normalizePhone } from '@/lib/db/normalize';
 import { Conflict, Forbidden } from '@/lib/db/errors';
@@ -169,6 +173,92 @@ export default {
     await loginAs(db, anna);
     check('инв.4: приведший контакт видит',
       owner ? await canSeeContact(owner.contact_id) : false);
+
+    // -----------------------------------------------------------------
+    // Контакты: один человек — одна запись
+    // -----------------------------------------------------------------
+    const ivan = await createContact({ name: 'Иван', phone: '0555 10 20 30' });
+    check('контакт заводится с телефоном', ivan.name === 'Иван');
+
+    const sameNumber = await findContactByPhone('+996555102030');
+    check('поиск по другому написанию находит ту же запись',
+      sameNumber.found && sameNumber.contact_id === ivan.id);
+
+    await throws('второй контакт с тем же номером отклонён',
+      () => createContact({ name: 'Иван ещё раз', phone: '+996 555 10 20 30' }),
+      Conflict);
+
+    // -----------------------------------------------------------------
+    // Объединение: порядок шагов и потеря данных
+    // -----------------------------------------------------------------
+    // Главный случай — запись БЕЗ связей с объектами. При неправильном
+    // порядке RESTRICT промолчит, и потребности исчезнут без единой ошибки.
+    const dupe = await createContact({ name: 'Иван Иванов', phone: '0555 40 50 60' });
+    await db.prepare(
+      `insert into requirements (id, contact_id, deal_type, agent_id, status,
+                                 created_at, updated_at)
+       values (?, ?, 'sale', ?, 'new', ?, ?)`,
+    ).bind(crypto.randomUUID(), dupe.id, anna, iso(), iso()).run();
+
+    const report = await mergeContacts(ivan.id, dupe.id);
+    const reqAfter = await db.prepare(
+      'select count(*) as n from requirements where contact_id = ?',
+    ).bind(ivan.id).first<{ n: number }>();
+    const gone = await db.prepare('select count(*) as n from requirements')
+      .first<{ n: number }>();
+
+    check('объединение переносит потребность, а не теряет её',
+      (reqAfter?.n ?? 0) === 1 && (gone?.n ?? 0) === 1,
+      `у остающейся ${reqAfter?.n}, всего ${gone?.n}`);
+    check('объединение переносит телефоны', report.phones === 1);
+
+    const phones = await contactPhones(ivan.id);
+    check('после объединения оба номера у одной записи', phones.length === 2);
+    check('основной номер ровно один',
+      phones.filter((p) => p.is_primary === 1).length === 1);
+
+    // Чужие записи объединять нельзя.
+    const hers = await createContact({ name: 'Клиент Анны', phone: '0777 11 11 11' });
+    await loginAs(db, boris);
+    const his = await createContact({ name: 'Клиент Бориса', phone: '0777 22 22 22' });
+    await throws('объединять чужую запись нельзя',
+      () => mergeContacts(his.id, hers.id), Forbidden);
+
+    // -----------------------------------------------------------------
+    // Передача записи вместе с доступом к телефону
+    // -----------------------------------------------------------------
+    check('до передачи чужой телефон не виден',
+      (await contactPhones(hers.id)).length === 0);
+
+    await loginAs(db, anna);
+    await transferContact(hers.id, boris);
+    check('после передачи прежний владелец телефон не видит',
+      (await contactPhones(hers.id)).length === 0);
+
+    await loginAs(db, boris);
+    check('после передачи новый владелец телефон видит',
+      (await contactPhones(hers.id)).length === 1);
+
+    // -----------------------------------------------------------------
+    // Доли собственности: сумма не выходит за единицу
+    // -----------------------------------------------------------------
+    await loginAs(db, anna);
+    const shared = await createObject({
+      kind: 'house', deal_type: 'sale', address: 'Ала-Тоо 7', price_minor: 10_000_000,
+    });
+    const second = await createContact({ name: 'Второй собственник', phone: '0555 99 88 77' });
+    await setObjectOwnership(shared.id, ivan.id, 'owner', 0.6);
+    await throws('сумма долей за единицу не выходит',
+      () => setObjectOwnership(shared.id, second.id, 'co_owner', 0.6), Conflict);
+    await setObjectOwnership(shared.id, second.id, 'co_owner', 0.4);
+    check('сумма ровно в единицу принимается', true);
+
+    await removeObjectOwnership(shared.id, ivan.id, 'owner');
+    const left = await db.prepare(
+      'select count(*) as n from object_ownerships where object_id = ?',
+    ).bind(shared.id).first<{ n: number }>();
+    check('связь собственности снимается, когда сделки нет', (left?.n ?? 0) === 1,
+      `осталось связей: ${left?.n}`);
 
     // -----------------------------------------------------------------
     // Инвариант 7: журнал
