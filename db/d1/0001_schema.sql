@@ -42,7 +42,7 @@ pragma foreign_keys = on;
 -- Агенты
 -- ---------------------------------------------------------------------------
 
-create table organizations (
+create table if not exists organizations (
   id                  text primary key,
   name                text not null check (length(trim(name)) between 2 and 120),
   -- Нормализованное имя: «Этажи», «этажи» и «ЭТАЖИ» — одно агентство.
@@ -53,10 +53,10 @@ create table organizations (
   updated_at          text not null
 );
 
-create unique index organizations_name_normalized_idx
+create unique index if not exists organizations_name_normalized_idx
   on organizations (name_normalized);
 
-create table agents (
+create table if not exists agents (
   id            text primary key,
   -- Якорь личности — теперь почта: вход идёт по ссылке на неё.
   -- UNIQUE здесь и есть инвариант 6 на уровне схемы.
@@ -82,7 +82,7 @@ create table agents (
   check (email is not null or telegram_id is not null)
 );
 
-create index agents_approved_idx on agents (status) where status = 'approved';
+create index if not exists agents_approved_idx on agents (status) where status = 'approved';
 
 -- ---------------------------------------------------------------------------
 -- Вход: одноразовые ссылки и сессии
@@ -93,7 +93,7 @@ create index agents_approved_idx on agents (status) where status = 'approved';
 -- войти: по хэшу ссылку не восстановить. Сам токен existует ровно один раз —
 -- в письме.
 
-create table login_tokens (
+create table if not exists login_tokens (
   -- SHA-256 от токена из ссылки, шестнадцатеричной строкой.
   token_hash  text primary key,
   email       text not null,
@@ -105,10 +105,10 @@ create table login_tokens (
   redirect_to text
 );
 
-create index login_tokens_email_idx   on login_tokens (email);
-create index login_tokens_expires_idx on login_tokens (expires_at);
+create index if not exists login_tokens_email_idx   on login_tokens (email);
+create index if not exists login_tokens_expires_idx on login_tokens (expires_at);
 
-create table sessions (
+create table if not exists sessions (
   -- SHA-256 от значения cookie.
   token_hash text primary key,
   agent_id   text not null references agents (id) on delete cascade,
@@ -118,14 +118,14 @@ create table sessions (
   seen_at    text not null
 );
 
-create index sessions_agent_idx   on sessions (agent_id);
-create index sessions_expires_idx on sessions (expires_at);
+create index if not exists sessions_agent_idx   on sessions (agent_id);
+create index if not exists sessions_expires_idx on sessions (expires_at);
 
 -- ---------------------------------------------------------------------------
 -- Справочник районов
 -- ---------------------------------------------------------------------------
 
-create table districts (
+create table if not exists districts (
   id              text primary key,
   city            text not null default 'Бишкек',
   name            text not null check (length(trim(name)) between 2 and 80),
@@ -135,13 +135,13 @@ create table districts (
   created_at      text not null
 );
 
-create unique index districts_city_name_idx on districts (city, name_normalized);
+create unique index if not exists districts_city_name_idx on districts (city, name_normalized);
 
 -- ---------------------------------------------------------------------------
 -- Контакты: «один человек — одна запись»
 -- ---------------------------------------------------------------------------
 
-create table contacts (
+create table if not exists contacts (
   id             text primary key,
   kind           text not null default 'person'
                       check (kind in ('person', 'company')),
@@ -158,9 +158,9 @@ create table contacts (
   updated_at     text not null
 );
 
-create index contacts_owner_idx on contacts (owner_agent_id);
+create index if not exists contacts_owner_idx on contacts (owner_agent_id);
 
-create table contact_phones (
+create table if not exists contact_phones (
   id               text primary key,
   contact_id       text not null references contacts (id) on delete cascade,
   phone            text not null check (length(trim(phone)) > 0),
@@ -175,20 +175,20 @@ create table contact_phones (
 );
 
 -- Один номер — один контакт. Это и есть «один человек — одна запись».
-create unique index contact_phones_one_contact_per_phone_idx
+create unique index if not exists contact_phones_one_contact_per_phone_idx
   on contact_phones (phone_normalized) where phone_normalized <> '';
 
 -- Один основной номер на контакт.
-create unique index contact_phones_one_primary_idx
+create unique index if not exists contact_phones_one_primary_idx
   on contact_phones (contact_id) where is_primary = 1;
 
-create index contact_phones_normalized_idx on contact_phones (phone_normalized);
+create index if not exists contact_phones_normalized_idx on contact_phones (phone_normalized);
 
 -- ---------------------------------------------------------------------------
 -- Объекты
 -- ---------------------------------------------------------------------------
 
-create table objects (
+create table if not exists objects (
   id                  text primary key,
   kind                text not null check (kind in
                         ('flat', 'room', 'house', 'townhouse', 'land',
@@ -223,11 +223,11 @@ create table objects (
   updated_at          text not null
 );
 
-create index objects_published_idx on objects (publication_state, actual_at)
+create index if not exists objects_published_idx on objects (publication_state, actual_at)
   where publication_state = 'published';
-create index objects_creator_idx   on objects (created_by_agent_id);
+create index if not exists objects_creator_idx   on objects (created_by_agent_id);
 
-create table object_ownerships (
+create table if not exists object_ownerships (
   object_id  text not null references objects  (id) on delete cascade,
   contact_id text not null references contacts (id) on delete restrict,
   role       text not null default 'owner'
@@ -239,13 +239,13 @@ create table object_ownerships (
   primary key (object_id, contact_id, role)
 );
 
-create index object_ownerships_contact_idx on object_ownerships (contact_id);
+create index if not exists object_ownerships_contact_idx on object_ownerships (contact_id);
 
 -- ---------------------------------------------------------------------------
 -- Мандаты (инвариант 1)
 -- ---------------------------------------------------------------------------
 
-create table mandates (
+create table if not exists mandates (
   id                 text primary key,
   object_id          text not null references objects (id) on delete cascade,
   kind               text not null default 'non_exclusive'
@@ -272,16 +272,16 @@ create table mandates (
 );
 
 -- Инвариант 1, половина схемы: не больше одного активного мандата на объект.
-create unique index mandates_one_active_per_object_idx
+create unique index if not exists mandates_one_active_per_object_idx
   on mandates (object_id) where status = 'active';
 
-create index mandates_listing_agent_idx on mandates (listing_agent_id);
+create index if not exists mandates_listing_agent_idx on mandates (listing_agent_id);
 
 -- ---------------------------------------------------------------------------
 -- Потребности и подборы
 -- ---------------------------------------------------------------------------
 
-create table requirements (
+create table if not exists requirements (
   id                text primary key,
   contact_id        text not null references contacts (id) on delete cascade,
   deal_type         text not null check (deal_type in ('rent', 'sale')),
@@ -304,10 +304,10 @@ create table requirements (
          or budget_max_minor >= budget_min_minor)
 );
 
-create index requirements_agent_idx   on requirements (agent_id);
-create index requirements_contact_idx on requirements (contact_id);
+create index if not exists requirements_agent_idx   on requirements (agent_id);
+create index if not exists requirements_contact_idx on requirements (contact_id);
 
-create table matches (
+create table if not exists matches (
   id                  text primary key,
   object_id           text not null references objects      (id) on delete cascade,
   requirement_id      text not null references requirements (id) on delete cascade,
@@ -329,14 +329,14 @@ create table matches (
   check (status <> 'rejected' or length(trim(coalesce(rejection_reason, ''))) > 0)
 );
 
-create index matches_object_idx      on matches (object_id);
-create index matches_requirement_idx on matches (requirement_id);
+create index if not exists matches_object_idx      on matches (object_id);
+create index if not exists matches_requirement_idx on matches (requirement_id);
 
 -- ---------------------------------------------------------------------------
 -- Сделки (инварианты 2 и 3)
 -- ---------------------------------------------------------------------------
 
-create table deals (
+create table if not exists deals (
   id                    text primary key,
   -- ИНВАРИАНТ 2 на уровне схемы: сделки без подбора не существует.
   match_id              text not null references matches (id) on delete restrict,
@@ -364,14 +364,14 @@ create table deals (
   check (status <> 'closed' or final_price_minor is not null)
 );
 
-create unique index deals_one_per_match_idx on deals (match_id);
-create index deals_object_idx on deals (object_id);
+create unique index if not exists deals_one_per_match_idx on deals (match_id);
+create index if not exists deals_object_idx on deals (object_id);
 
 -- ---------------------------------------------------------------------------
 -- Активности и напоминания
 -- ---------------------------------------------------------------------------
 
-create table activities (
+create table if not exists activities (
   id          text primary key,
   kind        text not null check (kind in ('call', 'showing', 'task', 'note', 'message')),
   entity_type text not null check (entity_type in
@@ -387,10 +387,10 @@ create table activities (
   updated_at  text not null
 );
 
-create index activities_entity_idx on activities (entity_type, entity_id);
-create index activities_due_idx    on activities (due_at) where done = 0;
+create index if not exists activities_entity_idx on activities (entity_type, entity_id);
+create index if not exists activities_due_idx    on activities (due_at) where done = 0;
 
-create table notifications (
+create table if not exists notifications (
   id          text primary key,
   agent_id    text not null references agents     (id) on delete cascade,
   -- Напоминание живёт ровно столько, сколько задача.
@@ -411,13 +411,13 @@ create table notifications (
   unique (activity_id, kind)
 );
 
-create index notifications_pending_idx on notifications (status) where status = 'pending';
+create index if not exists notifications_pending_idx on notifications (status) where status = 'pending';
 
 -- ---------------------------------------------------------------------------
 -- Заявки с сайта
 -- ---------------------------------------------------------------------------
 
-create table leads (
+create table if not exists leads (
   id               text primary key,
   object_id        text not null references objects (id) on delete cascade,
   name             text not null check (length(trim(name)) between 1 and 120),
@@ -432,10 +432,10 @@ create table leads (
   updated_at       text not null
 );
 
-create index leads_object_idx on leads (object_id, created_at);
-create index leads_phone_idx  on leads (phone_normalized, created_at);
+create index if not exists leads_object_idx on leads (object_id, created_at);
+create index if not exists leads_phone_idx  on leads (phone_normalized, created_at);
 
-create table requests (
+create table if not exists requests (
   id               text primary key,
   deal             text check (deal is null or deal in ('buy', 'rent')),
   housing_type     text check (housing_type is null or housing_type in
@@ -480,14 +480,14 @@ create table requests (
   check ((status = 'closed') = (closed_reason is not null and closed_at is not null))
 );
 
-create index requests_status_idx on requests (status, created_at);
-create index requests_phone_idx  on requests (phone_normalized, created_at);
+create index if not exists requests_status_idx on requests (status, created_at);
+create index if not exists requests_phone_idx  on requests (phone_normalized, created_at);
 
 -- ---------------------------------------------------------------------------
 -- Каналы публикации
 -- ---------------------------------------------------------------------------
 
-create table publication_channels (
+create table if not exists publication_channels (
   id           text primary key,
   object_id    text not null references objects (id) on delete cascade,
   channel      text not null check (channel in ('site', 'mini_app', 'lalafo', 'house_kg')),
@@ -506,7 +506,7 @@ create table publication_channels (
 -- Журнал (инвариант 7)
 -- ---------------------------------------------------------------------------
 
-create table audit_log (
+create table if not exists audit_log (
   id             integer primary key autoincrement,
   entity_type    text not null,
   entity_id      text not null,
@@ -518,5 +518,5 @@ create table audit_log (
   at             text not null
 );
 
-create index audit_log_entity_idx on audit_log (entity_type, entity_id, at);
-create index audit_log_actor_idx  on audit_log (actor_agent_id, at);
+create index if not exists audit_log_entity_idx on audit_log (entity_type, entity_id, at);
+create index if not exists audit_log_actor_idx  on audit_log (actor_agent_id, at);
