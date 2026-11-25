@@ -20,6 +20,10 @@ import {
 import { createMandate, expireMandates, terminateMandate } from '@/lib/db/mandates';
 import { canSeeContact } from '@/lib/db/access';
 import { createRequirement } from '@/lib/db/requirements';
+import { createActivity, setActivityDone } from '@/lib/db/activities';
+import {
+  claimNotifications, enqueueDueReminders, markNotification,
+} from '@/lib/db/notifications';
 import { createMatch, setMatchStatus } from '@/lib/db/matches';
 import {
   closeDeal, createDealFromMatch, failDeal, getDeal,
@@ -358,6 +362,60 @@ export default {
     check('срыв не закрывает потребность', need2After?.status === 'qualified',
       `статус ${need2After?.status}`);
     check('срыв требует причины', failed.failure_reason === 'клиент передумал');
+
+    // -----------------------------------------------------------------
+    // Напоминания: очередь идемпотентна
+    // -----------------------------------------------------------------
+    const soon = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const task = await createActivity({
+      kind: 'task', entity_type: 'object', entity_id: forSale.id,
+      body: 'позвонить собственнику', due_at: soon,
+    });
+
+    const firstRun = await enqueueDueReminders();
+    const secondRun = await enqueueDueReminders();
+    const queued = await db.prepare(
+      'select count(*) as n from notifications where activity_id = ?',
+    ).bind(task.id).first<{ n: number }>();
+
+    check('напоминание ставится в очередь', firstRun >= 1, `поставлено ${firstRun}`);
+    check('повторный прогон расписания не плодит дублей',
+      (queued?.n ?? 0) === 1, `записей по задаче: ${queued?.n}`);
+    check('второй прогон не добавил ничего', secondRun === 0, `добавлено ${secondRun}`);
+
+    // Агент без Telegram получает запись «нечем доставить», а не тишину.
+    const noChannel = await db.prepare(
+      `select status from notifications where activity_id = ?`,
+    ).bind(task.id).first<{ status: string }>();
+    check('без привязанного Telegram статус «нечем доставить»',
+      noChannel?.status === 'no_channel', `статус ${noChannel?.status}`);
+
+    // Выполненная задача гасит своё напоминание.
+    await db.prepare(`update notifications set status = 'pending' where activity_id = ?`)
+      .bind(task.id).run();
+    await setActivityDone(task.id, true);
+    const cancelled = await db.prepare(
+      'select status from notifications where activity_id = ?',
+    ).bind(task.id).first<{ status: string }>();
+    check('выполненная задача гасит напоминание',
+      cancelled?.status === 'cancelled', `статус ${cancelled?.status}`);
+
+    // Выдача на отправку не отдаёт одно и то же дважды.
+    await db.prepare(`update notifications set status = 'pending', attempts = 0
+                       where activity_id = ?`).bind(task.id).run();
+    const batch1 = await claimNotifications();
+    const batch2 = await claimNotifications();
+    check('взятое на отправку второй раз не выдаётся',
+      batch1.length === 1 && batch2.length === 0,
+      `первая партия ${batch1.length}, вторая ${batch2.length}`);
+
+    await markNotification(batch1[0].id, false, 'канал недоступен');
+    const retried = await db.prepare(
+      'select status, attempts from notifications where activity_id = ?',
+    ).bind(task.id).first<{ status: string; attempts: number }>();
+    check('неудача возвращает в очередь и считает попытку',
+      retried?.status === 'pending' && retried?.attempts === 1,
+      `статус ${retried?.status}, попыток ${retried?.attempts}`);
 
     // -----------------------------------------------------------------
     // Инвариант 7: журнал
