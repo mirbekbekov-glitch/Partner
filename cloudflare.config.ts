@@ -85,6 +85,11 @@ export default defineConfig({
       FEED_PHONE: bindings.text('+996 505 804 402, +996 500 804 402'),
       FEED_ORG: bindings.text('Liberterra'),
 
+      // Имя бота для ссылки привязки. Не секрет: оно и так видно в чате.
+      // Пусто — кабинет честно скажет, что бот не настроен, вместо ссылки
+      // в никуда.
+      TELEGRAM_BOT_USERNAME: bindings.text(''),
+
       // Собственный адрес сайта: нужен карте сайта и превью при пересылке.
       NEXT_PUBLIC_SITE_URL: bindings.secret(),
 
@@ -94,6 +99,12 @@ export default defineConfig({
       // открывается.
       CRON_SECRET: bindings.secret(),
       TELEGRAM_BOT_TOKEN: bindings.secret(),
+
+      // Секрет обработчика бота. Telegram получает его при установке
+      // обработчика и присылает заголовком с каждым обновлением. Без него
+      // маршрут отключён: открытый обработчик позволил бы кому угодно
+      // привязать чужой код к своему Telegram.
+      TELEGRAM_WEBHOOK_SECRET: bindings.secret(),
     },
   }),
 });

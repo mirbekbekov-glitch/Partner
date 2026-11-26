@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { sessionAgent } from '@/lib/db/session';
 import { listOrganizations } from '@/lib/db/agents';
 import { ProfileForm } from './ProfileForm';
+import { TelegramLink } from './TelegramLink';
 
 export const metadata = { title: 'Профиль' };
 
@@ -53,25 +54,17 @@ export default async function ProfilePage() {
       </div>
 
       <h2>Напоминания</h2>
-      {agent.telegram_id ? (
-        <p className="key">
-          Telegram привязан ({agent.telegram_id}) — напоминания о задачах и показах
-          придут туда.
+      <div className="card">
+        <p>
+          Напоминания о задачах и показах доставляются в Telegram. Без привязки они
+          остаются в очереди и до вас не доходят.
         </p>
-      ) : (
-        <div className="card">
-          <p className="warn">Telegram не привязан</p>
-          <p>
-            Напоминания о задачах и показах доставляются в Telegram. Без привязки они
-            остаются в очереди и до вас не доходят.
-          </p>
-          <p className="key">
-            Привязать может администратор: самостоятельная привязка требует
-            подтверждения через бота, и она пока не сделана. Напишите админу свой
-            Telegram ID — его показывает любой бот вроде @userinfobot.
-          </p>
-        </div>
-      )}
+        {/* Привязывает сам агент: бот получает от Telegram настоящий
+            идентификатор отправителя, и подделать его нельзя. Раньше это
+            делал админ по присланному номеру — и верил человеку на слово,
+            проверить номер было нечем. */}
+        <TelegramLink linked={agent.telegram_id} />
+      </div>
     </>
   );
 }

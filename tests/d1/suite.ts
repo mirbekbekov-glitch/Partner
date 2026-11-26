@@ -41,6 +41,10 @@ import { listingSchema } from '@/lib/listing-schema';
 import { placeName, t } from '@/lib/i18n';
 import { citiesWithPlan, planFor } from '@/lib/city-plans';
 import {
+  completeTelegramLink, startTelegramLink, sweepTelegramLinks, unlinkTelegram,
+} from '@/lib/db/telegram';
+import { POST as telegramWebhook } from '@/app/api/telegram/webhook/route';
+import {
   cabinetCounters, contactList, contactObjects, dealList, objectCard,
   objectList, requirementList,
 } from '@/lib/db/cabinet';
@@ -1001,6 +1005,158 @@ export default {
       centre(oshZones) === 1);
     check('чужой район в чужом городе не появляется',
       !oshZones.some((z) => z.zone === 'Чүй'));
+
+    // -----------------------------------------------------------------
+    // Привязка Telegram агентом самостоятельно
+    // -----------------------------------------------------------------
+    // Раньше telegram_id проставлял админ по присланному номеру — и верил
+    // человеку на слово: проверить, чей это номер, было нечем. Теперь
+    // идентификатор приходит от Telegram, а не от человека.
+
+    await loginAs(db, vera);
+    setEnv({ ...(env as unknown as Record<string, unknown>),
+      TELEGRAM_BOT_USERNAME: '@liberterra_bot' });
+
+    const link = await startTelegramLink();
+    check('ссылка ведёт к боту и несёт код',
+      link.url.startsWith('https://t.me/liberterra_bot?start=')
+      && link.url.length > 'https://t.me/liberterra_bot?start='.length + 32);
+    const code = link.url.split('start=')[1];
+
+    // Кода в базе нет — только его отпечаток. Утечка таблицы не даёт
+    // привязать чужой Telegram, ровно как при входе по почте.
+    const storedCode = await db.prepare(
+      'select code_hash from telegram_links where agent_id = ?',
+    ).bind(vera).first<{ code_hash: string }>();
+    check('в базе лежит отпечаток, а не сам код',
+      storedCode !== null && storedCode.code_hash !== code);
+
+    // Бот не настроен — честный отказ, а не ссылка в никуда.
+    setEnv({ ...(env as unknown as Record<string, unknown>), TELEGRAM_BOT_USERNAME: '' });
+    await throws('без настроенного бота ссылка не выдаётся',
+      () => startTelegramLink(), Invalid);
+    setEnv({ ...(env as unknown as Record<string, unknown>),
+      TELEGRAM_BOT_USERNAME: 'liberterra_bot' });
+
+    // Главное: код привязывает ТОГО агента, который его запросил, а не
+    // того, кто прислал сообщение.
+    await completeTelegramLink(code, 777000111);
+    check('привязался агент, запросивший код',
+      (await getAgent(vera))?.telegram_id === 777000111);
+
+    // Одноразовость. Повтор — отказ, а не вторая привязка.
+    await throws('код срабатывает один раз',
+      () => completeTelegramLink(code, 777000222), Forbidden);
+    check('повтор ничего не переписал',
+      (await getAgent(vera))?.telegram_id === 777000111);
+
+    await throws('выдуманный код не привязывает',
+      () => completeTelegramLink('не-код', 777000333), Forbidden);
+
+    // Один Telegram — один агент. Иначе напоминания двух агентов пришли бы
+    // в один чат, и неясно, чьи именно.
+    await loginAs(db, anna);
+    const annaLink = await startTelegramLink();
+    await throws('чужой Telegram не привязать вторым',
+      () => completeTelegramLink(annaLink.url.split('start=')[1], 777000111), Conflict);
+
+    // Протухший код. Срок короткий намеренно: код уходит в чат.
+    const stale = await startTelegramLink();
+    await db.prepare(
+      `update telegram_links set expires_at = ? where used_at is null and agent_id = ?`,
+    ).bind('2000-01-01T00:00:00.000Z', anna).run();
+    await throws('протухший код не привязывает',
+      () => completeTelegramLink(stale.url.split('start=')[1], 777000444), Forbidden);
+
+    check('уборка уносит протухшие коды',
+      (await sweepTelegramLinks()) > 0);
+
+    // Отвязка. Без неё единственным выходом был бы админ — то есть ровно
+    // то, от чего уходили.
+    await loginAs(db, vera);
+    await unlinkTelegram();
+    check('агент отвязывает свой Telegram',
+      (await getAgent(vera))?.telegram_id === null);
+
+    // Привязка — то же право, что и правка своей карточки: ожидающему
+    // одобрения напоминания нужны с первого дня, а одобрения можно ждать
+    // сутки. Заблокированному закрыто всё.
+    await loginAs(db, newcomer.id);
+    const pendingLink = await startTelegramLink();
+    await completeTelegramLink(pendingLink.url.split('start=')[1], 777000555);
+    check('ожидающий одобрения тоже может привязать',
+      (await getAgent(newcomer.id))?.telegram_id === 777000555);
+    await unlinkTelegram();
+
+    await db.prepare(`update agents set status = 'blocked' where id = ?`)
+      .bind(newcomer.id).run();
+    await throws('заблокированный Telegram не привязывает',
+      () => startTelegramLink(), Forbidden);
+    await db.prepare(`update agents set status = 'pending' where id = ?`)
+      .bind(newcomer.id).run();
+
+    // -----------------------------------------------------------------
+    // Обработчик бота: подлинность запроса
+    // -----------------------------------------------------------------
+    // Это граница безопасности всей затеи. Маршрут открыт в интернет и
+    // входа не спрашивает — спрашивать нечего, запрос приходит от
+    // Telegram. Кто угодно мог бы прислать «/start <чужой код>» со своим
+    // идентификатором и забрать чужие напоминания. Единственное, что это
+    // останавливает, — секретный заголовок.
+    const update = (text: string, fromId: number) => JSON.stringify({
+      message: { text, from: { id: fromId }, chat: { id: fromId } },
+    });
+    const hit = (body: string, header?: string) => telegramWebhook(new Request(
+      'https://liberterra.kg/api/telegram/webhook',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(header === undefined ? {} : { 'x-telegram-bot-api-secret-token': header }),
+        },
+        body,
+      },
+    ));
+
+    await loginAs(db, vera);
+    const viaBot = (await startTelegramLink()).url.split('start=')[1];
+
+    // Секрет не задан — маршрут отключён целиком. Открытый обработчик
+    // хуже неработающей привязки: неработающую видно сразу.
+    delete (process.env as Record<string, string | undefined>).TELEGRAM_WEBHOOK_SECRET;
+    check('без секрета обработчик отключён',
+      (await hit(update(`/start ${viaBot}`, 777111000))).status === 503);
+    check('и ничего не привязал',
+      (await getAgent(vera))?.telegram_id === null);
+
+    process.env.TELEGRAM_WEBHOOK_SECRET = 'настоящий-секрет';
+
+    check('без заголовка — отказ',
+      (await hit(update(`/start ${viaBot}`, 777111000))).status === 401);
+    check('с чужим секретом — отказ',
+      (await hit(update(`/start ${viaBot}`, 777111000), 'подделка')).status === 401);
+    check('после отказов привязки нет',
+      (await getAgent(vera))?.telegram_id === null);
+
+    // С верным секретом — привязка проходит.
+    check('с верным секретом обработчик отвечает 200',
+      (await hit(update(`/start ${viaBot}`, 777111000), 'настоящий-секрет')).status === 200);
+    check('привязка состоялась',
+      (await getAgent(vera))?.telegram_id === 777111000);
+
+    // Остальные сообщения боту — не ошибка: он служебный, а не
+    // собеседник. Отвечаем 200, иначе Telegram повторял бы обновление
+    // бесконечно.
+    check('постороннее сообщение не роняет обработчик',
+      (await hit(update('привет', 777111000), 'настоящий-секрет')).status === 200);
+    check('мусор вместо тела тоже',
+      (await hit('не json', 'настоящий-секрет')).status === 200);
+
+    await loginAs(db, vera);
+    await unlinkTelegram();
+
+    await loginAs(db, anna);
+    setEnv(env as unknown as Record<string, unknown>);
 
     // Схемы районов по городам. Схема — не карта, и вся её ценность в
     // правде расположения: местный должен узнать город с первого

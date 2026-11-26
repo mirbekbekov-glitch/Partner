@@ -108,6 +108,19 @@ create table if not exists login_tokens (
 create index if not exists login_tokens_email_idx   on login_tokens (email);
 create index if not exists login_tokens_expires_idx on login_tokens (expires_at);
 
+-- Одноразовые коды привязки Telegram. Устройство то же, что у входа по
+-- почте: в базе только SHA-256, сам код живёт в одной ссылке.
+create table if not exists telegram_links (
+  code_hash  text primary key,
+  agent_id   text not null references agents (id) on delete cascade,
+  created_at text not null,
+  expires_at text not null,
+  used_at    text
+);
+
+create index if not exists telegram_links_agent_idx   on telegram_links (agent_id);
+create index if not exists telegram_links_expires_idx on telegram_links (expires_at);
+
 create table if not exists sessions (
   -- SHA-256 от значения cookie.
   token_hash text primary key,

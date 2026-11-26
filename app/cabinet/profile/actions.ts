@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import {
   clearMyOrganization, setMyOrganization, updateProfile,
 } from '@/lib/db/agents';
+import { startTelegramLink, unlinkTelegram } from '@/lib/db/telegram';
 import { explain } from '@/lib/db/report';
 
 export type ProfileResult = { error: string | null; saved: boolean };
@@ -37,4 +38,33 @@ export async function saveProfile(formData: FormData): Promise<ProfileResult> {
   // Имя показывается в верхней полосе на каждой странице кабинета.
   revalidatePath('/cabinet', 'layout');
   return { error: null, saved: true };
+}
+
+export type LinkResult = { error: string | null; url: string | null };
+
+/**
+ * Получить ссылку на бота.
+ *
+ * Ссылка возвращается в разметку, а не уводит перенаправлением: человек
+ * может открыть её на телефоне, где и стоит Telegram, а не в том
+ * браузере, где открыт кабинет. Поэтому её надо показать, а не открыть.
+ */
+export async function requestTelegramLink(): Promise<LinkResult> {
+  try {
+    const { url } = await startTelegramLink();
+    return { error: null, url };
+  } catch (e) {
+    return { error: explain(e), url: null };
+  }
+}
+
+/** Отвязать свой Telegram. */
+export async function dropTelegram(): Promise<{ error: string | null }> {
+  try {
+    await unlinkTelegram();
+    revalidatePath('/cabinet/profile');
+    return { error: null };
+  } catch (e) {
+    return { error: explain(e) };
+  }
 }
