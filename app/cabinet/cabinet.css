@@ -328,3 +328,19 @@ form.stack.card { max-width: 760px; }
 /* Кнопки действий внутри ячейки: сверху отступа не нужно, его даёт сама
    ячейка. На узкой колонке встают в столбик. */
 .tbl .actions { margin-top: 0; gap: 6px; }
+
+/* Аватарка агента: круг с ровным обрезом, чтобы вертикальные и
+   горизонтальные снимки выглядели одинаково. Без этого один агент
+   вытягивается, другой сплющивается. */
+.avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--line, #e8e8e8);
+  flex: none;
+}
+
+.avatar.none {
+  display: inline-block;
+}

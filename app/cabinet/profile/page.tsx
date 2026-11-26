@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { sessionAgent } from '@/lib/db/session';
 import { listOrganizations } from '@/lib/db/agents';
 import { ProfileForm } from './ProfileForm';
+import { AvatarUpload } from './AvatarUpload';
 import { TelegramLink } from './TelegramLink';
 
 export const metadata = { title: 'Профиль' };
@@ -43,6 +44,12 @@ export default async function ProfilePage() {
       </p>
 
       <div className="card">
+        {/* Отдельно от формы намеренно: снимок уходит в хранилище сразу,
+            а не ждёт кнопки «Сохранить». Так же устроена загрузка снимков
+            объекта, и по той же причине — ждать отправки файла, прежде
+            чем увидеть его, ощущается как зависшая страница. */}
+        <AvatarUpload initial={agent.avatar_key ? `/photos/${agent.avatar_key}` : null} />
+
         <ProfileForm
           fullName={agent.full_name}
           phone={agent.phone}
@@ -50,6 +57,9 @@ export default async function ProfilePage() {
           organization={organization?.name ?? null}
           orgConfirmed={agent.org_confirmed === 1}
           knownOrgs={organizations.map((o) => o.name)}
+          worksSince={agent.works_since}
+          certificateNo={agent.certificate_no}
+          certificateConfirmed={agent.certificate_confirmed === 1}
         />
       </div>
 

@@ -3,6 +3,15 @@
 import { useActionState } from 'react';
 import { saveProfile, type ProfileResult } from './actions';
 
+/** «год», «года», «лет» — иначе подпись читается как машинный перевод. */
+function yearsWord(n: number): string {
+  const ten = n % 10;
+  const hundred = n % 100;
+  if (ten === 1 && hundred !== 11) return 'год';
+  if (ten >= 2 && ten <= 4 && (hundred < 12 || hundred > 14)) return 'года';
+  return 'лет';
+}
+
 export function ProfileForm({
   fullName,
   phone,
@@ -10,6 +19,9 @@ export function ProfileForm({
   organization,
   orgConfirmed,
   knownOrgs,
+  worksSince,
+  certificateNo,
+  certificateConfirmed,
   hint,
 }: {
   fullName: string;
@@ -18,6 +30,9 @@ export function ProfileForm({
   organization: string | null;
   orgConfirmed: boolean;
   knownOrgs: string[];
+  worksSince: number | null;
+  certificateNo: string | null;
+  certificateConfirmed: boolean;
   hint?: string;
 }) {
   const [state, formAction, pending] = useActionState<ProfileResult, FormData>(
@@ -64,6 +79,59 @@ export function ProfileForm({
           autoComplete="tel"
         />
         <p className="key">Не обязателен. Коллегам виден, клиентам — нет.</p>
+      </div>
+
+      <div className="field">
+        <label className="key" htmlFor="works_since">
+          Работаю с какого года
+        </label>
+        <input
+          id="works_since"
+          name="works_since"
+          type="number"
+          inputMode="numeric"
+          min={1990}
+          max={new Date().getFullYear()}
+          defaultValue={worksSince ?? ''}
+          placeholder="2019"
+        />
+        {/* Год, а не число лет: «5 лет», записанное однажды, через два
+            года станет неправдой, и поправить это никто не вспомнит. */}
+        <p className="key">
+          {worksSince
+            ? `Клиент увидит: в недвижимости ${new Date().getFullYear() - worksSince} ${
+                yearsWord(new Date().getFullYear() - worksSince)}.`
+            : 'Клиент увидит стаж на карточке объекта. Год, а не число лет — чтобы не устарело.'}
+        </p>
+      </div>
+
+      <div className="field">
+        <label className="key" htmlFor="certificate_no">
+          Номер в реестре риэлторов
+        </label>
+        <input
+          id="certificate_no"
+          name="certificate_no"
+          type="text"
+          defaultValue={certificateNo ?? ''}
+          placeholder="КР-12345"
+          autoComplete="off"
+        />
+        {/* Тот же порядок, что у агентства, и по той же причине: номер
+            видит клиент, а непроверенное утверждение от имени агентства —
+            обман, даже если агент не хотел обманывать. */}
+        <p className={certificateNo && !certificateConfirmed ? 'warn' : 'key'}>
+          {!certificateNo
+            ? 'Не обязателен. Если состоите в реестре — впишите, админ сверит.'
+            : certificateConfirmed
+              ? 'Подтверждён администратором — клиент видит отметку.'
+              : 'Заявлен, но ещё не подтверждён. До проверки клиенту не показывается.'}
+        </p>
+        {certificateNo ? (
+          <p className="key">
+            Правка номера снимает подтверждение: сверять придётся заново.
+          </p>
+        ) : null}
       </div>
 
       <div className="field">

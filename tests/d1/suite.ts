@@ -29,8 +29,8 @@ import {
   catalogZones,
 } from '@/lib/db/catalog';
 import {
-  deletePhoto, listPhotos, photoKey, photoUrl, photosMissingThumb, putPhoto,
-  putThumb, readPhoto, sniff,
+  deleteAvatar, deletePhoto, listPhotos, photoKey, photoUrl,
+  photosMissingThumb, putAvatar, putPhoto, putThumb, readPhoto, sniff,
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml } from '@/lib/feed';
@@ -50,7 +50,8 @@ import {
 } from '@/lib/db/cabinet';
 import {
   approveAgent, blockAgent, clearMyOrganization, confirmAgentOrganization,
-  ensureAgentByEmail, getAgent, setAgentRole, setMyOrganization, updateProfile,
+  confirmAgentCertificate, ensureAgentByEmail, getAgent, setAgentRole,
+  setMyOrganization, updateProfile,
 } from '@/lib/db/agents';
 import {
   claimNotifications, enqueueDueReminders, markNotification,
@@ -1005,6 +1006,82 @@ export default {
       centre(oshZones) === 1);
     check('чужой район в чужом городе не появляется',
       !oshZones.some((z) => z.zone === 'Чүй'));
+
+    // -----------------------------------------------------------------
+    // Карточка агента: стаж, сертификат, аватарка
+    // -----------------------------------------------------------------
+    // Эти поля видит КЛИЕНТ, и потому сертификат устроен как агентство:
+    // агент заявляет, админ сверяет. Непроверенное утверждение от имени
+    // агентства — обман, даже если агент не хотел обманывать.
+
+    await loginAs(db, vera);
+    await updateProfile({ works_since: 2019, certificate_no: 'КР-12345' });
+
+    const veraCard = await getAgent(vera);
+    check('стаж хранится годом начала, а не числом лет',
+      veraCard?.works_since === 2019);
+    check('номер сертификата записан', veraCard?.certificate_no === 'КР-12345');
+    check('но не подтверждён сам собой', veraCard?.certificate_confirmed === 0);
+
+    // Год из будущего — не стаж, а опечатка.
+    await throws('год начала из будущего отвергается',
+      () => updateProfile({ works_since: new Date().getUTCFullYear() + 1 }), Invalid);
+    await throws('год до 1990 отвергается',
+      () => updateProfile({ works_since: 1980 }), Invalid);
+
+    // Подтверждает только админ.
+    await throws('агент не подтверждает свой сертификат сам',
+      () => confirmAgentCertificate(vera, true), Forbidden);
+
+    await loginAs(db, anna);
+    await confirmAgentCertificate(vera, true);
+    check('админ подтверждает сертификат',
+      (await getAgent(vera))?.certificate_confirmed === 1);
+
+    // ГЛАВНОЕ. Порядок обходится в два приёма: вписать настоящий номер,
+    // дождаться отметки, подменить на любой другой — и остаться с
+    // галочкой. Смена номера обязана сбрасывать подтверждение.
+    await loginAs(db, vera);
+    await updateProfile({ certificate_no: 'КР-99999' });
+    const reclaimed = await getAgent(vera);
+    check('смена номера сбрасывает подтверждение',
+      reclaimed?.certificate_no === 'КР-99999'
+      && reclaimed?.certificate_confirmed === 0,
+      `подтверждение осталось ${reclaimed?.certificate_confirmed}`);
+
+    // Пустое поле подтверждать нечего: иначе отметка повиснет на пустоте,
+    // а номер впишут потом.
+    await updateProfile({ certificate_no: null });
+    await loginAs(db, anna);
+    await throws('пустой сертификат не подтверждается',
+      () => confirmAgentCertificate(vera, true), Invalid);
+
+    // Аватарка. Ключ детерминированный: новая затирает старую, а не
+    // копится рядом.
+    await loginAs(db, vera);
+    const avaJpeg = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4])]);
+    const ava = await putAvatar(avaJpeg);
+    check('аватарка лежит по имени агента', ava.key === `avatars/${vera}.jpg`);
+    check('ключ записан в карточку агента',
+      (await getAgent(vera))?.avatar_key === ava.key);
+    check('аватарка отдаётся посетителю',
+      (await readPhoto(ava.key))?.type === 'image/jpeg');
+
+    const avaPng = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10])]);
+    const ava2 = await putAvatar(avaPng);
+    check('другой формат не плодит вторую аватарку',
+      ava2.key === `avatars/${vera}.png`
+      && (await readPhoto(ava.key)) === null);
+
+    await throws('не-картинка аватаркой не становится',
+      () => putAvatar(new Blob(['<?php ?>'])), Invalid);
+
+    await deleteAvatar();
+    check('аватарка убирается и из хранилища, и из карточки',
+      (await readPhoto(ava2.key)) === null
+      && (await getAgent(vera))?.avatar_key === null);
+
+    await loginAs(db, anna);
 
     // -----------------------------------------------------------------
     // Привязка Telegram агентом самостоятельно

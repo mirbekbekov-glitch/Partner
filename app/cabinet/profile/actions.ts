@@ -18,9 +18,16 @@ export type ProfileResult = { error: string | null; saved: boolean };
  */
 export async function saveProfile(formData: FormData): Promise<ProfileResult> {
   try {
+    // Пустое поле — это «не указано», а не «ноль»: иначе стёртый год
+    // превратился бы в 0, а тот не пройдёт проверку и уронит сохранение
+    // всей формы, включая имя.
+    const year = String(formData.get('works_since') ?? '').trim();
+
     await updateProfile({
       full_name: String(formData.get('full_name') ?? ''),
       phone: String(formData.get('phone') ?? ''),
+      works_since: year === '' ? null : Number.parseInt(year, 10),
+      certificate_no: String(formData.get('certificate_no') ?? ''),
     });
 
     // Агентство — отдельной функцией: агент его ЗАЯВЛЯЕТ, а подтверждает

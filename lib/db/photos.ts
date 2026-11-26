@@ -1,7 +1,8 @@
 import 'server-only';
 import { env } from 'cloudflare:workers';
-import { newId } from './sql';
-import { requireAdmin, requireAgent } from './session';
+import { batch, newId, now, stmt } from './sql';
+import { auditStmt } from './audit';
+import { requireAdmin, requireAgent, requireSelf } from './session';
 import { canEditObject } from './access';
 import { Forbidden, Invalid, NotFound } from './errors';
 import { fullKeyOf, thumbKey } from '../photo-url';
@@ -281,13 +282,90 @@ export async function deletePhoto(objectId: string, key: string): Promise<void> 
   await bucket().delete([key, thumbKey(key)]);
 }
 
+/**
+ * Снимок агента.
+ *
+ * Отдельная функция, а не putPhoto с другим ключом. Разница не в пути:
+ * у снимка объекта права считает мандат, лимит — двадцать штук на объект,
+ * и ключ случайный, чтобы ничего не сообщал. Аватарка же своя, одна, и
+ * заменяется, а не копится.
+ *
+ * Ключ детерминированный — avatars/<id агента>.<расширение>, — поэтому
+ * новая аватарка затирает старую. Копить их незачем: прежнее лицо агента
+ * никому не нужно, а мусор в хранилище нужен ещё меньше.
+ *
+ * Следствие: адрес прежней аватарки отдаст новую. Это и требуется —
+ * ссылка на агента остаётся прежней, где бы она ни стояла.
+ */
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+
+export async function putAvatar(file: Blob): Promise<{ key: string; url: string }> {
+  const agent = await requireSelf();
+
+  if (file.size === 0) throw new Invalid('Пустой файл');
+  if (file.size > AVATAR_MAX_BYTES) {
+    throw new Invalid(`Аватарка больше ${Math.round(AVATAR_MAX_BYTES / 1024 / 1024)} МБ`);
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const kind = sniff(bytes);
+  if (!kind) {
+    throw new Invalid('Это не похоже на снимок: принимаются JPEG, PNG, WebP и AVIF');
+  }
+
+  // Прежняя аватарка другого формата осталась бы лежать рядом и отдаваться
+  // по своему адресу. Убираем все, кроме той, что кладём.
+  const old = await bucket().list({ prefix: `avatars/${agent.id}.` });
+  const key = `avatars/${agent.id}.${kind.ext}`;
+  const stale = old.objects.map((o) => o.key).filter((k) => k !== key);
+  if (stale.length > 0) await bucket().delete(stale);
+
+  await bucket().put(key, bytes, {
+    httpMetadata: {
+      contentType: kind.type,
+      // Ключ постоянный, содержимое меняется — вечный кеш здесь солгал бы.
+      cacheControl: 'public, max-age=300',
+    },
+  });
+
+  // Ключ записывается в карточку агента тем же действием. Иначе файл в
+  // хранилище есть, а страница о нём не знает — и наоборот: сменился
+  // формат, ключ в карточке остался прежний и ведёт в пустоту.
+  const at = now();
+  await batch([
+    stmt('update agents set avatar_key = ?, updated_at = ? where id = ?',
+      key, at, agent.id),
+    auditStmt('agents', agent.id, 'update', agent.id, { avatar_key: key }),
+  ]);
+
+  return { key, url: photoUrl(key) };
+}
+
+/** Убрать свою аватарку. */
+export async function deleteAvatar(): Promise<void> {
+  const agent = await requireSelf();
+  const listed = await bucket().list({ prefix: `avatars/${agent.id}.` });
+  if (listed.objects.length > 0) {
+    await bucket().delete(listed.objects.map((o) => o.key));
+  }
+
+  const at = now();
+  await batch([
+    stmt('update agents set avatar_key = null, updated_at = ? where id = ?',
+      at, agent.id),
+    auditStmt('agents', agent.id, 'update', agent.id, { avatar_key: null }),
+  ]);
+}
+
 /** Отдать снимок посетителю. */
 export async function readPhoto(key: string): Promise<{
   body: ReadableStream; type: string; etag: string; size: number;
 } | null> {
   // Ключ приходит из адреса, то есть снаружи. Пускаем только тот вид, который
   // выдаём сами: иначе «../» и прочие игры с путём.
-  if (!/^objects\/[0-9a-f-]+\/[0-9a-f-]+\.[a-z]+(@thumb\.webp)?$/i.test(key)) return null;
+  const own = /^objects\/[0-9a-f-]+\/[0-9a-f-]+\.[a-z]+(@thumb\.webp)?$/i.test(key)
+    || /^avatars\/[0-9a-f-]+\.[a-z]+$/i.test(key);
+  if (!own) return null;
 
   let object = await bucket().get(key);
 

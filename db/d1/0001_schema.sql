@@ -71,6 +71,17 @@ create table if not exists agents (
                      check (status in ('pending', 'approved', 'blocked')),
   focus         text not null default 'both'
                      check (focus in ('sale', 'rent', 'both')),
+  -- Стаж хранится ГОДОМ НАЧАЛА, а не числом лет: «5 лет», записанное
+  -- однажды, через два года станет неправдой. Год не протухает.
+  works_since   integer check (works_since is null
+                     or (works_since >= 1990 and works_since <= 2100)),
+  -- Номер в реестре риэлторов. Заявляет агент, подтверждает админ — тот
+  -- же порядок, что и у агентства: иначе любой впишет чужой номер.
+  certificate_no        text,
+  certificate_confirmed integer not null default 0
+                        check (certificate_confirmed in (0, 1)),
+  -- Ключ снимка в R2, без домена: сменится хранилище — ссылки уцелеют.
+  avatar_key    text,
   -- Агентство агент ЗАЯВЛЯЕТ сам, а подтверждает только админ: иначе любой
   -- впишет «Этажи» и прикроется чужой репутацией.
   organization_id text references organizations (id) on delete set null,

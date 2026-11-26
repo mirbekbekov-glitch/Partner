@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { approveAgent, blockAgent, setAgentRole, confirmAgentOrg } from './actions';
+import { approveAgent, blockAgent, setAgentRole, confirmAgentOrg, confirmAgentCert } from './actions';
 
 type Result = { error: string | null };
 type Action = (fd: FormData) => Promise<Result>;
@@ -57,12 +57,16 @@ export function AgentActions({
   role,
   hasOrg,
   orgConfirmed,
+  certificateNo,
+  certificateConfirmed,
 }: {
   agentId: string;
   status: string;
   role: string;
   hasOrg: boolean;
   orgConfirmed: boolean;
+  certificateNo: string | null;
+  certificateConfirmed: boolean;
 }) {
   return (
     <div className="actions">
@@ -74,6 +78,15 @@ export function AgentActions({
         <Button action={confirmAgentOrg} agentId={agentId} confirmed={false}
                 label="Снять подтверждение"
                 confirmText="Снять подтверждение принадлежности к агентству?" />
+      ) : null}
+      {certificateNo && !certificateConfirmed ? (
+        <Button action={confirmAgentCert} agentId={agentId} confirmed
+                label={`Подтвердить сертификат ${certificateNo}`} />
+      ) : null}
+      {certificateNo && certificateConfirmed ? (
+        <Button action={confirmAgentCert} agentId={agentId} confirmed={false}
+                label="Снять подтверждение сертификата"
+                confirmText="Снять подтверждение номера в реестре риэлторов?" />
       ) : null}
       {status !== 'approved' ? (
         <Button action={approveAgent} agentId={agentId} label="Одобрить" />

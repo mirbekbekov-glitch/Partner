@@ -29,6 +29,10 @@ export type Agent = {
   id: string;
   email: string | null;
   telegram_id: number | null;
+  works_since: number | null;
+  certificate_no: string | null;
+  certificate_confirmed: number;
+  avatar_key: string | null;
   full_name: string;
   phone: string | null;
   role: 'agent' | 'admin';
