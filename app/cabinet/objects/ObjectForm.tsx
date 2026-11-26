@@ -11,6 +11,7 @@ export type ObjectDraft = {
   kind: string;
   deal_type: string;
   address: string;
+  city: string;
   zone: string | null;
   rooms: number | null;
   area: number | null;
@@ -119,10 +120,22 @@ export function ObjectForm({
 
       <div className="grid2">
         <div className="field">
+          <label className="key" htmlFor="city">Город</label>
+          {/* Значение подставлено, а не оставлено пустым: почти все объекты
+              бишкекские, и заставлять агента печатать это каждый раз —
+              лишняя работа ради редкого случая. Но поле на виду: объект
+              из Оша иначе молча уехал бы в выгрузку как бишкекский. */}
+          <input id="city" name="city" type="text"
+                 defaultValue={draft?.city ?? 'Бишкек'} placeholder="Бишкек" />
+        </div>
+        <div className="field">
           <label className="key" htmlFor="zone">Зона</label>
           <input id="zone" name="zone" type="text" defaultValue={draft?.zone ?? ''}
                  placeholder="Центр" />
         </div>
+      </div>
+
+      <div className="grid2">
         <div className="field">
           <label className="key" htmlFor="rooms">Комнат</label>
           <input id="rooms" name="rooms" type="text" inputMode="numeric"

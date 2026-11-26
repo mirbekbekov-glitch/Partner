@@ -22,15 +22,13 @@ import { catalogPage, type CatalogItem } from './db/catalog';
 import { normalizePhone } from './db/normalize';
 
 /**
- * Город.
+ * Страна. В отличие от города, она здесь и правда одна: платформа о
+ * недвижимости Кыргызстана.
  *
- * Допущение: в базе города нет, есть адрес и район. Площадке город нужен
- * обязательно, и сейчас он один — Бишкек. Появятся объекты в другом
- * городе — город придётся хранить в объекте, и это место сломается
- * заметно: все объявления уедут в Бишкек. Поэтому написано здесь, а не
- * спрятано в середине разметки.
+ * Город раньше тоже был константой — и это было допущение, а не факт:
+ * первый же объект из Оша уехал бы в фид как бишкекский. Теперь город
+ * хранится в объекте.
  */
-const CITY = 'Бишкек';
 const COUNTRY = 'Кыргызстан';
 
 /**
@@ -141,7 +139,7 @@ function offer(item: CatalogItem, origin: string): string {
     + tag('last-update-date', item.actual_at)
     + '    <location>\n'
     + tag('country', COUNTRY).replace('    <', '      <')
-    + tag('locality-name', CITY).replace('    <', '      <')
+    + tag('locality-name', item.city).replace('    <', '      <')
     + (item.zone ? tag('sub-locality-name', item.zone).replace('    <', '      <') : '')
     + tag('address', item.address).replace('    <', '      <')
     + '    </location>\n'

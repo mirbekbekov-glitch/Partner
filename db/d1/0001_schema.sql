@@ -195,6 +195,9 @@ create table if not exists objects (
                          'commercial', 'garage')),
   deal_type           text not null check (deal_type in ('rent', 'sale')),
   address             text not null check (length(trim(address)) > 0),
+  -- Город. По умолчанию Бишкек: объект без явного города — бишкекский.
+  -- Нужен выгрузке на площадки, где город обязателен, и поиску.
+  city                text not null default 'Бишкек',
   zone                text,
   rooms               integer check (rooms is null or rooms >= 0),
   area                real    check (area  is null or area > 0),
@@ -231,6 +234,7 @@ create table if not exists objects (
 create index if not exists objects_published_idx on objects (publication_state, actual_at)
   where publication_state = 'published';
 create index if not exists objects_creator_idx   on objects (created_by_agent_id);
+create index if not exists objects_city_idx      on objects (city);
 
 create table if not exists object_ownerships (
   object_id  text not null references objects  (id) on delete cascade,

@@ -885,6 +885,53 @@ export default {
 
     setEnv(env as unknown as Record<string, unknown>);
 
+    // -----------------------------------------------------------------
+    // Город
+    // -----------------------------------------------------------------
+    // Раньше города не было вовсе: в выгрузке он подставлялся константой
+    // «Бишкек». Это держалось ровно до первого объекта из другого города
+    // — и тот молча уехал бы в фид как бишкекский.
+
+    const osh = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Ленина 10', city: 'Ош',
+      rooms: 2, area: 50, price_minor: 3_000_000,
+    });
+    await createMandate({ object_id: osh.id, kind: 'non_exclusive' });
+    await publishObject(osh.id);
+
+    const cities = await feedXml('https://liberterra.kg');
+    check('город объекта попадает в фид',
+      cities.includes('<locality-name>Ош</locality-name>'));
+    check('бишкекский объект остался бишкекским',
+      cities.includes('<locality-name>Бишкек</locality-name>'));
+
+    check('объект без города считается бишкекским',
+      (await createObject({
+        kind: 'flat', deal_type: 'sale', address: 'Безгорода 1',
+        price_minor: 1_000_000,
+      })).city === 'Бишкек');
+
+    // Город ищется наравне с адресом: иначе «Ош» в поиске не находит
+    // ошских объектов, хотя город у них записан.
+    check('объект находится по городу',
+      (await catalogPage({ q: 'ош' })).items.some((i) => i.id === osh.id));
+
+    // Правка города пересобирает текст поиска. Без этого объект остался
+    // бы находиться по прежнему городу и не находился по новому.
+    await updateObject(osh.id, { city: 'Джалал-Абад' });
+    check('после переезда находится по новому городу',
+      (await catalogPage({ q: 'джалал' })).items.some((i) => i.id === osh.id));
+    check('и больше не находится по прежнему',
+      !(await catalogPage({ q: 'ош' })).items.some((i) => i.id === osh.id));
+
+    // Пустой город — не «без города», а Бишкек: колонка обязательная, и
+    // пустая строка означала бы объект без города в выгрузке.
+    await updateObject(osh.id, { city: '   ' });
+    check('пустой город при правке становится Бишкеком',
+      (await catalogObject(osh.id))?.city === 'Бишкек');
+
+    await withdrawObject(osh.id);
+
     // Аренда и продажа должны называться по-разному. Проверка на одну
     // продажу этого не ловит: мутация «всё — продажа» проходит молча.
     const rented = await createObject({

@@ -224,7 +224,7 @@ export async function objectList(query: {
   const rows = await all<Omit<ObjectListItem, 'can_edit' | 'contract_confirmed'> & {
     can_edit: number; contract_confirmed: number | null;
   }>(
-    `select o.id, o.kind, o.deal_type, o.address, o.zone, o.rooms, o.area,
+    `select o.id, o.kind, o.deal_type, o.address, o.city, o.zone, o.rooms, o.area,
             o.floor, o.price_minor / 100.0 as price, o.currency,
             o.publication_state, o.published_at, o.actual_at, o.created_at,
             m.id as mandate_id,
@@ -365,13 +365,13 @@ export async function objectCard(id: string) {
   await asker();
   const row = await one<{
     id: string; kind: string; deal_type: 'rent' | 'sale'; address: string;
-    zone: string | null; rooms: number | null; area: number | null;
+    city: string; zone: string | null; rooms: number | null; area: number | null;
     floor: number | null; floors_total: number | null; price: number;
     currency: string; photos: string; description: string | null;
     publication_state: string; published_at: string | null; actual_at: string;
     created_by_agent_id: string;
   }>(
-    `select o.id, o.kind, o.deal_type, o.address, o.zone, o.rooms, o.area,
+    `select o.id, o.kind, o.deal_type, o.address, o.city, o.zone, o.rooms, o.area,
             o.floor, o.floors_total, o.price_minor / 100.0 as price, o.currency,
             o.photos, o.description, o.publication_state, o.published_at,
             o.actual_at, o.created_by_agent_id

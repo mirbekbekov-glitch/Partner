@@ -24,6 +24,7 @@ export type ObjectRow = {
   kind: string;
   deal_type: 'rent' | 'sale';
   address: string;
+  city: string;
   zone: string | null;
   rooms: number | null;
   area: number | null;
@@ -120,6 +121,8 @@ export type NewObject = {
   deal_type: 'rent' | 'sale';
   address: string;
   price_minor: number;
+  /** Город. Пусто — Бишкек: подавляющее большинство объектов оттуда. */
+  city?: string | null;
   zone?: string | null;
   rooms?: number | null;
   area?: number | null;
@@ -157,6 +160,7 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
 
   const address = input.address.trim();
   if (!address) throw new Invalid('Адрес обязателен');
+  const city = (input.city ?? '').trim() || 'Бишкек';
   if (!(input.price_minor > 0)) throw new Invalid('Цена должна быть больше нуля');
 
   const id = newId();
@@ -165,17 +169,17 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
 
   writes.push(stmt(
     `insert into objects (
-       id, kind, deal_type, address, zone, rooms, area, floor, floors_total,
+       id, kind, deal_type, address, city, zone, rooms, area, floor, floors_total,
        price_minor, currency, photos, description, source, search_text,
        publication_state, published_at, actual_at,
        created_by_agent_id, created_at, updated_at)
-     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', null, ?, ?, ?, ?)`,
-    id, input.kind, input.deal_type, address,
+     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', null, ?, ?, ?, ?)`,
+    id, input.kind, input.deal_type, address, city,
     blank(input.zone), input.rooms ?? null, input.area ?? null,
     input.floor ?? null, input.floors_total ?? null,
     input.price_minor, (input.currency || 'USD').trim().toUpperCase(),
     photos, blank(input.description), blank(input.source),
-    searchText(address, input.zone),
+    searchText(address, city, input.zone),
     at, agent.id, at, at,
   ));
   writes.push(auditStmt('objects', id, 'insert', agent.id, {
@@ -247,12 +251,12 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
 // ---------------------------------------------------------------------------
 
 export type ObjectPatch = Partial<Pick<NewObject,
-  'kind' | 'deal_type' | 'address' | 'price_minor' | 'zone' | 'rooms' | 'area'
-  | 'floor' | 'floors_total' | 'currency' | 'description' | 'photos'>>;
+  'kind' | 'deal_type' | 'address' | 'city' | 'price_minor' | 'zone' | 'rooms'
+  | 'area' | 'floor' | 'floors_total' | 'currency' | 'description' | 'photos'>>;
 
 /** Поля, которые агент вправе править. Остальные — только через свои действия. */
 const EDITABLE = [
-  'kind', 'deal_type', 'address', 'price_minor', 'zone', 'rooms', 'area',
+  'kind', 'deal_type', 'address', 'city', 'price_minor', 'zone', 'rooms', 'area',
   'floor', 'floors_total', 'currency', 'description', 'photos',
 ] as const;
 
@@ -282,13 +286,21 @@ export async function updateObject(id: string, patch: ObjectPatch): Promise<Obje
   if (typeof next.price_minor === 'number' && !(next.price_minor > 0)) {
     throw new Invalid('Цена должна быть больше нуля');
   }
+  // Пустой город — это не «без города», а «Бишкек»: колонка обязательная,
+  // и пустая строка в ней означала бы объект, у которого город как бы
+  // есть, но его нет. В выгрузке такой объект остался бы без города.
+  if (next.city !== undefined) {
+    next.city = String(next.city ?? '').trim() || 'Бишкек';
+  }
   if (Object.keys(next).length === 0) return view(before);
 
   // Текст поиска пересобирается при каждой правке адреса или района:
   // иначе объект находился бы по прежнему адресу и не находился по новому.
-  if (next.address !== undefined || next.zone !== undefined) {
+  if (next.address !== undefined || next.city !== undefined
+      || next.zone !== undefined) {
     next.search_text = searchText(
       (next.address as string) ?? before.address,
+      (next.city as string) ?? before.city,
       (next.zone as string | null) ?? before.zone,
     );
   }

@@ -21,7 +21,7 @@ import { fromMinor } from './money';
 
 /** Единственный разрешённый состав публичной выдачи. */
 const COLUMNS = [
-  'id', 'kind', 'deal_type', 'address', 'zone',
+  'id', 'kind', 'deal_type', 'address', 'city', 'zone',
   'rooms', 'area', 'floor', 'floors_total',
   'price_minor', 'currency', 'photos', 'description',
   'published_at', 'actual_at',
@@ -34,6 +34,7 @@ export type CatalogRow = {
   kind: string;
   deal_type: 'rent' | 'sale';
   address: string;
+  city: string;
   zone: string | null;
   rooms: number | null;
   area: number | null;
