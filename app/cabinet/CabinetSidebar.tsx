@@ -11,7 +11,9 @@ import {
   Handshake,
   Image as ImageIcon,
   Inbox,
+  ExternalLink,
   LayoutDashboard,
+  Store,
   Menu,
   Target,
   User,
@@ -145,6 +147,15 @@ export function CabinetSidebar({
         </nav>
 
         <div className="crm-side-foot">
+          {/* Публичный каталог. Обычная <a>, а не Link: переход в новую
+              вкладку, чтобы открытый кабинет не терялся, когда агент ушёл
+              смотреть витрину глазами клиента. Адрес корневой — язык
+              подставит редирект. */}
+          <a href="/" className="crm-link" target="_blank" rel="noopener">
+            <Store size={18} aria-hidden="true" />
+            <span>Каталог</span>
+            <ExternalLink size={14} aria-hidden="true" className="crm-link-out" />
+          </a>
           <Link
             href="/cabinet/profile"
             className="crm-link"
