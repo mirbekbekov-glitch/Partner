@@ -79,6 +79,12 @@ export default defineConfig({
       // обычным значением, а не секретом: одной ручной настройкой меньше.
       MAIL_FROM: bindings.text('cabinet@liberterra.kg'),
 
+      // Контакт агентства в выгрузке на площадки. Пусто — блок контакта
+      // в фид не выводится вовсе: пустой телефон площадка примет за
+      // настоящий, и по объявлению будут звонить в никуда.
+      FEED_PHONE: bindings.text(''),
+      FEED_ORG: bindings.text('Liberterra'),
+
       // Собственный адрес сайта: нужен карте сайта и превью при пересылке.
       NEXT_PUBLIC_SITE_URL: bindings.secret(),
 

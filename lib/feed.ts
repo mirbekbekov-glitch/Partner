@@ -17,7 +17,9 @@
  * назад уже нельзя. Витрина физически не отдаёт таких колонок.
  */
 import 'server-only';
+import { env } from 'cloudflare:workers';
 import { catalogPage, type CatalogItem } from './db/catalog';
+import { normalizePhone } from './db/normalize';
 
 /**
  * Город.
@@ -49,6 +51,40 @@ const CATEGORY: Record<string, string> = {
   land: 'участок',
   garage: 'гараж',
 };
+
+/**
+ * Контакт агентства в объявлении.
+ *
+ * Площадке нужен телефон: объявление без него — это объявление, по
+ * которому нельзя позвонить. Но витрина телефонов не отдаёт вовсе, и
+ * правильно делает: там телефоны СОБСТВЕННИКОВ, и утечь наружу они не
+ * должны ни при каких обстоятельствах.
+ *
+ * Поэтому телефон здесь один и общий — агентства, а не агента. Он и по
+ * сути верен: звонок с площадки приходит в агентство, а не конкретному
+ * человеку, которого в выгрузке всё равно нет.
+ *
+ * Задан настройкой, а не в коде: номер меняется, а выкладка ради номера —
+ * лишний повод тронуть код. Не задан — блок контакта не выводится вовсе:
+ * пустой <phone> хуже отсутствующего, его площадка примет за настоящий.
+ *
+ * Внутри НАМЕРЕННО только phone и organization. В справочнике YRL у
+ * контакта есть и другие поля со списком допустимых значений, но проверить
+ * их я не смог — справка Яндекса закрыта сетевой политикой окружения, — а
+ * неверное значение делает невалидным весь файл, а не одно объявление.
+ */
+function salesAgent(): string {
+  const raw = (env as unknown as { FEED_PHONE?: string }).FEED_PHONE ?? '';
+  const digits = normalizePhone(raw);
+  if (digits.length !== 9) return '';
+
+  const organization = (env as unknown as { FEED_ORG?: string }).FEED_ORG ?? '';
+
+  return '    <sales-agent>\n'
+    + `      <phone>+996${digits}</phone>\n`
+    + (organization ? `      <organization>${esc(organization)}</organization>\n` : '')
+    + '    </sales-agent>\n';
+}
 
 /** Больше этого за один запрос не собираем: Worker не резиновый. */
 const MAX_OFFERS = 5000;
@@ -110,6 +146,7 @@ function offer(item: CatalogItem, origin: string): string {
     + tag('floor', item.floor)
     + tag('floors-total', item.floors_total)
     + tag('description', item.description)
+    + salesAgent()
     + images
     + '  </offer>\n';
 }

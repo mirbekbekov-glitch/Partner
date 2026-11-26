@@ -830,6 +830,39 @@ export default {
     check('продажа названа продажей', feed.includes('<type>продажа</type>'));
     check('вид объекта переведён', feed.includes('<category>квартира</category>'));
 
+    // Телефон агентства. Витрина телефонов не отдаёт вовсе — там номера
+    // собственников, — поэтому в фиде он один и общий, из настройки.
+    //
+    // Проверяется в обе стороны. Без настройки блок контакта не выводится
+    // совсем: пустой <phone> хуже отсутствующего, площадка примет его за
+    // настоящий, и по объявлению будут звонить в никуда.
+    check('без настройки контакта в фиде нет',
+      !feed.includes('<sales-agent>'));
+
+    setEnv({ ...(env as unknown as Record<string, unknown>),
+      FEED_PHONE: '0700 11 22 33', FEED_ORG: 'Liberterra' });
+    const withPhone = await feedXml('https://liberterra.kg');
+
+    check('телефон агентства попадает в фид',
+      withPhone.includes('<phone>+996700112233</phone>'));
+    check('номер приведён к международному виду',
+      !withPhone.includes('0700 11 22 33'));
+    check('название агентства рядом с телефоном',
+      withPhone.includes('<organization>Liberterra</organization>'));
+
+    // Мусор вместо номера — не номер. Лучше без контакта, чем с ломаным.
+    setEnv({ ...(env as unknown as Record<string, unknown>), FEED_PHONE: '12' });
+    check('непохожий на номер телефон в фид не идёт',
+      !(await feedXml('https://liberterra.kg')).includes('<sales-agent>'));
+
+    // Телефона собственника в фиде нет и при включённом контакте.
+    setEnv({ ...(env as unknown as Record<string, unknown>),
+      FEED_PHONE: '0700 11 22 33', FEED_ORG: 'Liberterra' });
+    check('телефон собственника в фид не просочился',
+      !(await feedXml('https://liberterra.kg')).includes('555121314'));
+
+    setEnv(env as unknown as Record<string, unknown>);
+
     // Аренда и продажа должны называться по-разному. Проверка на одну
     // продажу этого не ловит: мутация «всё — продажа» проходит молча.
     const rented = await createObject({
