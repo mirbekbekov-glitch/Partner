@@ -328,3 +328,62 @@ form.stack.card { max-width: 760px; }
 /* Кнопки действий внутри ячейки: сверху отступа не нужно, его даёт сама
    ячейка. На узкой колонке встают в столбик. */
 .tbl .actions { margin-top: 0; gap: 6px; }
+
+/* ── Доска сделок ────────────────────────────────────────── */
+/*
+ * Колонки одной ширины и своей высоты: сделка переезжает по этапам, и
+ * столбик, растянутый по самому длинному соседу, скрывал бы, что в нём
+ * пусто. На узком экране доска прокручивается вбок — это единственное
+ * место, где горизонтальная прокрутка уместна: она и есть доска.
+ */
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(240px, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  align-items: start;
+}
+
+.board-col {
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 10px;
+  min-height: 120px;
+}
+/* Колонка под курсором с карточкой: видно, куда она ляжет. */
+.board-col[data-over='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--sunk));
+}
+
+.board-head {
+  margin: 0 0 10px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.board-head .key { font-weight: 400; }
+.board-empty { margin: 0; color: var(--muted); font-size: 13px; }
+
+.board-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px;
+  margin-bottom: 8px;
+  box-shadow: var(--sh-sm);
+}
+.board-card[draggable='true'] { cursor: grab; }
+.board-card[data-busy='true'] { opacity: .5; }
+.board-card:last-child { margin-bottom: 0; }
+
+.board-title { display: block; font-weight: 700; margin-bottom: 4px; }
+.board-line { margin: 2px 0 0; font-size: 13px; }
+.board-money { margin: 6px 0 0; font-family: var(--mono); font-size: 14px; }
+
+/* Кнопки перехода: мышь не единственный способ двигать сделку. */
+.board-move { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.board-move button { padding: 3px 8px; font-size: 12px; }
