@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { createClient } from '@/lib/supabase/server';
-import { publicSupabaseConfig } from '@/lib/supabase/public-config';
+import { catalogPage, catalogZoneCounts } from '@/lib/db/catalog';
 import {
   CATALOG_PAGE_SIZE, parseCatalogFilters, catalogHref, sortHref, hasAnyFilter,
-  firstPhoto, searchTokens, tokenFilter, daysSince,
+  firstPhoto, daysSince,
   SORTS, publicMoney, type CatalogFilters,
 } from '@/lib/catalog-params';
+import { thumbOf } from '@/lib/photo-url';
 import { t, kindName, freshWordIn, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { CatalogHeader } from '../CatalogHeader';
 import { HeroArt } from '../HeroArt';
@@ -110,7 +110,7 @@ function Search({ lang, f, deal }: { lang: Lang; f: CatalogFilters; deal: 'sale'
             <input id="to" name="to" type="number" min={0} step={1000} placeholder={d.priceHint}
                    inputMode="numeric" defaultValue={f.priceMax ?? ''} />
           </div>
-          <FindButton lang={lang} deal={deal} supabase={publicSupabaseConfig()} />
+          <FindButton lang={lang} deal={deal} />
         </div>
 
         {/* Район и нижняя граница цены нужны меньшинству, но нужны всерьёз.
@@ -162,43 +162,41 @@ export default async function Catalog({
   const f = parseCatalogFilters(await searchParams);
   // Нет параметра — значит покупка: вкладок две, третьей («всё сразу») нет.
   const deal: 'sale' | 'rent' = f.deal ?? 'sale';
-  const supabase = await createClient();
-  const order = SORTS.find((s) => s.key === f.sort) ?? SORTS[0];
+  // Только витрина: в ней нет ни комиссии, ни агента, ни собственника.
+  // Это свойство не страницы, а модуля — состав колонок задан там одним
+  // списком, и дописать в него «ведёт» мимо рецензии нельзя.
+  let total = 0;
+  let rows: Row[] = [];
+  let failed = false;
 
-  // Только витрина. В ней нет ни комиссии, ни агента, ни собственника.
-  let query = supabase
-    .from('public_catalog_v')
-    .select('*', { count: 'exact' })
-    .order(order.column, { ascending: order.asc, nullsFirst: false })
-    .range((f.page - 1) * CATALOG_PAGE_SIZE, f.page * CATALOG_PAGE_SIZE - 1);
-
-  query = query.eq('deal_type', deal);
-  if (f.kind) query = query.eq('kind', f.kind);
-  if (f.zone) query = query.eq('zone', f.zone);
-  if (f.rooms) query = query.eq('rooms', f.rooms);
-  if (f.priceMin != null) query = query.gte('price', f.priceMin);
-  if (f.priceMax != null) query = query.lte('price', f.priceMax);
-  if (f.q) for (const token of searchTokens(f.q)) query = query.or(tokenFilter(token));
-
-  // Все опубликованные объекты — по ним строится строка районов под
-  // пультом поиска. Без фильтров: это состояние каталога целиком.
-  const { data: all } = await supabase
-    .from('public_catalog_v')
-    .select('zone, deal_type')
-    .limit(1000);
-  const { data, count, error } = await query;
-  const rows = (data ?? []) as Row[];
-  const total = count ?? 0;
-  const pages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
-  // Районы, в которых реально есть объекты, по убыванию числа объектов:
-  // показывать пустой район — обманывать нажатие.
-  const byZone = new Map<string, number>();
-  for (const r of all ?? []) {
-    if (r.deal_type !== deal) continue;
-    const z = r.zone as string | null;
-    if (z) byZone.set(z, (byZone.get(z) ?? 0) + 1);
+  try {
+    const page = await catalogPage({
+      deal,
+      kind: f.kind,
+      zone: f.zone,
+      rooms: f.rooms,
+      priceMin: f.priceMin,
+      priceMax: f.priceMax,
+      q: f.q,
+      sort: f.sort,
+      page: f.page,
+      pageSize: CATALOG_PAGE_SIZE,
+    });
+    rows = page.items as unknown as Row[];
+    total = page.total;
+  } catch {
+    // Каталог должен сказать «не открылся», а не упасть белой страницей:
+    // человек пришёл смотреть квартиры, а не читать стек вызовов.
+    failed = true;
   }
-  const zones = [...byZone.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([z]) => z);
+
+  const pages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
+
+  // Районы, в которых реально есть объекты, по убыванию числа: показывать
+  // пустой район — обманывать нажатие. Те же числа идут на карту города.
+  const zoneCounts = failed ? [] : await catalogZoneCounts(deal);
+  const byZone = new Map(zoneCounts.map((z) => [z.zone, z.n]));
+  const zones = zoneCounts.slice(0, 8).map((z) => z.zone);
 
   const sortLabel: Record<string, string> = {
     fresh: d.sortFresh, cheap: d.sortCheap, big: d.sortBig,
@@ -242,7 +240,7 @@ export default async function Catalog({
           <h2>
             {deal === 'rent' ? d.forRent : d.forSale}
           </h2>
-          <span className="found">{error ? d.catalogDown : d.objectsCount(total)}</span>
+          <span className="found">{failed ? d.catalogDown : d.objectsCount(total)}</span>
           <div className="sorts">
             {SORTS.map((s) => (
               <Link key={s.key} className="sort" href={sortHref(lang, f, s.key)}
@@ -254,13 +252,17 @@ export default async function Catalog({
         </div>
 
         <div className="grid">
-          {error ? (
-            <p className="none error">{error.message}</p>
+          {failed ? (
+            <p className="none error">{d.catalogDown}</p>
           ) : rows.length === 0 ? (
             <p className="none">{hasAnyFilter(f) ? d.nothingFound : d.nothingYet}</p>
           ) : (
             rows.map((o, i) => {
-              const photo = firstPhoto(o.photos);
+              // В списке — миниатюра. Карточка показывает снимок размером
+              // с ладонь, а на странице каталога их десяток: полные
+              // снимки стоили бы посетителю мегабайты за то, чего он не
+              // увидит. На странице самого объекта берётся полный.
+              const photo = thumbOf(firstPhoto(o.photos) ?? '') || null;
               const days = daysSince(o.actual_at);
               const fresh = freshWordIn(lang, days);
               const facade = <Facade o={o} alt={d.drawingAlt} />;

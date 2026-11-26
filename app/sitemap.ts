@@ -17,7 +17,7 @@
  * ровно то, что открыто посетителю.
  */
 import type { MetadataRoute } from 'next';
-import { createClient } from '@/lib/supabase/server';
+import { publishedIds } from '@/lib/db/catalog';
 import { LANGS } from '@/lib/i18n';
 import { siteUrl } from '@/lib/site';
 
@@ -32,29 +32,20 @@ const MAX_OBJECTS = 6000;
 /**
  * Карта собирается на каждое обращение, без кеша.
  *
- * Кеш тут был бы обманом: клиент Supabase читает куки, а это запрос
- * времени выполнения — страница всё равно считается динамической, сколько
- * ни пиши revalidate. Роботы заходят редко, один запрос к витрине на их
- * визит ничего не стоит, зато снятый с публикации объект исчезает из карты
- * сразу, а не через час.
+ * Кеш тут был бы обманом: запрос к базе идёт во время выполнения, и
+ * страница всё равно считается динамической, сколько ни пиши revalidate.
+ * Роботы заходят редко, один запрос к витрине на их визит ничего не стоит,
+ * зато снятый с публикации объект исчезает из карты сразу, а не через час.
  */
 
 type Row = { id: string; actual_at: string };
 
 async function objects(): Promise<Row[]> {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('public_catalog_v')
-      .select('id, actual_at')
-      .order('actual_at', { ascending: false })
-      .limit(MAX_OBJECTS);
-
+    return (await publishedIds()).slice(0, MAX_OBJECTS);
+  } catch {
     // База недоступна — отдаём карту со статическими страницами, а не 500.
     // Пустой sitemap.xml поисковик перечитает; ошибку он запомнит надолго.
-    if (error) return [];
-    return (data as Row[] | null) ?? [];
-  } catch {
     return [];
   }
 }
@@ -90,6 +81,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     // «Что я ищу»: форма, текст на ней меняется редко.
     ...cluster((l) => `/${l}/request`, now, 'monthly', 0.5),
+
+    // Посадочная страница печатного QR-кода. Языковых версий у неё нет —
+    // текст об объекте не переводится машиной, — поэтому не кластер, а одна
+    // запись.
+    {
+      url: siteUrl('/chaika-resort'),
+      lastModified: now,
+      changeFrequency: 'monthly' as const,
+      priority: 0.7,
+    },
 
     // Карточки объектов. lastModified — actual_at, дата последнего
     // подтверждения актуальности агентом: именно она говорит роботу,

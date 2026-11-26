@@ -1,9 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import type { SupabasePublicConfig } from '@/lib/supabase/public-config';
-import { searchTokens, tokenFilter } from '@/lib/catalog-params';
 import { t, type Lang } from '@/lib/i18n';
 
 /**
@@ -15,20 +12,17 @@ import { t, type Lang } from '@/lib/i18n';
  *
  * Считает тот же публичный источник, что и страница, и теми же
  * условиями — иначе число на кнопке расходилось бы с выдачей, а это хуже,
- * чем отсутствие числа.
+ * чем отсутствие числа. Это обеспечено тем, что число приходит с сервера:
+ * маршрут /api/catalog/count зовёт ту же функцию, что и страница.
+ *
+ * Раньше кнопка считала сама, обращаясь к базе прямо из браузера. С D1
+ * так нельзя — до неё достаёт только Worker, — и это к лучшему: в браузере
+ * не осталось ни ключей, ни знания о том, как устроена витрина.
  *
  * Без JavaScript на кнопке остаётся «Показать», и форма работает как
  * работала: это надстройка, а не условие.
  */
-export function FindButton({
-  lang, deal, supabase,
-}: {
-  lang: Lang;
-  deal: 'sale' | 'rent';
-  // Координаты приходят с сервера: в клиентском коде их больше нет, потому
-  // что подстановка при сборке однажды оставила тут пустые строки.
-  supabase: SupabasePublicConfig;
-}) {
+export function FindButton({ lang, deal }: { lang: Lang; deal: 'sale' | 'rent' }) {
   const d = t(lang);
   const btn = useRef<HTMLButtonElement>(null);
   const [count, setCount] = useState<number | null>(null);
@@ -42,32 +36,24 @@ export function FindButton({
 
     const recount = async () => {
       const fd = new FormData(form);
-      const str = (k: string) => {
-        const v = String(fd.get(k) ?? '').trim();
-        return v === '' ? null : v;
-      };
-      const num = (k: string) => {
-        const v = Number.parseInt(String(fd.get(k) ?? ''), 10);
-        return Number.isFinite(v) && v > 0 ? v : null;
-      };
+      const params = new URLSearchParams({ deal });
 
-      let q = createClient(supabase.url, supabase.anonKey)
-        .from('public_catalog_v')
-        .select('id', { count: 'exact', head: true })
-        .eq('deal_type', deal);
+      for (const key of ['kind', 'rooms', 'zone', 'from', 'to', 'q']) {
+        const value = String(fd.get(key) ?? '').trim();
+        if (value !== '') params.set(key, value);
+      }
 
-      const kind = str('kind');   if (kind) q = q.eq('kind', kind);
-      const rooms = num('rooms'); if (rooms) q = q.eq('rooms', rooms);
-      const zone = str('zone');   if (zone) q = q.eq('zone', zone);
-      const from = num('from');   if (from) q = q.gte('price', from);
-      const to = num('to');       if (to) q = q.lte('price', to);
-      const text = str('q');
-      if (text) for (const token of searchTokens(text)) q = q.or(tokenFilter(token));
-
-      const { count: n, error } = await q;
-      // Ошибку не показываем: на кнопке останется «Показать», и форма
-      // отработает обычным путём. Счётчик — удобство, не обязательство.
-      if (alive && !error && typeof n === 'number') setCount(n);
+      try {
+        const response = await fetch(`/api/catalog/count?${params}`, {
+          headers: { accept: 'application/json' },
+        });
+        const data = await response.json() as { count: number | null };
+        // Ошибку не показываем: на кнопке останется «Показать», и форма
+        // отработает обычным путём. Счётчик — удобство, не обязательство.
+        if (alive && typeof data.count === 'number') setCount(data.count);
+      } catch {
+        // То же самое: молчим и оставляем «Показать».
+      }
     };
 
     const onChange = () => {
@@ -84,9 +70,7 @@ export function FindButton({
       form.removeEventListener('input', onChange);
       form.removeEventListener('change', onChange);
     };
-    // Строки, а не объект: сравниваются по значению, поэтому эффект не
-    // перезапускается на каждой отрисовке из-за нового объекта с сервера.
-  }, [deal, supabase.url, supabase.anonKey]);
+  }, [deal]);
 
   return (
     <button className="go" type="submit" ref={btn}>

@@ -9,6 +9,7 @@ import {
   CalendarCheck,
   FileText,
   Handshake,
+  Image as ImageIcon,
   Inbox,
   LayoutDashboard,
   Menu,
@@ -113,6 +114,7 @@ export function CabinetSidebar({
             <>
               <span className="crm-nav-sep">Администратор</span>
               {link('/cabinet/admin/agents', 'Агенты', UserCog)}
+              {link('/cabinet/admin/photos', 'Миниатюры', ImageIcon)}
             </>
           ) : null}
         </nav>

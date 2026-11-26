@@ -919,3 +919,99 @@ main:has(.nav) { max-width: none; padding: 0; }
   width: 34px; height: 34px; background: var(--sunk); color: var(--fg); border: 0;
   border-radius: var(--r-full); cursor: pointer; transition: background .18s, color .18s; }
 .theme-btn:hover { background: var(--ink); color: #fff; }
+
+/* Посадочная страница объекта (/chayka): разделы и списки с галочками.
+   Отдельные классы, а не правка .detail: карточка объекта из каталога и
+   посадочная страница живут по-разному, и общий стиль развёл бы их обе. */
+.block { padding-block: 22px; border-top: 1px solid var(--line); }
+.block h2 { font-size: 20px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 10px; }
+.block h3 { margin: 0 0 8px; }
+.block p { margin: 0; color: var(--fg); font-size: 16px; line-height: 1.6; max-width: 62ch; }
+.ticks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ticks li { position: relative; padding-left: 22px; font-size: 15px; line-height: 1.5; }
+/* Галочка нарисована фоном, а не символом: экранный диктор не должен
+   зачитывать «галка» перед каждым пунктом. */
+.ticks li::before {
+  content: ""; position: absolute; left: 2px; top: .55em;
+  width: 10px; height: 5px; border-left: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent); transform: rotate(-45deg);
+}
+.ticks.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px 18px; }
+
+/* Переход к форме на узком экране. На телефоне колонка с формой уходит под
+   весь текст, а человек у баннера хочет оставить телефон сразу. На широком
+   экране форма и так видна справа, поэтому кнопка там не нужна. */
+.cta-jump { display: none; }
+
+@media (max-width: 1040px) {
+  .cta-jump {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent); color: var(--accent-fg);
+    padding: 12px 20px; border-radius: var(--r-full);
+    font-weight: 700; text-decoration: none; margin-top: 4px;
+  }
+  /* Нечётная последняя плитка растягивается на ряд: иначе рядом с ней
+     остаётся пустая серая ячейка, и это выглядит поломкой. */
+  .specs .spec:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+/* Галерея посадочной страницы. Первый снимок во всю ширину — он решает,
+   станет ли человек смотреть дальше; остальные плиткой. */
+.gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding-top: 20px; }
+.gallery .shot { width: 100%; height: 100%; object-fit: cover; display: block;
+                 border-radius: var(--r-md); background: var(--sunk); aspect-ratio: 4 / 3; }
+.gallery .shot.lead { grid-column: 1 / -1; aspect-ratio: 16 / 9; }
+
+/* На узком экране галерея остаётся в два столбца. В один она растягивала
+   страницу так, что до формы приходилось листать минуту: снимков девять, и
+   каждый занимал бы экран целиком. Верхний кадр — исключение, он во всю
+   ширину: по нему человек понимает, что ему вообще показывают. */
+@media (max-width: 560px) {
+  .gallery { gap: 6px; }
+  .gallery .shot.lead { aspect-ratio: 4 / 3; }
+}
+
+/* Нечётная последняя плитка галереи занимает ряд целиком: иначе рядом с ней
+   зияет пустота, и ряд выглядит недоделанным. */
+.gallery .shot:last-child:nth-child(odd) { grid-column: 1 / -1; aspect-ratio: 16 / 9; }
+.block .gallery { padding-top: 0; }
+.block p.after { margin-top: 10px; }
+
+/* --- Снимки объекта в форме ------------------------------------------------
+   Список, а не сетка: порядок здесь — смысл, первый снимок становится
+   обложкой в каталоге, и это должно быть видно строкой, а не угадываться
+   по положению в сетке. */
+.photolist {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.photolist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-100);
+}
+
+.photolist img {
+  width: 72px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex: none;
+}
+
+/* Подпись забирает свободное место, кнопки прижимаются вправо. */
+.photolist .key { flex: 1; }
+
+.photolist button {
+  padding: 4px 10px;
+  font-size: 13px;
+}

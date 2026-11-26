@@ -1,17 +1,27 @@
-import { createServiceClient } from '@/lib/supabase/service';
+import {
+  claimNotifications, enqueueDueReminders, markNotification,
+} from '@/lib/db/notifications';
+import { sweepExpired } from '@/lib/db/session';
+import { expireMandates } from '@/lib/db/mandates';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Рассылка напоминаний о задачах. Вызывается по расписанию.
  *
- * Решение о том, что и кому напомнить, принимает база
- * (app.enqueue_due_reminders), здесь только доставка. Разделение не
+ * Решение о том, что и кому напомнить, принимает слой доступа
+ * (lib/db/notifications.ts), здесь только доставка. Разделение не
  * формальное: решение проверяемо тестами, доставка — нет.
  *
- * Маршрут держит ключ service_role, то есть обходит RLS, поэтому он закрыт
- * секретом. Если секрет не задан — маршрут отказывает, а не открывается:
- * незаданный секрет это не «проверка выключена», это ошибка настройки.
+ * Маршрут ходит в базу БЕЗ сессии агента, то есть мимо проверок прав,
+ * поэтому он закрыт секретом. Если секрет не задан — маршрут отказывает,
+ * а не открывается: незаданный секрет это не «проверка выключена», это
+ * ошибка настройки.
+ *
+ * Здесь же делается остальная работа по расписанию: гашение просроченных
+ * мандатов и уборка протухших сессий и ссылок входа. Одно расписание на
+ * всё — потому что все три задачи идемпотентны и дешёвы, а отдельное
+ * расписание на каждую пришлось бы заводить и помнить.
  */
 
 /** Сравнение без утечки времени: иначе секрет подбирается по задержке. */
@@ -63,40 +73,48 @@ export async function GET(request: Request) {
     return Response.json({ error: denied }, { status: 401 });
   }
 
-  let supabase;
+  // Истёкшие мандаты. Инвариант 1 держится датой, а дата сама себя не
+  // проверяет: без этого вызова объект остаётся в каталоге с просроченным
+  // договором.
+  let expired = 0;
   try {
-    supabase = createServiceClient();
+    expired = await expireMandates();
   } catch (e) {
     return Response.json(
-      { error: e instanceof Error ? e.message : 'ошибка настройки' },
+      { error: e instanceof Error ? e.message : 'ошибка гашения мандатов' },
       { status: 500 },
     );
   }
 
+  // Уборка протухшего. Просроченные строки и так не пускают — проверка по
+  // сроку стоит в запросе, — но без уборки таблицы растут вечно.
+  const swept = await sweepExpired().catch(() => ({ sessions: 0, tokens: 0 }));
+
   // 1. Решаем, о чём напоминать. Идемпотентно: повторный вызов расписания
   //    дубликатов не создаёт.
-  const { error: enqueueError } = await supabase.rpc('enqueue_due_reminders', {
-    p_horizon: '24 hours',
-  });
-  if (enqueueError) {
-    return Response.json({ error: enqueueError.message }, { status: 500 });
+  let queued = 0;
+  try {
+    queued = await enqueueDueReminders();
+  } catch (e) {
+    return Response.json(
+      { error: e instanceof Error ? e.message : 'ошибка постановки в очередь' },
+      { status: 500 },
+    );
   }
 
-  // 2. Забираем пачку. Статус 'sending' ставится при выдаче, поэтому
+  // 2. Забираем пачку. Статус «в отправке» ставится при выдаче, поэтому
   //    одновременный второй вызов те же записи не возьмёт.
-  const { data: batch, error: claimError } = await supabase.rpc('claim_notifications', {
-    p_limit: 50,
-  });
-  if (claimError) {
-    return Response.json({ error: claimError.message }, { status: 500 });
+  let rows: Array<{
+    id: string; channel: string | null; body: string; telegram_id: number | null;
+  }> = [];
+  try {
+    rows = await claimNotifications(50);
+  } catch (e) {
+    return Response.json(
+      { error: e instanceof Error ? e.message : 'ошибка выдачи' },
+      { status: 500 },
+    );
   }
-
-  const rows = (batch ?? []) as {
-    id: string;
-    channel: string | null;
-    body: string;
-    telegram_id: number | null;
-  }[];
 
   let sent = 0;
   let failed = 0;
@@ -120,12 +138,16 @@ export async function GET(request: Request) {
 
     // Отчитываемся по каждой записи отдельно: падение на середине не теряет
     // уже отправленное и не отправляет повторно.
-    await supabase.rpc('mark_notification', {
-      p_id: row.id,
-      p_ok: error === null,
-      p_error: error,
-    });
+    await markNotification(row.id, error === null, error);
   }
 
-  return Response.json({ claimed: rows.length, sent, failed, reasons });
+  return Response.json({
+    expired_mandates: expired,
+    swept,
+    queued,
+    claimed: rows.length,
+    sent,
+    failed,
+    reasons,
+  });
 }

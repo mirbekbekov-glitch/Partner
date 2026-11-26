@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { requirementList } from '@/lib/db/cabinet';
 import { PAGE_SIZE, parseFilters, money, day } from '@/lib/list-params';
 import { Pager } from '../Pager';
 
@@ -37,31 +37,21 @@ export default async function RequirementsList({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const f = parseFilters(await searchParams);
-  const supabase = await createClient();
+  // Чужие потребности видны — это нормально, подбор объекта чужому клиенту
+  // полезен. Закрыто имя клиента: его открывает инвариант 4, и решает это
+  // запрос, а не страница.
+  let rows: Row[] = [];
+  let error: string | null = null;
 
-  let query = supabase
-    .from('requirement_list_v')
-    .select('*', { count: 'exact' })
-    .order('updated_at', { ascending: false })
-    .range((f.page - 1) * PAGE_SIZE, f.page * PAGE_SIZE - 1);
-
-  if (f.deal) query = query.eq('deal_type', f.deal);
-  if (f.status) query = query.eq('status', f.status);
-  if (f.zone) query = query.contains('zones', [f.zone]);
-  if (f.q) query = query.ilike('requirements_text', `%${f.q}%`);
-
-  const { data, count, error } = await query;
-
-  if (error) {
-    return (
-      <>
-        <h1>Потребности</h1>
-        <p className="error">{error.message}</p>
-      </>
-    );
+  try {
+    rows = await requirementList({
+      status: f.status, deal: f.deal, zone: f.zone, q: f.q,
+    }) as unknown as Row[];
+  } catch (e) {
+    error = e instanceof Error ? e.message : 'Не удалось загрузить потребности.';
   }
 
-  const rows = (data ?? []) as Row[];
+  const count = rows.length;
 
   return (
     <>

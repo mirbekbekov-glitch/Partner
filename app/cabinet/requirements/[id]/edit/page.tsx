@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { requirementCard } from '@/lib/db/cabinet';
 import { RequirementForm, type RequirementDraft } from '../../RequirementForm';
 import { updateRequirement } from '../../form-actions';
 
@@ -11,14 +11,8 @@ export default async function EditRequirementPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
 
-  const { data: requirement } = await supabase
-    .from('requirements')
-    .select('id, deal_type, budget_min, budget_max, zones, rooms, deadline, requirements_text, status, closed_reason')
-    .eq('id', id)
-    .maybeSingle();
-
+  const requirement = await requirementCard(id);
   if (!requirement) notFound();
 
   return (
@@ -27,7 +21,7 @@ export default async function EditRequirementPage({
       <div className="card">
         <RequirementForm
           action={updateRequirement}
-          draft={requirement as RequirementDraft}
+          draft={requirement as unknown as RequirementDraft}
           mode="edit"
         />
       </div>

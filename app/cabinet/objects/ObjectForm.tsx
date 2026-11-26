@@ -4,12 +4,14 @@ import Link from 'next/link';
 import { useActionState, useRef, useState, useTransition } from 'react';
 import type { FormResult } from './form-actions';
 import { draftDescription } from './form-actions';
+import { PhotoUpload } from './PhotoUpload';
 
 export type ObjectDraft = {
   id?: string;
   kind: string;
   deal_type: string;
   address: string;
+  city: string;
   zone: string | null;
   rooms: number | null;
   area: number | null;
@@ -18,7 +20,7 @@ export type ObjectDraft = {
   price: number | null;
   currency: string;
   description: string | null;
-  photos: { url?: string }[] | null;
+  photos: (string | { url?: string })[] | null;
 };
 
 const KINDS: [string, string][] = [
@@ -67,10 +69,12 @@ export function ObjectForm({
     });
   };
 
-  const photoLines = (draft?.photos ?? [])
-    .map((p) => p?.url ?? '')
-    .filter(Boolean)
-    .join('\n');
+  // Снимки в базе лежат списком строк. Старые записи могли хранить объекты
+  // с полем url — читаем оба вида, чтобы правка такой карточки не теряла
+  // фотографии.
+  const photoList = (draft?.photos ?? [])
+    .map((p) => (typeof p === 'string' ? p : p?.url ?? ''))
+    .filter(Boolean);
 
   return (
     <form ref={formRef} action={formAction} className="stack">
@@ -116,10 +120,22 @@ export function ObjectForm({
 
       <div className="grid2">
         <div className="field">
+          <label className="key" htmlFor="city">Город</label>
+          {/* Значение подставлено, а не оставлено пустым: почти все объекты
+              бишкекские, и заставлять агента печатать это каждый раз —
+              лишняя работа ради редкого случая. Но поле на виду: объект
+              из Оша иначе молча уехал бы в выгрузку как бишкекский. */}
+          <input id="city" name="city" type="text"
+                 defaultValue={draft?.city ?? 'Бишкек'} placeholder="Бишкек" />
+        </div>
+        <div className="field">
           <label className="key" htmlFor="zone">Зона</label>
           <input id="zone" name="zone" type="text" defaultValue={draft?.zone ?? ''}
                  placeholder="Центр" />
         </div>
+      </div>
+
+      <div className="grid2">
         <div className="field">
           <label className="key" htmlFor="rooms">Комнат</label>
           <input id="rooms" name="rooms" type="text" inputMode="numeric"
@@ -159,16 +175,7 @@ export function ObjectForm({
         {draftError ? <p className="error">{draftError}</p> : null}
       </div>
 
-      <div className="field">
-        <label className="key" htmlFor="photos">Фото: по одной ссылке в строке</label>
-        <textarea id="photos" name="photos" rows={3} defaultValue={photoLines}
-                  placeholder="https://…/1.jpg" />
-        <p className="key">
-          {mode === 'edit'
-            ? 'Набор заменяется целиком. Правка фото обновит дату актуальности.'
-            : 'Загрузки файлов пока нет — только ссылки.'}
-        </p>
-      </div>
+      <PhotoUpload objectId={draft?.id ?? null} initial={photoList} />
 
       {mode === 'create' ? (
         <>

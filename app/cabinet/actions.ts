@@ -1,15 +1,17 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import { createMatch as makeMatch } from '@/lib/db/matches';
+import { attempt } from '@/lib/db/report';
 
 /**
  * Создать подбор.
  *
- * Кабинет передаёт только пару «объект + потребность». closing_agent,
- * проверку совпадения типа сделки и запрет подбора по закрытой потребности
- * делает функция create_match() в базе, а не этот код: та же проверка должна
- * работать и при прямом обращении к PostgREST.
+ * Кабинет передаёт только пару «объект + потребность». closing-агента и
+ * проверку совпадения направления сделки делает слой доступа, а не этот
+ * код: закрытие формы не должно быть единственным местом, где правило
+ * соблюдается. closing-агент при этом берётся из потребности — кто бы
+ * подбор ни создал, доля комиссии идёт тому, кто ведёт клиента.
  */
 export async function createMatch(formData: FormData) {
   const objectId = String(formData.get('object_id') ?? '');
@@ -20,17 +22,8 @@ export async function createMatch(formData: FormData) {
     return { error: 'Выберите объект и потребность.' };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('create_match', {
-    p_object_id: objectId,
-    p_requirement_id: requirementId,
-  });
-
-  if (error) {
-    // Сообщение из базы показываем как есть: там написано, какое правило
-    // не выполнено, и это полезнее любой нашей формулировки.
-    return { error: error.message };
-  }
+  const error = await attempt(() => makeMatch(objectId, requirementId));
+  if (error) return { error };
 
   revalidatePath(back);
   return { error: null };

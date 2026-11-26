@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { publicSupabaseConfig } from '@/lib/supabase/public-config';
+import { sessionAgent } from '@/lib/db/session';
 import { safeNext } from '@/lib/next-param';
 import { LoginForm } from './LoginForm';
 
@@ -12,14 +11,13 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const { next, error } = await searchParams;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const agent = await sessionAgent();
 
   // Уже вошёл — незачем показывать форму. Но если вход принёс ошибку, её
-  // надо показать: иначе причина теряется. Так и случилось на живом проекте —
-  // /auth/confirm отправлял сюда понятный текст про занятую почту, а эта
-  // строка молча уводила в кабинет, и человек видел лишь «аккаунт не найден».
-  if (user && !error) redirect(next ?? '/cabinet');
+  // надо показать: иначе причина теряется. Так уже случалось на живом
+  // проекте — маршрут входа присылал сюда понятный текст, а эта строка
+  // молча уводила в кабинет, и человек видел лишь «аккаунт не найден».
+  if (agent && !error) redirect(next ?? '/cabinet');
 
   const target = safeNext(next);
 
@@ -28,7 +26,7 @@ export default async function LoginPage({
       <h1>Вход в кабинет</h1>
       <p className="sub">Кабинет агента открывается после одобрения администратором.</p>
       {error ? <p className="error">{decodeURIComponent(error)}</p> : null}
-      <LoginForm next={target} supabase={publicSupabaseConfig()} />
+      <LoginForm next={target} />
     </>
   );
 }

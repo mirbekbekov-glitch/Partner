@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { activityFeed, dealCard } from '@/lib/db/cabinet';
 import { Activities, type ActivityRow } from '../../Activities';
 import { money, day } from '@/lib/list-params';
 import { DealActions } from '../DealActions';
@@ -10,18 +10,18 @@ export const metadata = { title: 'Сделка' };
 
 export default async function DealCard({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
 
-  const [{ data: deal }, { data: activities }] = await Promise.all([
-    supabase.from('deal_list_v').select('*').eq('id', id).maybeSingle(),
-    supabase.from('activity_feed_v').select('*')
-      .eq('entity_type', 'deal').eq('entity_id', id)
-      .order('created_at', { ascending: false }),
+  // Карточка отдаётся только стороне сделки: предикат стоит в самом
+  // запросе, поэтому постороннему приходит «не найдено», а не отказ — так
+  // по идентификатору не выясняется, что сделка существует.
+  const [deal, activities] = await Promise.all([
+    dealCard(id),
+    activityFeed('deal', id),
   ]);
 
   if (!deal) notFound();
 
-  const d = deal as {
+  const d = deal as unknown as {
     id: string; status: string; created_at: string; closed_at: string | null;
     final_price: number | null; failure_reason: string | null;
     object_id: string; requirement_id: string; match_id: string; mandate_id: string;

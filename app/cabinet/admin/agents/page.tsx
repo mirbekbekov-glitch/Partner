@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { listAgents } from '@/lib/db/agents';
 import { AgentActions } from './AgentActions';
 
 export const metadata = { title: 'Агенты' };
@@ -22,34 +22,35 @@ type Row = {
   status: string;
   created_at: string;
   organization_name: string | null;
-  org_confirmed: boolean;
+  org_confirmed: number;
   objects_count: number;
   contacts_count: number;
   requirements_count: number;
 };
 
 export default async function AgentsAdminPage() {
-  const supabase = await createClient();
+  // Проверка «только админ» — первая строка listAgents(). Раньше её делало
+  // представление с «where app.is_admin()» внутри, и не админу оно просто
+  // ничего не отдавало; теперь такой подстраховки нет, и отказ приходит
+  // исключением.
+  let rows: Row[] = [];
+  let error: string | null = null;
 
-  // admin_agents_v содержит `where app.is_admin()`, поэтому не админу
-  // представление просто пусто — отдельной проверки роли здесь не нужно,
-  // и обойти её нельзя даже прямым запросом к PostgREST.
-  const { data, error } = await supabase
-    .from('admin_agents_v')
-    .select('*')
-    .order('status', { ascending: true })
-    .order('created_at', { ascending: false });
+  try {
+    rows = await listAgents() as unknown as Row[];
+  } catch (e) {
+    error = e instanceof Error ? e.message : 'Список недоступен.';
+  }
 
   if (error) {
     return (
       <>
         <h1>Агенты</h1>
-        <p className="error">{error.message}</p>
+        <p className="error">{error}</p>
       </>
     );
   }
 
-  const rows = (data ?? []) as Row[];
   const pending = rows.filter((r) => r.status === 'pending');
   const rest = rows.filter((r) => r.status !== 'pending');
 
@@ -128,7 +129,7 @@ function AgentCard({ a }: { a: Row }) {
         status={a.status}
         role={a.role}
         hasOrg={a.organization_name !== null}
-        orgConfirmed={a.org_confirmed}
+        orgConfirmed={a.org_confirmed === 1}
       />
     </div>
   );

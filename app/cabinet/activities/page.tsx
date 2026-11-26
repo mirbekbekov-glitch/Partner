@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { myActivities, myReminders } from '@/lib/db/cabinet';
 import { ActivityRowView, KIND_RU, type ActivityRow } from '../Activities';
 
 export const metadata = { title: 'Задачи' };
@@ -18,39 +18,34 @@ const ENTITY_PATH: Record<string, string> = {
  * уже забыл.
  */
 export default async function ActivitiesPage() {
-  const supabase = await createClient();
+  let rows: ActivityRow[] = [];
+  let reminders: Array<{
+    activity_id: string; kind: string; status: string;
+    channel: string | null; last_error: string | null;
+  }> = [];
+  let failed: string | null = null;
 
-  const [{ data, error }, { data: reminders }] = await Promise.all([
-    supabase
-      .from('activity_feed_v')
-      .select('*')
-      .eq('mine', true)
-    .order('done', { ascending: true })
-    .order('due_at', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: false })
-      .limit(200),
-    // Состояние напоминаний: молчание хуже всего — агент должен видеть,
-    // отправлено ли напоминание и если нет, то почему.
-    supabase.from('my_reminders_v').select('activity_id, kind, status, channel, last_error'),
-  ]);
+  try {
+    // Состояние напоминаний рядом со списком: молчание хуже всего — агент
+    // должен видеть, отправлено ли напоминание и если нет, то почему.
+    [rows, reminders] = await Promise.all([
+      myActivities() as unknown as Promise<ActivityRow[]>,
+      myReminders(),
+    ]);
+  } catch (e) {
+    failed = e instanceof Error ? e.message : 'Не удалось загрузить задачи.';
+  }
 
-  if (error) {
+  if (failed) {
     return (
       <>
         <h1>Задачи</h1>
-        <p className="error">{error.message}</p>
+        <p className="error">{failed}</p>
       </>
     );
   }
 
-  const rows = (data ?? []) as ActivityRow[];
-
-  type Rem = {
-    activity_id: string; kind: string; status: string;
-    channel: string | null; last_error: string | null;
-  };
-  const byActivity = new Map<string, Rem>();
-  for (const r of (reminders ?? []) as Rem[]) byActivity.set(r.activity_id, r);
+  const byActivity = new Map(reminders.map((r) => [r.activity_id, r]));
   const overdue = rows.filter((r) => r.overdue);
   const dueSoon = rows.filter((r) => !r.done && !r.overdue && r.due_at);
   const noDate = rows.filter((r) => !r.done && !r.due_at);

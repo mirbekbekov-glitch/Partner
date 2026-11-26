@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { leadFeed } from '@/lib/db/cabinet';
 import { day } from '@/lib/list-params';
 import { LeadActions } from './LeadActions';
 
@@ -14,8 +14,8 @@ type Row = {
   status: 'new' | 'in_work' | 'done' | 'spam';
   created_at: string;
   agent_id: string | null;
-  objects: { address: string; price: number; currency: string } | null;
-  agents: { full_name: string } | null;
+  address: string | null;
+  agent_name: string | null;
 };
 
 const STATUS_RU: Record<string, string> = {
@@ -34,19 +34,18 @@ export default async function Leads({
   const raw = Array.isArray(sp.status) ? sp.status[0] : sp.status;
   const status = raw && raw in STATUS_RU ? raw : null;
 
-  const supabase = await createClient();
+  // Видимость стоит в самом запросе: заявки по объектам, за которые
+  // отвечает этот агент. Раньше её обеспечивала политика базы, и условия
+  // здесь не было вовсе — теперь страховки нет, поэтому предикат общий и
+  // живёт в lib/db/visibility.ts.
+  let rows: Row[] = [];
+  let error: string | null = null;
 
-  // Видимость решает политика: заявки по объектам, которые ведёт этот агент.
-  // Поэтому здесь нет ни одного условия про агента — и это намеренно.
-  let query = supabase
-    .from('leads')
-    .select('*, objects(address, price, currency), agents(full_name)')
-    .order('created_at', { ascending: false })
-    .limit(100);
-  if (status) query = query.eq('status', status);
-
-  const { data, error } = await query;
-  const rows = (data ?? []) as unknown as Row[];
+  try {
+    rows = await leadFeed(status) as unknown as Row[];
+  } catch (e) {
+    error = e instanceof Error ? e.message : 'Не удалось загрузить заявки.';
+  }
 
   return (
     <>
@@ -67,7 +66,7 @@ export default async function Leads({
         {status ? <Link href="/cabinet/leads" className="key">сбросить</Link> : null}
       </form>
 
-      {error ? <p className="error">{error.message}</p> : null}
+      {error ? <p className="error">{error}</p> : null}
 
       {rows.length === 0 ? (
         <p className="empty">
@@ -89,12 +88,12 @@ export default async function Leads({
             <div className="row" style={{ marginTop: 6 }}>
               <span className="key">объект</span>
               <Link href={`/cabinet/objects/${l.object_id}`}>
-                {l.objects?.address ?? 'объект удалён'}
+                {l.address ?? 'объект удалён'}
               </Link>
-              {l.agents ? (
+              {l.agent_name ? (
                 <>
                   <span className="key">ведёт</span>
-                  <span>{l.agents.full_name}</span>
+                  <span>{l.agent_name}</span>
                 </>
               ) : null}
             </div>

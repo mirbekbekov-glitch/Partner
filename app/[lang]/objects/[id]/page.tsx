@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { createClient } from '@/lib/supabase/server';
+import { catalogObject } from '@/lib/db/catalog';
 import { allPhotos, firstPhoto, daysSince, publicMoney } from '@/lib/catalog-params';
 import { t, kindName, freshWordIn, LOCALE, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { AGENCY_PHONES } from '@/lib/agency';
@@ -32,14 +32,21 @@ type Row = {
   actual_at: string;
 };
 
+/**
+ * Карточка объекта из витрины.
+ *
+ * Черновик и снятый объект отдают НИЧЕГО, и страница отвечает 404. Это не
+ * вежливость: иначе по прямой ссылке видна устаревшая цена, а существование
+ * черновика выясняется перебором идентификаторов.
+ */
 async function load(id: string) {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from('public_catalog_v')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-  return (data as Row | null) ?? null;
+  try {
+    return (await catalogObject(id)) as unknown as Row | null;
+  } catch {
+    // База недоступна — это не «объекта нет». Пусть страница ответит
+    // ошибкой, а не выдумает 404 о существующем объекте.
+    throw new Error('Каталог недоступен');
+  }
 }
 
 /** Дата по правилам языка: 18.11.2026, 11/18/2026, 2026/11/18.

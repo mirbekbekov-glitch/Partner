@@ -1,71 +1,57 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import {
+  approveAgent as approve, blockAgent as block,
+  confirmAgentOrganization, setAgentRole as setRole,
+} from '@/lib/db/agents';
+import { attempt } from '@/lib/db/report';
 
 type Result = { error: string | null };
 
 /**
  * Одобрение, блокировка и роль.
  *
- * Проверка «только админ» живёт в базе (app.approve_agent и соседние), а не
- * здесь: иначе её можно было бы обойти прямым запросом к PostgREST. Этот код
- * только передаёт вызов и показывает ответ.
- *
- * Имя функции написано в каждом вызове буквально, а не передано переменной:
- * tests/check-rpc.sh сверяет вызовы со схемой текстом, и через переменную
- * вызов для него невидим — а эту ошибку я уже делал.
+ * Проверка «только админ» живёт в слое доступа, а не здесь: действие формы
+ * защищает только путь через форму. Там же живёт правило, что последнего
+ * админа нельзя ни разжаловать, ни заблокировать — иначе систему можно
+ * запереть так, что одобрять агентов станет некому.
  */
 export async function approveAgent(formData: FormData): Promise<Result> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('approve_agent', {
-    p_agent_id: String(formData.get('agent_id') ?? ''),
-  });
+  const error = await attempt(() => approve(String(formData.get('agent_id') ?? '')));
   revalidatePath('/cabinet/admin/agents');
-  return { error: error ? error.message : null };
+  return { error };
 }
 
 export async function blockAgent(formData: FormData): Promise<Result> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('block_agent', {
-    p_agent_id: String(formData.get('agent_id') ?? ''),
-  });
+  const error = await attempt(() => block(String(formData.get('agent_id') ?? '')));
   revalidatePath('/cabinet/admin/agents');
-  return { error: error ? error.message : null };
+  return { error };
 }
 
 export async function setAgentRole(formData: FormData): Promise<Result> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('set_agent_role', {
-    p_agent_id: String(formData.get('agent_id') ?? ''),
-    p_role: String(formData.get('role') ?? 'agent'),
-  });
+  const error = await attempt(() => setRole(
+    String(formData.get('agent_id') ?? ''),
+    String(formData.get('role') ?? 'agent') === 'admin' ? 'admin' : 'agent',
+  ));
   revalidatePath('/cabinet/admin/agents');
-  return { error: error ? error.message : null };
+  return { error };
 }
 
 /**
  * Подтверждение принадлежности к агентству.
  *
  * Агент заявляет агентство сам — иначе он не зарегистрируется, — но
- * подтвердить может только админ. Правило держит триггер в базе, здесь
- * только вызов и перевод отказа в человеческую фразу.
+ * подтвердить может только админ. Иначе любой впишет «Этажи» и прикроется
+ * чужой репутацией.
  */
 export async function confirmAgentOrg(formData: FormData): Promise<Result> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('confirm_agent_organization', {
-    p_agent_id: String(formData.get('agent_id') ?? ''),
-    p_confirmed: formData.get('confirmed') === 'true',
-  });
-  if (error) {
-    return {
-      error: error.message.includes('BAD_INPUT')
-        ? 'Агент не указал агентство — подтверждать нечего.'
-        : error.message.includes('FORBIDDEN')
-          ? 'Подтверждать принадлежность может только администратор.'
-          : error.message,
-    };
-  }
+  const error = await attempt(() => confirmAgentOrganization(
+    String(formData.get('agent_id') ?? ''),
+    formData.get('confirmed') === 'true',
+  ));
+  if (error) return { error };
+
   revalidatePath('/cabinet/admin/agents');
   return { error: null };
 }

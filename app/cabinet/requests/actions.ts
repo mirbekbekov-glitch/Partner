@@ -1,82 +1,59 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import {
+  answerRequest as reportAnswer, closeRequest as close,
+  convertRequest as convert, releaseRequest as release, takeRequest as take,
+} from '@/lib/db/requests';
+import { attempt } from '@/lib/db/report';
 
 export type RequestActionResult = { error: string | null };
 
 /**
  * Действия над заявкой.
  *
- * Права и состояния проверяет база: take_request(), close_request() и
- * остальные знают, кто ведёт заявку и в каком она состоянии. Здесь только
- * перевод кода отказа в человеческую фразу.
+ * Права и состояния проверяет слой доступа: он знает, кто ведёт заявку и
+ * в каком она состоянии. Взятие в работу идёт одним запросом с условием
+ * «ещё не взята» — иначе два агента, нажавшие одновременно, оба увидели бы
+ * «свободна» и оба записали бы себя.
  */
-const SAY: Record<string, string> = {
-  TAKEN: 'Заявку уже взял другой агент.',
-  DENIED: 'Это чужая заявка.',
-  BAD_INPUT: 'Проверьте, что вы ввели.',
-};
-
-function say(message: string): string {
-  for (const [code, phrase] of Object.entries(SAY)) {
-    if (message.includes(code)) return phrase;
-  }
-  return message;
-}
-
-/**
- * Имя функции в каждом вызове написано БУКВАЛЬНО, а не подставлено
- * переменной. Так чуть длиннее, зато tests/check-rpc.sh видит, что именно
- * вызывает кабинет, и ловит расхождение с базой до рантайма: спрятав имена
- * за общий помощник, я сломал эту сверку и узнал бы о переименованной
- * функции только от агента, у которого упала страница.
- */
-function done(error: { message: string } | null): RequestActionResult {
-  if (error) return { error: say(error.message) };
+function touch(): void {
   revalidatePath('/cabinet/requests');
   revalidatePath('/cabinet');
-  return { error: null };
 }
 
 export async function takeRequest(formData: FormData): Promise<RequestActionResult> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('take_request', {
-    p_id: String(formData.get('id') ?? ''),
-  });
-  return done(error);
+  const error = await attempt(() => take(String(formData.get('id') ?? '')));
+  touch();
+  return { error };
 }
 
 export async function releaseRequest(formData: FormData): Promise<RequestActionResult> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('release_request', {
-    p_id: String(formData.get('id') ?? ''),
-  });
-  return done(error);
+  const error = await attempt(() => release(String(formData.get('id') ?? '')));
+  touch();
+  return { error };
 }
 
 export async function answerRequest(formData: FormData): Promise<RequestActionResult> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('answer_request', {
-    p_id: String(formData.get('id') ?? ''),
-    p_note: String(formData.get('note') ?? ''),
-  });
-  return done(error);
+  const error = await attempt(() => reportAnswer(String(formData.get('id') ?? '')));
+  touch();
+  return { error };
 }
 
 export async function closeRequest(formData: FormData): Promise<RequestActionResult> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('close_request', {
-    p_id: String(formData.get('id') ?? ''),
-    p_reason: String(formData.get('reason') ?? ''),
-  });
-  return done(error);
+  const error = await attempt(() => close(
+    String(formData.get('id') ?? ''),
+    String(formData.get('reason') ?? 'other') as Parameters<typeof close>[1],
+  ));
+  touch();
+  return { error };
 }
 
+/** Превращение заявки в клиента и потребность: отсюда начинается работа CRM. */
 export async function convertRequest(formData: FormData): Promise<RequestActionResult> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('convert_request', {
-    p_id: String(formData.get('id') ?? ''),
-  });
-  return done(error);
+  const error = await attempt(() => convert(String(formData.get('id') ?? '')));
+  touch();
+  revalidatePath('/cabinet/contacts');
+  revalidatePath('/cabinet/requirements');
+  return { error };
 }
