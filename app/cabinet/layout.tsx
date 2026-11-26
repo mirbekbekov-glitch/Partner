@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { sessionAgent } from '@/lib/db/session';
 import { getAgent, listOrganizations } from '@/lib/db/agents';
 import { SignOutButton } from './SignOutButton';
+import { CabinetSidebar } from './CabinetSidebar';
+import './cabinet.css';
 import { ProfileForm } from './profile/ProfileForm';
 
 /**
@@ -76,26 +77,14 @@ export default async function CabinetLayout({ children }: { children: React.Reac
   }
 
   return (
-    <>
-      <nav className="topbar">
-        <span className="who">
-          <Link href="/cabinet">Кабинет</Link>
-          <Link href="/cabinet/contacts">Контакты</Link>
-          <Link href="/cabinet/objects">Объекты</Link>
-          <Link href="/cabinet/requirements">Потребности</Link>
-          <Link href="/cabinet/deals">Сделки</Link>
-          <Link href="/cabinet/activities">Задачи</Link>
-          <Link href="/cabinet/leads">По объектам</Link>
-          <Link href="/cabinet/requests">Заявки</Link>
-        </span>
-        {agent.role === 'admin' ? <Link href="/cabinet/admin/agents">Агенты</Link> : null}
-        {agent.role === 'admin' ? <Link href="/cabinet/admin/photos">Миниатюры</Link> : null}
-        <Link href="/cabinet/profile">{agent.full_name}</Link>
-        {agent.role === 'admin' ? <span className="tag">админ</span> : null}
-        <SignOutButton />
-      </nav>
-      {children}
-    </>
+    <div className="crm-shell">
+      <CabinetSidebar
+        fullName={agent.full_name}
+        isAdmin={agent.role === 'admin'}
+        footer={<SignOutButton />}
+      />
+      <div className="crm-content">{children}</div>
+    </div>
   );
 }
 
