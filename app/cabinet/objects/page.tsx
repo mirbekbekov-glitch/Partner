@@ -112,7 +112,7 @@ export default async function ObjectsList({
         </select>
         <button type="submit">Фильтр</button>
         {f.deal || f.state || f.zone || f.q || f.src ? (
-          <Link href="/cabinet/objects" className="key">сбросить</Link>
+          <Link href="/cabinet/objects" className="key reset">сбросить</Link>
         ) : null}
       </form>
 
@@ -123,61 +123,74 @@ export default async function ObjectsList({
             : 'Под эти условия ничего не подошло. Попробуйте ослабить фильтр.'}
         </p>
       ) : (
-        rows.map((o) => (
-          <div className="card" key={o.id}>
-            <div className="row">
-              <Link href={`/cabinet/objects/${o.id}`}>
-                <strong>{o.address}</strong>
-              </Link>
-              <span className="tag">{STATE_RU[o.publication_state] ?? o.publication_state}</span>
-              <span>{money(o.price, o.currency)}</span>
-              <span className="key">{o.deal_type === 'sale' ? 'продажа' : 'аренда'}</span>
-            </div>
-
-            <div className="row" style={{ marginTop: 6 }}>
-              {o.zone ? <span className="key">{o.zone}</span> : null}
-              {o.rooms ? <span>{o.rooms} комн.</span> : null}
-              {o.area ? <span>{o.area} м²</span> : null}
-              {o.floor ? <span className="key">этаж {o.floor}</span> : null}
-              <span className="key">актуально на</span>
-              <span>{day(o.actual_at)}</span>
-            </div>
-
-            <div className="row" style={{ marginTop: 6 }}>
-              <span className="key">собственник</span>
-              {o.owners ? (
-                <span>{o.owners}</span>
-              ) : (
-                <span className="hidden-contact">скрыт</span>
-              )}
-              <span className="key">ведёт</span>
-              <span>
-                {o.responsible_name ?? '—'}
-                {o.responsible_org_name ? ` · ${o.responsible_org_name}` : ' · частный агент'}
-              </span>
-              <span className="key">подборов</span>
-              <span>{o.matches_count}</span>
-              <span className="key">комиссия</span>
-              <span>{money(o.commission_total, o.currency)}</span>
-            </div>
-
-            {/* Состояние мандата важнее остального: без активного объект
-                нельзя опубликовать. */}
-            <div className="row" style={{ marginTop: 6 }}>
-              {!o.active_mandate_id ? (
-                <span className="warn">нет активного мандата — публикация невозможна</span>
-              ) : (
-                <>
-                  <span className="key">мандат</span>
-                  <span>{o.listing_agent_name ?? '—'}</span>
-                  {o.contract_confirmed === false ? (
-                    <span className="warn">договор требует подтверждения</span>
-                  ) : null}
-                </>
-              )}
-            </div>
-          </div>
-        ))
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Адрес</th>
+                <th>Сделка</th>
+                <th>Состояние</th>
+                <th className="num">Цена</th>
+                <th className="num">Комиссия</th>
+                <th className="num">Подборов</th>
+                <th>Собственник</th>
+                <th>Ведёт</th>
+                <th>Актуально</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((o) => (
+                <tr key={o.id}>
+                  <td>
+                    <Link className="tbl-main" href={`/cabinet/objects/${o.id}`}>
+                      {o.address}
+                    </Link>
+                    <span className="tbl-sub">
+                      {[
+                        o.zone,
+                        o.rooms ? `${o.rooms} комн.` : null,
+                        o.area ? `${o.area} м²` : null,
+                        o.floor ? `этаж ${o.floor}` : null,
+                      ].filter(Boolean).join(' · ') || 'без характеристик'}
+                    </span>
+                  </td>
+                  <td data-l="Сделка">{o.deal_type === 'sale' ? 'продажа' : 'аренда'}</td>
+                  <td data-l="Состояние">
+                    <span className="tag">
+                      {STATE_RU[o.publication_state] ?? o.publication_state}
+                    </span>
+                    {/* Состояние мандата важнее остального: без активного
+                        объект нельзя опубликовать. */}
+                    {!o.active_mandate_id ? (
+                      <span className="tbl-note">
+                        <span className="warn">нет активного мандата</span>
+                      </span>
+                    ) : o.contract_confirmed === false ? (
+                      <span className="tbl-note">
+                        <span className="warn">договор требует подтверждения</span>
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="num" data-l="Цена">{money(o.price, o.currency)}</td>
+                  <td className="num" data-l="Комиссия">
+                    {money(o.commission_total, o.currency)}
+                  </td>
+                  <td className="num" data-l="Подборов">{o.matches_count}</td>
+                  <td data-l="Собственник">
+                    {o.owners ?? <span className="hidden-contact">скрыт</span>}
+                  </td>
+                  <td data-l="Ведёт">
+                    {o.responsible_name ?? '—'}
+                    <span className="tbl-sub">
+                      {o.responsible_org_name ?? 'частный агент'}
+                    </span>
+                  </td>
+                  <td className="nowrap" data-l="Актуально">{day(o.actual_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <Pager base="/cabinet/objects" filters={f} total={count ?? 0} />

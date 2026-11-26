@@ -195,3 +195,101 @@ form.stack.card { max-width: 760px; }
   .topbar { flex-wrap: wrap; gap: 10px; }
   .topbar .who { margin-right: 0; gap: 12px; }
 }
+
+/* ── Таблицы списков ─────────────────────────────────────── */
+/*
+ * Списки кабинета — это таблицы, а не карточки: агент сравнивает строки
+ * между собой (цена, комиссия, подборы), а в карточках те же числа стоят
+ * в разных местах, и взгляду не за что зацепиться.
+ *
+ * Шапка не липкая намеренно: обёртка со своей прокруткой перехватила бы
+ * position: sticky у строки заголовка, и она «прилипала» бы к невидимой
+ * границе обёртки вместо верха экрана.
+ */
+.tbl-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+.tbl th,
+.tbl td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.tbl thead th {
+  background: var(--sunk);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+
+.tbl tbody tr:last-child td { border-bottom: 0; }
+.tbl tbody tr:hover td { background: var(--sunk); }
+
+/* Числа моноширинным и по правому краю: так разряды выстраиваются в
+   колонку и суммы можно сравнивать взглядом, не читая цифры. */
+.tbl .num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.tbl th.num { font-family: inherit; }
+.tbl .nowrap { white-space: nowrap; }
+
+/* Первая колонка — то, по чему строку узнают: ей отдаётся место раньше
+   остальных, иначе адрес переносится, пока соседние колонки пустуют. */
+.tbl th:first-child, .tbl td:first-child { min-width: 200px; }
+
+.tbl-main { font-weight: 700; }
+.tbl-sub { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.tbl-note { display: block; margin-top: 4px; }
+
+/* Узкий экран: таблица разбирается на карточки. Горизонтальная прокрутка
+   девяти колонок на телефоне нечитаема, а подписи колонок подставляются
+   из data-l — разметка остаётся одна. */
+@media (max-width: 760px) {
+  .tbl-wrap { overflow: visible; border: 0; background: none; border-radius: 0; }
+  .tbl, .tbl tbody, .tbl tr, .tbl td { display: block; }
+  .tbl thead { display: none; }
+  .tbl tr {
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--panel);
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  .tbl tbody tr:hover td { background: none; }
+  .tbl td { border: 0; padding: 2px 0; }
+  .tbl td[data-l]::before {
+    content: attr(data-l) ": ";
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .tbl .num { text-align: left; }
+  .tbl td:first-child { min-width: 0; }
+  /* В ячейке с подписью пояснение дописывается в ту же строку, а в первой —
+     остаётся отдельной строкой: там оно идёт сразу за названием, и без
+     переноса слиплось бы с ним. */
+  .tbl td[data-l] .tbl-sub { display: inline; margin: 0; }
+  .tbl td[data-l] .tbl-sub::before { content: " · "; }
+}
+
+/* ── Полоса фильтров ─────────────────────────────────────── */
+/* Отдельная панель, а не линия под полями: над таблицей линия читается
+   как её же граница. */
+.filters {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  row-gap: 8px;
+}
+.filters .reset { margin-left: auto; }

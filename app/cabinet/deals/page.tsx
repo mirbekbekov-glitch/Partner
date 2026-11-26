@@ -66,71 +66,87 @@ export default async function DealsList() {
           потребности.
         </p>
       ) : (
-        open.map((d) => <DealRow key={d.id} d={d} />)
+        <DealTable rows={open} />
       )}
 
       {done.length > 0 ? (
         <>
           <h2>Завершённые ({done.length})</h2>
-          {done.map((d) => <DealRow key={d.id} d={d} />)}
+          <DealTable rows={done} />
         </>
       ) : null}
     </>
   );
 }
 
-function DealRow({ d }: { d: Row }) {
+/**
+ * Таблица сделок.
+ *
+ * Колонок много, и это намеренно: сделку читают по деньгам — цена,
+ * комиссия, доли сторон, — а их сравнивают между строками. На узком экране
+ * таблица разбирается на карточки силами cabinet.css.
+ */
+function DealTable({ rows }: { rows: Row[] }) {
   return (
-    <div className="card">
-      <div className="row">
-        <Link href={`/cabinet/deals/${d.id}`}>
-          <strong>{d.address}</strong>
-        </Link>
-        <span className="tag">{DEAL_STATUS_RU[d.status] ?? d.status}</span>
-        <span className="key">{d.deal_type === 'sale' ? 'продажа' : 'аренда'}</span>
-        {!d.can_act ? <span className="key">вы не участник</span> : null}
-      </div>
-
-      <div className="row" style={{ marginTop: 6 }}>
-        <span className="key">клиент</span>
-        {d.client_name ? <span>{d.client_name}</span> : <span className="hidden-contact">скрыт</span>}
-        <span className="key">listing</span>
-        <span>{d.listing_agent_name ?? '—'}</span>
-        <span className="key">closing</span>
-        <span>{d.closing_agent_name ?? '—'}</span>
-      </div>
-
-      <div className="row" style={{ marginTop: 6 }}>
-        <span className="key">{d.status === 'closed' ? 'финальная цена' : 'цена объекта'}</span>
-        <span>{money(d.final_price ?? d.object_price, d.currency)}</span>
-        <span className="key">комиссия</span>
-        <span>
-          {money(d.commission_total, d.currency)}
-          {d.is_indicative ? ' (индикативно)' : ''}
-        </span>
-        <span className="key">доли</span>
-        <span>
-          {money(d.listing_share, d.currency)} / {money(d.closing_share, d.currency)}
-        </span>
-      </div>
-
-      {d.failure_reason ? (
-        <div className="row" style={{ marginTop: 6 }}>
-          <span className="key">причина срыва</span>
-          <span>{d.failure_reason}</span>
-        </div>
-      ) : null}
-
-      <div className="row" style={{ marginTop: 6 }}>
-        <span className="key">начата</span>
-        <span>{day(d.created_at)}</span>
-        {d.closed_at ? (
-          <>
-            <span className="key">завершена</span>
-            <span>{day(d.closed_at)}</span>
-          </>
-        ) : null}
-      </div>
+    <div className="tbl-wrap">
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Объект</th>
+            <th>Статус</th>
+            <th>Клиент</th>
+            <th>Listing</th>
+            <th>Closing</th>
+            <th className="num">Цена</th>
+            <th className="num">Комиссия</th>
+            <th className="num">Доли</th>
+            <th>Начата</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((d) => (
+            <tr key={d.id}>
+              <td>
+                <Link className="tbl-main" href={`/cabinet/deals/${d.id}`}>
+                  {d.address}
+                </Link>
+                <span className="tbl-sub">
+                  {d.deal_type === 'sale' ? 'продажа' : 'аренда'}
+                  {!d.can_act ? ' · вы не участник' : ''}
+                </span>
+              </td>
+              <td data-l="Статус">
+                <span className="tag">{DEAL_STATUS_RU[d.status] ?? d.status}</span>
+                {d.failure_reason ? (
+                  <span className="tbl-sub">{d.failure_reason}</span>
+                ) : null}
+              </td>
+              <td data-l="Клиент">
+                {d.client_name ?? <span className="hidden-contact">скрыт</span>}
+              </td>
+              <td data-l="Listing">{d.listing_agent_name ?? '—'}</td>
+              <td data-l="Closing">{d.closing_agent_name ?? '—'}</td>
+              <td className="num" data-l={d.status === 'closed' ? 'Финальная цена' : 'Цена объекта'}>
+                {money(d.final_price ?? d.object_price, d.currency)}
+              </td>
+              <td className="num" data-l="Комиссия">
+                {money(d.commission_total, d.currency)}
+                {d.is_indicative ? <span className="tbl-sub">индикативно</span> : null}
+              </td>
+              <td className="num" data-l="Доли">
+                {money(d.listing_share, d.currency)}
+                <span className="tbl-sub">/ {money(d.closing_share, d.currency)}</span>
+              </td>
+              <td className="nowrap" data-l="Начата">
+                {day(d.created_at)}
+                {d.closed_at ? (
+                  <span className="tbl-sub">завершена {day(d.closed_at)}</span>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
