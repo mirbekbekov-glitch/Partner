@@ -19,6 +19,7 @@ type Row = {
   kind: string;
   deal_type: 'rent' | 'sale';
   address: string;
+  city: string;
   zone: string | null;
   rooms: number | null;
   area: number | null;
@@ -115,6 +116,11 @@ export default async function PublicObject({
     ...(o.rooms ? [[d.roomsLabel, String(o.rooms)] as [string, string]] : []),
     ...(o.area ? [[d.areaLabel, `${o.area} ${d.sqm}`] as [string, string]] : []),
     ...(o.floor ? [[d.floorLabel, `${o.floor}${o.floors_total ? ` ${d.floorOf} ${o.floors_total}` : ''}`] as [string, string]] : []),
+    // Город здесь показывается ВСЕГДА, в отличие от карточки в списке.
+    // Страница про один объект, и повторения не возникает; зато человек,
+    // пришедший по ссылке из переписки или с площадки, видит город сразу,
+    // а не угадывает его по названию улицы.
+    [d.cityLabel, o.city],
     ...(o.zone ? [[d.zoneLabel, o.zone] as [string, string]] : []),
     [d.published, dateIn(lang, o.published_at)],
   ];

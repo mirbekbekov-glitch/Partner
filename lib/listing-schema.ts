@@ -21,6 +21,7 @@ type Listing = {
   kind: string;
   deal_type: 'rent' | 'sale';
   address: string;
+  city: string;
   zone: string | null;
   rooms: number | null;
   area: number | null;
@@ -64,7 +65,10 @@ export function listingSchema(o: Listing, lang: string, title: string) {
     address: {
       '@type': 'PostalAddress',
       streetAddress: o.address,
-      addressLocality: 'Бишкек',
+      // Город из объекта, а не из константы. Константа здесь была той же
+      // ошибкой, что и в выгрузке на площадки: объект из Оша поисковик
+      // увидел бы бишкекским — и показал бы его не тем людям.
+      addressLocality: o.city,
       addressCountry: 'KG',
       ...(o.zone ? { addressRegion: o.zone } : {}),
     },

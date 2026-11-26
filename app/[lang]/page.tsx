@@ -41,6 +41,7 @@ type Row = {
   kind: string;
   deal_type: 'rent' | 'sale';
   address: string;
+  city: string;
   zone: string | null;
   rooms: number | null;
   area: number | null;
@@ -214,6 +215,7 @@ export default async function Catalog({
   // Города нужны даже когда выдача не открылась: пульт должен выглядеть
   // одинаково, иначе при сбое каталога у человека молча пропадёт фильтр.
   const cities = failed ? [] : await catalogCities();
+  const manyCities = cities.length > 1;
   const zoneCounts = failed ? [] : await catalogZoneCounts(deal);
   const byZone = new Map(zoneCounts.map((z) => [z.zone, z.n]));
   const zones = zoneCounts.slice(0, 8).map((z) => z.zone);
@@ -322,6 +324,13 @@ export default async function Catalog({
                     <span className="addr">{o.address}</span>
                     <div className="facts">
                       <span className="fact">{kind.charAt(0).toUpperCase() + kind.slice(1)}</span>
+                      {/* Город — только когда городов в каталоге несколько.
+                          То же правило, что и у фильтра: «Бишкек» на каждой
+                          из десяти карточек это десять раз одно и то же
+                          слово, которое ничего не различает. А когда
+                          городов несколько, без него два одинаковых адреса
+                          не различить вовсе. */}
+                      {manyCities ? <span className="fact">{o.city}</span> : null}
                       {o.zone ? <span className="fact">{o.zone}</span> : null}
                       {o.rooms ? <span className="fact num">{o.rooms} {d.roomsShort}</span> : null}
                       {o.area ? <span className="fact num">{o.area} {d.sqm}</span> : null}

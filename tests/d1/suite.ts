@@ -36,6 +36,7 @@ import { feedXml } from '@/lib/feed';
 import {
   catalogHref, hasAnyFilter, parseCatalogFilters,
 } from '@/lib/catalog-params';
+import { listingSchema } from '@/lib/listing-schema';
 import {
   cabinetCounters, contactList, contactObjects, dealList, objectCard,
   objectList, requirementList,
@@ -974,6 +975,17 @@ export default {
     check('пустой город за фильтр не считается',
       parseCatalogFilters({ city: '  ' }).city === null
       && !hasAnyFilter(parseCatalogFilters({ city: '  ' })));
+
+    // Разметка для поисковика. Город там был зашит константой — той же
+    // ошибкой, что и в выгрузке: объект из Оша поисковик увидел бы
+    // бишкекским и показал бы его не тем людям.
+    const oshItem = await catalogObject(osh.id);
+    const schema = JSON.stringify(
+      listingSchema(oshItem as never, 'ru', 'Ленина 10'),
+    );
+    check('поисковик видит настоящий город объекта',
+      schema.includes('"addressLocality":"Ош"'));
+    check('и не видит зашитого Бишкека', !schema.includes('Бишкек'));
 
     await withdrawObject(osh.id);
 
