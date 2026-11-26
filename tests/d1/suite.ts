@@ -1303,7 +1303,7 @@ export default {
     await loginAs(db, vera);
     const veraContact = await createContact({ name: 'Клиент Веры', phone: '0500 44 55 66' });
 
-    const veraSees = await contactList();
+    const veraSees = (await contactList()).rows;
     check('чужих контактов в списке нет',
       !veraSees.some((c) => c.id === annaContact.id),
       `видно ${veraSees.length} контактов`);
@@ -1312,7 +1312,7 @@ export default {
 
     // Объект виден всем — его ведёт коллега, это нормально, — но имя
     // собственника и право правки нет.
-    const veraObjects = await objectList();
+    const veraObjects = (await objectList()).rows;
     const foreign = veraObjects.find((o) => o.id === annaObject.id);
     check('чужой объект в списке виден', Boolean(foreign));
     check('имя собственника чужого объекта закрыто',
@@ -1320,7 +1320,7 @@ export default {
     check('править чужой объект нельзя', foreign?.can_edit === false);
 
     await loginAs(db, anna);
-    const annaObjects = await objectList();
+    const annaObjects = (await objectList()).rows;
     const own = annaObjects.find((o) => o.id === annaObject.id);
     check('своего собственника видно', own?.owner_name === 'Клиент Анны-2');
     check('свой объект править можно', own?.can_edit === true);
@@ -1345,7 +1345,7 @@ export default {
     await loginAs(db, boris);
     await db.prepare(`update agents set status = 'approved' where id = ?`).bind(boris).run();
     await loginAs(db, boris);
-    const needs = await requirementList();
+    const needs = (await requirementList()).rows;
     const someoneElse = needs.find((r) => r.agent_id !== boris);
     check('чужая потребность видна',
       needs.length > 0 && someoneElse !== undefined);

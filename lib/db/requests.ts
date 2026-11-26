@@ -183,8 +183,33 @@ export type RequestFeedItem = Omit<RequestRow, 'phone'> & {
  * моя или чужая. Считать это на странице значило бы повторять правило в
  * каждом месте, где показывается кнопка «Взять».
  */
-export async function requestFeed(tab: 'open' | 'mine' | 'all' | 'closed' = 'open'):
-  Promise<RequestFeedItem[]> {
+/**
+ * Сколько открытых заявок просрочено и сколько свободно.
+ *
+ * Считается в базе, а не по загруженной странице: страница показывает
+ * двадцать строк, а норматив нарушают все, и число должно быть честным.
+ */
+export async function requestCounts(): Promise<{ overdue: number; free: number }> {
+  await requireAgent();
+  const deadline = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  const row = await one<{ overdue: number; free: number }>(
+    `select
+       sum(case when r.first_response_at is null and r.created_at < ?1
+                then 1 else 0 end) as overdue,
+       sum(case when r.agent_id is null then 1 else 0 end) as free
+     from requests r
+     where r.status in ('new', 'in_work')`,
+    deadline,
+  );
+
+  return { overdue: row?.overdue ?? 0, free: row?.free ?? 0 };
+}
+
+export async function requestFeed(
+  tab: 'open' | 'mine' | 'all' | 'closed' = 'open',
+  page?: number | null,
+): Promise<{ rows: RequestFeedItem[]; total: number }> {
   const agent = await requireAgent();
   const admin = await isAdmin();
 
@@ -198,19 +223,23 @@ export async function requestFeed(tab: 'open' | 'mine' | 'all' | 'closed' = 'ope
   // не нужна, и это должно быть видно сразу.
   const deadline = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
+  const size = 20;
+  const p = Math.min(Math.max(Math.trunc(page ?? 1) || 1, 1), 100_000);
+
   const rows = await all<RequestRow & {
-    district_name: string | null; agent_name: string | null;
+    district_name: string | null; agent_name: string | null; total_count: number;
   }>(
-    `select r.*, d.name as district_name, ag.full_name as agent_name
+    `select r.*, d.name as district_name, ag.full_name as agent_name,
+            count(*) over () as total_count
        from requests r
        left join districts d on d.id = r.district_id
        left join agents ag on ag.id = r.agent_id
       where ${where}
-      order by r.created_at desc limit 200`,
+      order by r.created_at desc limit ${size} offset ${(p - 1) * size}`,
     agent.id,
   );
 
-  return rows.map((row) => ({
+  const items = rows.map((row) => ({
     ...row,
     phone: admin || row.agent_id === agent.id || row.public_consent === 1
       ? row.phone
@@ -229,6 +258,8 @@ export async function requestFeed(tab: 'open' | 'mine' | 'all' | 'closed' = 'ope
     )),
     public_consent_flag: row.public_consent === 1,
   }));
+
+  return { rows: items, total: rows[0]?.total_count ?? 0 };
 }
 
 /**
