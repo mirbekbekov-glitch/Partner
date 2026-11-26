@@ -30,6 +30,7 @@ import {
   putThumb, readPhoto, sniff,
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
+import { feedXml } from '@/lib/feed';
 import {
   cabinetCounters, contactList, contactObjects, dealList, objectCard,
   objectList, requirementList,
@@ -785,6 +786,84 @@ export default {
       (await catalogObject(hidden.id)) === null);
     check('опубликованный по прямой ссылке отдаётся',
       (await catalogObject(shown.id))?.id === shown.id);
+
+    // -----------------------------------------------------------------
+    // Фид для площадок
+    // -----------------------------------------------------------------
+    // Коннекторов к house.kg и lalafo нет: открытой документации по их
+    // выгрузке не существует, и писать код к неизвестному формату — это
+    // код, который выглядит готовым и рассыпается при встрече с
+    // площадкой. Вместо этого постоянный адрес с файлом в общепринятом
+    // формате: ссылку отдают площадке, дальше она читает сама.
+    //
+    // Фид уходит наружу целиком и навсегда. Забрать из него поле нельзя,
+    // поэтому проверяется прежде всего состав, а не разметка.
+
+    await updateObject(shown.id, {
+      description: 'Светлая «трёшка» < 5 минут до парка & школы',
+      photos: ['/photos/objects/x/y.jpg', 'https://чужой.хостинг/1.jpg'],
+    });
+
+    const feed = await feedXml('https://liberterra.kg');
+
+    check('опубликованный объект в фиде есть', feed.includes(shown.id));
+    check('черновика в фиде нет', !feed.includes(hidden.id));
+
+    // То же, что и для витрины, но строже: здесь утечка необратима.
+    check('в фиде нет ни агента, ни собственника, ни телефона',
+      !feed.includes(anna) && !feed.includes('Собственник витрины')
+      && !feed.includes('0555 12 13 14'));
+
+    // Описание пишет человек, и «<» в нём — обычное дело. Без
+    // экранирования одна скобка ломает весь файл, а не одно объявление.
+    check('угловая скобка и амперсанд из описания экранированы',
+      feed.includes('&lt; 5 минут') && feed.includes('&amp; школы')
+      && !feed.includes('< 5 минут'));
+
+    // Файл читает чужой сервер: «/photos/…» он не разрешит.
+    check('свой снимок стал полным адресом',
+      feed.includes('https://liberterra.kg/photos/objects/x/y.jpg'));
+    check('чужая ссылка осталась как есть',
+      feed.includes('https://чужой.хостинг/1.jpg'));
+
+    // Тип сделки на языке площадки.
+    check('продажа названа продажей', feed.includes('<type>продажа</type>'));
+    check('вид объекта переведён', feed.includes('<category>квартира</category>'));
+
+    // Аренда и продажа должны называться по-разному. Проверка на одну
+    // продажу этого не ловит: мутация «всё — продажа» проходит молча.
+    const rented = await createObject({
+      kind: 'house', deal_type: 'rent', address: 'Дачная 7',
+      price_minor: 40_000,
+    });
+    await createMandate({ object_id: rented.id, kind: 'non_exclusive' });
+    await publishObject(rented.id);
+
+    const both = await feedXml('https://liberterra.kg');
+    check('аренда названа арендой, а не продажей',
+      both.includes('<type>аренда</type>') && both.includes('<type>продажа</type>'));
+    check('дом назван домом', both.includes('<category>дом</category>'));
+
+    await withdrawObject(rented.id);
+
+    // Коммерческий объект в выгрузку НЕ попадает: точного значения для
+    // него в справочнике я проверить не смог, а выдуманное сделало бы
+    // невалидным весь файл, а не одну запись. Записано в README.
+    const commercial = await createObject({
+      kind: 'commercial', deal_type: 'rent', address: 'Торговая 1',
+      price_minor: 2_000_000,
+    });
+    await createMandate({ object_id: commercial.id, kind: 'non_exclusive' });
+    await publishObject(commercial.id);
+
+    const withCommercial = await feedXml('https://liberterra.kg');
+    check('коммерческий объект в фид не попадает',
+      !withCommercial.includes(commercial.id));
+    check('а в витрине он при этом есть — значит дело в фиде, а не в публикации',
+      (await catalogPage({})).items.some((i) => i.id === commercial.id));
+
+    await withdrawObject(commercial.id);
+    await updateObject(shown.id, { description: null, photos: [] });
 
     // Поиск: кыргызские буквы в обоих написаниях.
     const byKg = await catalogPage({ q: 'Чүй' });
