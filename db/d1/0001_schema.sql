@@ -234,7 +234,12 @@ create table if not exists objects (
 create index if not exists objects_published_idx on objects (publication_state, actual_at)
   where publication_state = 'published';
 create index if not exists objects_creator_idx   on objects (created_by_agent_id);
-create index if not exists objects_city_idx      on objects (city);
+-- Индекс по city живёт в 0003, рядом с ALTER, а не здесь. Причина стоила
+-- упавшей выкладки: таблица создаётся через IF NOT EXISTS, и на уже
+-- существующей базе этот файл не добавляет ничего — колонка приходит
+-- только из 0003. Индекс же выполнялся бы раньше неё и падал с «no such
+-- column: city». Правило простое: всё, что зависит от новой колонки,
+-- живёт в той же миграции, что и сама колонка.
 
 create table if not exists object_ownerships (
   object_id  text not null references objects  (id) on delete cascade,
