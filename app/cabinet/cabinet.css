@@ -402,3 +402,9 @@ form.stack.card { max-width: 760px; }
 .avatar.none {
   display: inline-block;
 }
+
+/* Выданная ссылка-приглашение. Поле во всю ширину: ссылка длинная, и
+   обрезанная по середине читается как сломанная. */
+.invite-out { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.invite-out input { width: 100%; font-size: 13px; }
+.invite-out .tag { margin-left: 8px; }
