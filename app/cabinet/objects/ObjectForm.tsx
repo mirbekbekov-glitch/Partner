@@ -96,10 +96,12 @@ export function ObjectForm({
         </div>
       </div>
 
-      <div className="field">
-        <label className="key" htmlFor="address">Адрес</label>
-        <input id="address" name="address" type="text" required
-               defaultValue={draft?.address ?? ''} placeholder="Чүй 120, кв. 5" />
+      <div className="grid2">
+        <div className="field s4">
+          <label className="key" htmlFor="address">Адрес</label>
+          <input id="address" name="address" type="text" required
+                 defaultValue={draft?.address ?? ''} placeholder="Чүй 120, кв. 5" />
+        </div>
       </div>
 
       <div className="grid2">
@@ -136,22 +138,22 @@ export function ObjectForm({
       </div>
 
       <div className="grid2">
-        <div className="field">
+        <div className="field s1">
           <label className="key" htmlFor="rooms">Комнат</label>
           <input id="rooms" name="rooms" type="text" inputMode="numeric"
                  defaultValue={draft?.rooms ?? ''} />
         </div>
-        <div className="field">
+        <div className="field s1">
           <label className="key" htmlFor="area">Площадь, м²</label>
           <input id="area" name="area" type="text" inputMode="decimal"
                  defaultValue={draft?.area ?? ''} />
         </div>
-        <div className="field">
+        <div className="field s1">
           <label className="key" htmlFor="floor">Этаж</label>
           <input id="floor" name="floor" type="text" inputMode="numeric"
                  defaultValue={draft?.floor ?? ''} />
         </div>
-        <div className="field">
+        <div className="field s1">
           <label className="key" htmlFor="floors_total">Этажей в доме</label>
           <input id="floors_total" name="floors_total" type="text" inputMode="numeric"
                  defaultValue={draft?.floors_total ?? ''} />
@@ -208,16 +210,16 @@ export function ObjectForm({
                 <option value="non_exclusive">неэксклюзив</option>
               </select>
             </div>
-            <div className="field">
+            <div className="field s1">
               <label className="key" htmlFor="mandate_valid_to">Срок до</label>
               <input id="mandate_valid_to" name="mandate_valid_to" type="date" />
             </div>
-            <div className="field">
+            <div className="field s1">
               <label className="key" htmlFor="mandate_start_price">Стартовая цена</label>
               <input id="mandate_start_price" name="mandate_start_price" type="text"
                      inputMode="decimal" placeholder="как цена объекта" />
             </div>
-            <div className="field">
+            <div className="field s4">
               <label className="key" htmlFor="document_url">Ссылка на документ</label>
               <input id="document_url" name="document_url" type="url" />
             </div>

@@ -80,12 +80,12 @@ export function RequirementForm({
 
       <h2>Условия</h2>
       <div className="grid2">
-        <div className="field">
+        <div className="field s1">
           <label className="key" htmlFor="budget_min">Бюджет от</label>
           <input id="budget_min" name="budget_min" type="text" inputMode="decimal"
                  defaultValue={draft?.budget_min ?? ''} />
         </div>
-        <div className="field">
+        <div className="field s1">
           <label className="key" htmlFor="budget_max">Бюджет до</label>
           <input id="budget_max" name="budget_max" type="text" inputMode="decimal"
                  defaultValue={draft?.budget_max ?? ''} />
@@ -96,13 +96,13 @@ export function RequirementForm({
                  defaultValue={(draft?.zones ?? []).join(', ')} placeholder="Центр, Юг" />
           <p className="key">Через запятую.</p>
         </div>
-        <div className="field">
+        <div className="field s1">
           <label className="key" htmlFor="rooms">Комнат</label>
           <input id="rooms" name="rooms" type="text"
                  defaultValue={(draft?.rooms ?? []).join(', ')} placeholder="2, 3" />
           <p className="key">Через запятую.</p>
         </div>
-        <div className="field">
+        <div className="field s1">
           <label className="key" htmlFor="deadline">Срок</label>
           <input id="deadline" name="deadline" type="date" defaultValue={draft?.deadline ?? ''} />
         </div>
