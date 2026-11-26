@@ -36,8 +36,13 @@
   /* Свет за курсором: на светлом фоне он осветляет заметно, на тёмном
      почти неразличим — там яркое пятно читается как клякса. */
   --glow: rgba(255,255,255,.85);
-  /* Красный ярче фирменного — для тёмного фона и наведения. */
+  /* Красный ярче фирменного — для текста на тёмных полосах (заголовок
+     героя, надзаголовок призыва, ссылки в подвале). */
   --accent-2: #E0453F;
+  /* Наведение на кнопке с фирменной заливкой. ТЕМНЕЕ фирменного, а не
+     светлее: кнопка подписана белым, и на прежнем светлом #E0453F он давал
+     4.12 : 1. Здесь 7.15 : 1, и кнопка при этом заметно меняется. */
+  --accent-hover: #A62724;
   /* Цифры моноширинным: цена, площадь и этаж выстраиваются в колонку, и
      карточки перестают «плясать». */
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -50,6 +55,10 @@
   --warn-bg: #fff6e5;
   --hidden-fg: #6b6b76;
   --hidden-bg: #f0f0f3;
+  /* Кольцо фокуса. Почти чёрное: 18 : 1 на фоне страницы и 16 : 1 на
+     утопленном блоке. На тёмных полосах (подвал, призыв к заявке) его
+     перекрывает белое — см. правило .foot :focus-visible ниже. */
+  --focus: #0E1116;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -68,8 +77,13 @@
     --sh-md: 0 4px 12px -2px rgba(0,0,0,.45);
     --sh-lg: 0 12px 32px -4px rgba(0,0,0,.55);
     /* Фирменный на тёмном фоне даёт лишь 3.09 : 1 — мало. Тот же тон,
-       светлее: 4.57 : 1. */
-    --accent: #DA524E;
+       светлее. Светлее, чем кажется нужным: считать надо не по фону
+       страницы, а по САМОЙ СВЕТЛОЙ поверхности, на которой этот цвет
+       оказывается текстом, — по карточке --panel. Прежний #DA524E давал
+       на ней 3.63 : 1, хотя на фоне страницы честные 4.57, и под это
+       попадало самое читаемое в CRM — адреса объектов в таблице.
+       Нынешний: 4.8 : 1 на карточке, 6.05 на фоне страницы. */
+    --accent: #E8716C;
     --ink: #0A0C10;
     --ink-2: #12161C;
     --on-ink: #FFFFFF;
@@ -80,7 +94,12 @@
     --chip-fg: #ADADA8;
     --glow: rgba(255,255,255,.055);
     --accent-2: #F06A64;
-    /* И текст на кнопке здесь тёмный: белый на светло-красном — 2.6 : 1. */
+    /* На тёмном наведение, наоборот, светлее заливки: 8.76 : 1 с тёмной
+       подписью, и отличие от --accent видно. */
+    --accent-hover: #F79C97;
+    /* И текст на кнопке здесь тёмный: белый на светло-красном — 2.6 : 1.
+       Этим цветом пишут ВСЕ кнопки с фирменной заливкой: правила, которые
+       раньше вписывали #fff сами, обходили этот токен и давали 3.96 : 1. */
     --accent-fg: #14161a;
     --error-fg: #F3A6A2;
     --error-bg: #3A1A18;
@@ -88,6 +107,8 @@
     --warn-bg: #30260f;
     --hidden-fg: #9a9aa6;
     --hidden-bg: #24262c;
+    /* На тёмном кольцо белое: 14 : 1 даже на самой светлой поверхности. */
+    --focus: #FFFFFF;
   }
 }
 
@@ -105,7 +126,9 @@
   --sh-sm: 0 1px 3px 0 rgba(0,0,0,.4);
   --sh-md: 0 4px 12px -2px rgba(0,0,0,.45);
   --sh-lg: 0 12px 32px -4px rgba(0,0,0,.55);
-  --accent: #DA524E;
+  /* Светлее фирменного, и считано по карточке --panel, а не по фону
+     страницы: там этот цвет становится текстом. 4.8 : 1. */
+  --accent: #E8716C;
   --ink: #0A0C10;
   --ink-2: #12161C;
   --on-ink: #FFFFFF;
@@ -116,6 +139,7 @@
   --chip-fg: #ADADA8;
   --glow: rgba(255,255,255,.055);
   --accent-2: #F06A64;
+  --accent-hover: #F79C97;
   --accent-fg: #14161a;
   --error-fg: #F3A6A2;
   --error-bg: #3A1A18;
@@ -123,9 +147,25 @@
   --warn-bg: #30260f;
   --hidden-fg: #9a9aa6;
   --hidden-bg: #24262c;
+  --focus: #FFFFFF;
 }
 
 * { box-sizing: border-box; }
+
+/* Фокус с клавиатуры.
+   Системное кольцо здесь не годится: браузер рисует почти чёрную рамку в
+   1 px, и на тёмной теме её попросту не видно. Своё — в два пикселя, с
+   отступом, цветом из темы. :focus-visible, а не :focus: мышь кольца не
+   получает, клавиатура получает всегда. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+/* Тёмные полосы остаются тёмными в обеих темах, и в светлой почти чёрное
+   кольцо на них пропадает. Здесь оно белое. */
+.foot :focus-visible,
+.pitch :focus-visible,
+.callout :focus-visible { --focus: #FFFFFF; }
 
 body {
   margin: 0;
@@ -371,7 +411,7 @@ textarea {
   border-radius: var(--r-full); padding: 7px 15px; font-size: 13px; font-weight: 600;
   text-decoration: none; }
 .chip:hover { color: var(--fg); }
-.chip[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
 .rq-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
 .rq-head b { font-size: 16px; }
@@ -422,10 +462,10 @@ main:has(.nav) { max-width: none; padding: 0; }
 .nav-link { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600;
   white-space: nowrap; transition: color .18s; }
 .nav-link:hover { color: var(--accent); }
-.enter { background: var(--accent); color: #fff; border: 0; border-radius: var(--r-full);
+.enter { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: var(--r-full);
   padding: 9px 18px; font-weight: 700; font-size: 14px; text-decoration: none; white-space: nowrap;
   transition: background .18s, transform .18s; }
-.enter:hover { background: var(--accent-2); transform: translateY(-1px); }
+.enter:hover { background: var(--accent-hover); transform: translateY(-1px); }
 .enter .narrow { display: none; }
 
 /* --- Герой -------------------------------------------------------------- */
@@ -544,12 +584,11 @@ main:has(.nav) { max-width: none; padding: 0; }
   border-radius: var(--r-md); padding: 11px 12px; font-size: 15px; font-weight: 500;
   width: 100%; min-width: 0; font-family: inherit;
   transition: border-color .18s, box-shadow .18s; }
-.cell input:focus, .cell select:focus { outline: none; border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(18,22,28,.12); }
-.go { align-self: end; background: var(--accent); color: #fff; border: 0;
+.cell input:focus, .cell select:focus { border-color: var(--accent); }
+.go { align-self: end; background: var(--accent); color: var(--accent-fg); border: 0;
   border-radius: var(--r-md); padding: 12px 24px; font-weight: 700; font-size: 15px;
   cursor: pointer; white-space: nowrap; transition: background .18s, transform .18s; }
-.go:hover { background: var(--accent-2); transform: translateY(-1px); }
+.go:hover { background: var(--accent-hover); transform: translateY(-1px); }
 .go:active { transform: translateY(0); }
 
 /* --- Форма заявки ------------------------------------------------------- */
@@ -558,8 +597,8 @@ main:has(.nav) { max-width: none; padding: 0; }
 .reqgrid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 .reqform textarea { border: 1px solid var(--line); background: var(--bg); color: var(--fg);
   border-radius: var(--r-md); padding: 11px 12px; font: inherit; resize: vertical; }
-.reqform textarea:focus, .reqform input:focus, .reqform select:focus { outline: none;
-  border-color: var(--accent); box-shadow: 0 0 0 3px rgba(18,22,28,.12); }
+.reqform textarea:focus, .reqform input:focus, .reqform select:focus {
+  border-color: var(--accent); }
 .pair { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 
 /* Купить или снять — две кнопки, а не выпадающий список: это первое и
@@ -572,7 +611,7 @@ main:has(.nav) { max-width: none; padding: 0; }
   font-weight: 700; font-size: 15px; transition: border-color .18s, background .18s; }
 .seg label:hover { border-color: var(--steel); }
 .seg label:has(input:checked) { border-color: var(--accent); background: var(--accent);
-  color: #fff; }
+  color: var(--accent-fg); }
 .seg input { accent-color: var(--accent); }
 
 /* Согласие на показ телефона — крупной строкой с объяснением, а не мелким
@@ -600,7 +639,7 @@ main:has(.nav) { max-width: none; padding: 0; }
   animation: rise .4s cubic-bezier(.2,.7,.3,1) backwards;
   animation-delay: calc(var(--i, 0) * 35ms); }
 .zone:hover { color: var(--fg); border-color: var(--accent); transform: translateY(-2px); }
-.zone[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.zone[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .zone-off { border-style: dashed; }
 
 /* --- Полоса результатов ------------------------------------------------- */
@@ -612,7 +651,7 @@ main:has(.nav) { max-width: none; padding: 0; }
   border-radius: var(--r-full); padding: 8px 15px; font-size: 13px; font-weight: 600;
   text-decoration: none; white-space: nowrap; transition: color .18s, border-color .18s, background .18s; }
 .sort:hover { color: var(--fg); border-color: var(--steel); }
-.sort[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sort[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
 /* --- Сетка карточек ----------------------------------------------------- */
 .grid { display: grid; gap: 18px; grid-template-columns: repeat(3, 1fr); padding-bottom: 56px; }
@@ -658,7 +697,8 @@ main:has(.nav) { max-width: none; padding: 0; }
 .flag .pulse { background: #4FC2A6; }
 /* Тип сделки — фирменным красным: это не статус, а раздел каталога, и
    путать его с «подтверждено» нельзя. */
-.flag.deal { background: var(--accent); letter-spacing: .06em; text-transform: uppercase; }
+.flag.deal { background: var(--accent); color: var(--accent-fg);
+  letter-spacing: .06em; text-transform: uppercase; }
 .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--ok-fg); flex: none; }
 
 .info { padding: 16px; display: flex; flex-direction: column; gap: 9px; min-width: 0; }
@@ -846,7 +886,7 @@ main:has(.nav) { max-width: none; padding: 0; }
   box-shadow: var(--sh-md); }
 .zone-cell[aria-current='true'] { background: var(--accent); border-color: var(--accent); }
 .zone-cell[aria-current='true'] b,
-.zone-cell[aria-current='true'] small { color: #fff; }
+.zone-cell[aria-current='true'] small { color: var(--accent-fg); }
 /* Район без объектов не кликается и приглушён: нажатие, после которого
    ничего нет, — обман. */
 .zone-cell.off { background: transparent; border-color: transparent; color: var(--muted);
@@ -882,10 +922,10 @@ main:has(.nav) { max-width: none; padding: 0; }
 .pitch .eyebrow { color: var(--accent-2); }
 .pitch .eyebrow::after { background: rgba(255,255,255,.18); }
 .pitch-go { display: inline-flex; align-items: center; gap: 10px; margin-top: 24px;
-  background: var(--accent); color: #fff; text-decoration: none; font-weight: 700;
+  background: var(--accent); color: var(--accent-fg); text-decoration: none; font-weight: 700;
   font-size: 16px; padding: 14px 26px; border-radius: var(--r-full);
   transition: background .18s, transform .18s, gap .18s; }
-.pitch-go:hover { background: var(--accent-2); transform: translateY(-2px); gap: 14px; }
+.pitch-go:hover { background: var(--accent-hover); transform: translateY(-2px); gap: 14px; }
 
 /* Три шага лесенкой: тот же мотив, что в знаке, и он же объясняет
    порядок — каждый следующий шаг сдвинут вправо. */
@@ -897,7 +937,7 @@ main:has(.nav) { max-width: none; padding: 0; }
 .steps li:nth-child(2) { margin-left: 24px; }
 .steps li:nth-child(3) { margin-left: 48px; }
 .step-n { grid-row: 1 / 3; width: 34px; height: 34px; border-radius: 50%;
-  background: var(--accent); color: #fff; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-fg); display: grid; place-items: center;
   font-size: 15px; font-weight: 700; }
 .steps b { font-size: 15px; font-weight: 700; }
 .steps small { font-size: 13px; color: var(--on-ink-faint); line-height: 1.4; }
