@@ -25,6 +25,31 @@ import { searchText } from './normalize';
 
 type Params = (string | number)[];
 
+
+/**
+ * Порядок строк списка.
+ *
+ * Белый список колонок — единственное место, где имя из адреса
+ * превращается в SQL. Неизвестное имя молча заменяется порядком по
+ * умолчанию: подставить в запрос то, что пришло из браузера, нельзя.
+ *
+ * Колонки, закрытые инвариантом 4 (имя собственника, имя клиента), в
+ * списки не входят намеренно: порядок строк выдал бы то, что скрыто в
+ * самой ячейке.
+ */
+function orderBy(
+  columns: Record<string, string>,
+  fallback: string,
+  sort?: string | null,
+  dir?: 'asc' | 'desc',
+) {
+  const col = sort && Object.prototype.hasOwnProperty.call(columns, sort)
+    ? columns[sort]
+    : null;
+  if (!col) return `order by ${fallback}`;
+  return `order by ${col} ${dir === 'asc' ? 'asc' : 'desc'}`;
+}
+
 /** Кто спрашивает. Один вызов на запрос, а не на строку. */
 async function asker() {
   const agent = await requireAgent();
@@ -53,7 +78,11 @@ export type ContactListItem = {
   open_requirements: number;
 };
 
-export async function contactList(search?: string | null): Promise<ContactListItem[]> {
+export async function contactList(
+  search?: string | null,
+  sort?: string | null,
+  dir?: 'asc' | 'desc',
+): Promise<ContactListItem[]> {
   const me = await asker();
   const visible = contactVisible('c', me.id, me.admin);
 
@@ -85,7 +114,12 @@ export async function contactList(search?: string | null): Promise<ContactListIt
        from contacts c
        left join agents ag on ag.id = c.owner_agent_id
       where ${visible.sql} ${filter}
-      order by c.created_at desc limit 200`,
+      ${orderBy({
+        name: 'c.name',
+        objects: 'objects_count',
+        requirements: 'requirements_count',
+        source: 'c.source',
+      }, 'c.created_at desc', sort, dir)} limit 200`,
     ...params,
   );
 
@@ -163,6 +197,13 @@ export type ObjectListItem = {
   listing_agent_name: string | null;
   owner_name: string | null;
   organization_name: string | null;
+  /** Кто ведёт объект: listing-агент активного мандата, иначе — автор. */
+  responsible_name: string | null;
+  responsible_org_name: string | null;
+  /** Подборов по объекту. */
+  matches_count: number;
+  /** Комиссия по правилу мандата от текущей цены. Всегда индикативна. */
+  commission_total: number | null;
   can_edit: boolean;
   leads_new: number;
 };
@@ -176,6 +217,8 @@ export async function objectList(query: {
   q?: string | null;
   source?: ObjectSource;
   agentId?: string | null;
+  sort?: string | null;
+  dir?: 'asc' | 'desc';
 } = {}): Promise<ObjectListItem[]> {
   const me = await asker();
   const editable = objectEditable('o', me.id, me.admin);
@@ -221,17 +264,25 @@ export async function objectList(query: {
   }
   if (query.agentId) { where.push(`${responsible} = ${next()}`); params.push(query.agentId); }
 
-  const rows = await all<Omit<ObjectListItem, 'can_edit' | 'contract_confirmed'> & {
-    can_edit: number; contract_confirmed: number | null;
-  }>(
+  const rows = await all<
+    Omit<ObjectListItem, 'can_edit' | 'contract_confirmed' | 'commission_total'> & {
+      can_edit: number; contract_confirmed: number | null;
+      price_minor: number; commission_rule: string | null;
+    }
+  >(
     `select o.id, o.kind, o.deal_type, o.address, o.city, o.zone, o.rooms, o.area,
             o.floor, o.price_minor / 100.0 as price, o.currency,
             o.publication_state, o.published_at, o.actual_at, o.created_at,
             m.id as mandate_id,
             coalesce(m.contract_confirmed, 0) as contract_confirmed,
-            m.listing_agent_id,
+            m.listing_agent_id, m.commission_rule,
             la.full_name as listing_agent_name,
             org.name as organization_name,
+            ra.full_name as responsible_name,
+            org.name as responsible_org_name,
+            o.price_minor,
+            (select count(*) from matches mt where mt.object_id = o.id)
+              as matches_count,
             -- Имя собственника — только тому, кому инвариант 4 его открывает.
             (select case when ${visible.sql} then oc.name end
                from object_ownerships oo
@@ -247,7 +298,15 @@ export async function objectList(query: {
        left join agents ra on ra.id = ${responsible}
        left join organizations org on org.id = ra.organization_id
       where ${where.join(' and ')}
-      order by o.actual_at desc limit 200`,
+      ${orderBy({
+        address: 'o.address',
+        deal: 'o.deal_type',
+        state: 'o.publication_state',
+        price: 'o.price_minor',
+        matches: 'matches_count',
+        agent: 'responsible_name',
+        actual: 'o.actual_at',
+      }, 'o.actual_at desc', query.sort, query.dir)} limit 200`,
     ...params,
   );
 
@@ -255,6 +314,13 @@ export async function objectList(query: {
     ...r,
     can_edit: r.can_edit === 1,
     contract_confirmed: r.contract_confirmed === 1,
+    // Комиссия объекта считается на лету от текущей цены по правилу
+    // мандата: записывать её некуда и незачем — объект ещё не продан, и
+    // записанная сумма означала бы, что деньги уже поделены. Без
+    // активного мандата правила нет, и суммы тоже.
+    commission_total: fromMinor(
+      commissionTotal(r.deal_type, r.price_minor, parseRule(r.commission_rule)),
+    ),
   }));
 }
 
@@ -508,6 +574,10 @@ export type RequirementListItem = {
   client_name: string | null;
   mine: boolean;
   matches_count: number;
+  /** Состоявшиеся показы: подборы, доведённые до showing_done. */
+  showings_count: number;
+  /** Сделки, выросшие из этой потребности. */
+  deals_count: number;
 };
 
 export async function requirementList(query: {
@@ -516,6 +586,8 @@ export async function requirementList(query: {
   zone?: string | null;
   q?: string | null;
   mine?: boolean;
+  sort?: string | null;
+  dir?: 'asc' | 'desc';
 } = {}): Promise<RequirementListItem[]> {
   const me = await asker();
   const visible = contactVisible('c', me.id, me.admin);
@@ -552,11 +624,23 @@ export async function requirementList(query: {
             (select case when ${visible.sql} then c.name end
                from contacts c where c.id = r.contact_id) as client_name,
             (select count(*) from matches mt where mt.requirement_id = r.id)
-              as matches_count
+              as matches_count,
+            (select count(*) from matches mt where mt.requirement_id = r.id
+               and mt.status = 'showing_done') as showings_count,
+            (select count(*) from deals dl where dl.requirement_id = r.id)
+              as deals_count
        from requirements r
        left join agents ag on ag.id = r.agent_id
       where ${where.join(' and ')}
-      order by r.updated_at desc limit 200`,
+      ${orderBy({
+        budget: 'r.budget_max_minor',
+        deal: 'r.deal_type',
+        status: 'r.status',
+        agent: 'ag.full_name',
+        matches: 'matches_count',
+        showings: 'showings_count',
+        deadline: 'r.deadline',
+      }, 'r.updated_at desc', query.sort, query.dir)} limit 200`,
     ...params,
   );
 
@@ -692,7 +776,16 @@ export type DealListItem = {
   status: string;
   address: string;
   deal_type: 'rent' | 'sale';
+  object_price: number;
+  currency: string;
   final_price: number | null;
+  failure_reason: string | null;
+  /** Имя клиента — только тому, кому инвариант 4 его открывает. */
+  client_name: string | null;
+  /** Участник ли спрашивающий: смотреть сделку можно, менять — не всем. */
+  can_act: boolean;
+  /** Суммы посчитаны на лету, а не зафиксированы при закрытии. */
+  is_indicative: boolean;
   commission_total: number | null;
   listing_share: number | null;
   closing_share: number | null;
@@ -702,24 +795,36 @@ export type DealListItem = {
   closed_at: string | null;
 };
 
-export async function dealList(): Promise<DealListItem[]> {
+export async function dealList(
+  sort?: string | null,
+  dir?: 'asc' | 'desc',
+): Promise<DealListItem[]> {
   const me = await asker();
   const party = dealParty('d', me.id, me.admin);
 
+  const visible = contactVisible('c', me.id, me.admin);
+
   const rows = await all<{
     id: string; status: string; address: string; deal_type: 'rent' | 'sale';
-    final_price_minor: number | null; price_minor: number;
+    final_price_minor: number | null; price_minor: number; currency: string;
+    failure_reason: string | null;
     commission_total_minor: number | null;
     listing_share_minor: number | null; closing_share_minor: number | null;
     commission_rule: string | null;
     listing_agent_name: string | null; closing_agent_name: string | null;
+    client_name: string | null; can_act: number;
     created_at: string; closed_at: string | null;
   }>(
     `select d.id, d.status, o.address, o.deal_type,
-            d.final_price_minor, o.price_minor, m.commission_rule,
+            d.final_price_minor, o.price_minor, o.currency, m.commission_rule,
+            d.failure_reason,
             d.commission_total_minor, d.listing_share_minor, d.closing_share_minor,
             la.full_name as listing_agent_name,
             ca.full_name as closing_agent_name,
+            (select case when ${visible.sql} then c.name end
+               from requirements r join contacts c on c.id = r.contact_id
+              where r.id = d.requirement_id) as client_name,
+            (${party.sql}) as can_act,
             d.created_at, d.closed_at
        from deals d
        join objects o on o.id = d.object_id
@@ -727,7 +832,12 @@ export async function dealList(): Promise<DealListItem[]> {
        left join agents la on la.id = d.listing_agent_id
        left join agents ca on ca.id = d.closing_agent_id
       where ${party.sql}
-      order by d.created_at desc limit 200`,
+      ${orderBy({
+        address: 'o.address',
+        status: 'd.status',
+        price: 'coalesce(d.final_price_minor, o.price_minor)',
+        created: 'd.created_at',
+      }, 'd.created_at desc', sort, dir)} limit 200`,
     me.id,
   );
 
@@ -749,6 +859,12 @@ export async function dealList(): Promise<DealListItem[]> {
       status: r.status,
       address: r.address,
       deal_type: r.deal_type,
+      object_price: fromMinor(r.price_minor) ?? 0,
+      currency: r.currency,
+      failure_reason: r.failure_reason,
+      client_name: r.client_name,
+      can_act: r.can_act === 1,
+      is_indicative: !fixed,
       final_price: fromMinor(r.final_price_minor),
       commission_total: fromMinor(total),
       listing_share: fromMinor(shares.listing),

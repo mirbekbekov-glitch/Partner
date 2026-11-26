@@ -18,8 +18,14 @@ export const PAGE_SIZE = 20;
  */
 export type Source = 'me' | 'org' | 'other' | string | null;
 
+export type Dir = 'asc' | 'desc';
+
 export type Filters = {
   deal: 'rent' | 'sale' | null;
+  /** Колонка сортировки. Проверяется не здесь, а белым списком запроса. */
+  sort: string | null;
+  dir: Dir;
+  role: string | null;
   src: Source;
   zone: string | null;
   state: string | null;
@@ -44,6 +50,12 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
 
   return {
     deal: pick(one('deal'), DEALS) as Filters['deal'],
+    // Имя колонки сюда проходит любое: разбирать его здесь значило бы
+    // держать список колонок в двух местах. Единственный белый список —
+    // в запросе, он же и защищает от подстановки в SQL.
+    sort: one('sort')?.trim() || null,
+    dir: one('dir') === 'asc' ? 'asc' : 'desc',
+    role: one('role')?.trim() || null,
     zone: one('zone')?.trim() || null,
     state: pick(one('state'), STATES),
     status: pick(one('status'), REQ_STATUSES),
@@ -62,6 +74,8 @@ export function pageHref(base: string, f: Filters, page: number) {
   if (f.status) p.set('status', f.status);
   if (f.q) p.set('q', f.q);
   if (f.src) p.set('src', f.src);
+  if (f.role) p.set('role', f.role);
+  if (f.sort) { p.set('sort', f.sort); p.set('dir', f.dir); }
   if (page > 1) p.set('page', String(page));
   const qs = p.toString();
   return qs ? `${base}?${qs}` : base;
@@ -72,3 +86,15 @@ export const money = (v: number | null, c = 'USD') =>
 
 export const day = (v: string | null) =>
   v == null ? '—' : new Date(v).toLocaleDateString('ru-RU', { dateStyle: 'medium' });
+
+/**
+ * Ссылка на тот же список, отсортированный по колонке.
+ *
+ * Повторный щелчок по той же колонке переворачивает порядок. Новая колонка
+ * начинается с убывания: в CRM первым нужен верх списка — самая дорогая
+ * сделка, самый свежий объект, — а не начало алфавита.
+ */
+export function sortHref(base: string, f: Filters, col: string) {
+  const dir: Dir = f.sort === col && f.dir === 'desc' ? 'asc' : 'desc';
+  return pageHref(base, { ...f, sort: col, dir, page: 1 }, 1);
+}

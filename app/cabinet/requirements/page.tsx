@@ -1,26 +1,13 @@
 import Link from 'next/link';
-import { requirementList } from '@/lib/db/cabinet';
+import { requirementList, type RequirementListItem } from '@/lib/db/cabinet';
 import { PAGE_SIZE, parseFilters, money, day } from '@/lib/list-params';
 import { Pager } from '../Pager';
+import { SortTh } from '../SortTh';
 
 export const metadata = { title: 'Потребности' };
 
-type Row = {
-  id: string;
-  deal_type: 'rent' | 'sale';
-  budget_min: number | null;
-  budget_max: number | null;
-  zones: string[];
-  rooms: number[];
-  deadline: string | null;
-  requirements_text: string | null;
-  status: string;
-  agent_name: string | null;
-  client_name: string | null;
-  matches_count: number;
-  showings_count: number;
-  deals_count: number;
-};
+const BASE = '/cabinet/requirements';
+
 
 const STATUS_RU: Record<string, string> = {
   new: 'новая',
@@ -40,13 +27,14 @@ export default async function RequirementsList({
   // Чужие потребности видны — это нормально, подбор объекта чужому клиенту
   // полезен. Закрыто имя клиента: его открывает инвариант 4, и решает это
   // запрос, а не страница.
-  let rows: Row[] = [];
+  let rows: RequirementListItem[] = [];
   let error: string | null = null;
 
   try {
     rows = await requirementList({
       status: f.status, deal: f.deal, zone: f.zone, q: f.q,
-    }) as unknown as Row[];
+      sort: f.sort, dir: f.dir,
+    });
   } catch (e) {
     error = e instanceof Error ? e.message : 'Не удалось загрузить потребности.';
   }
@@ -92,15 +80,15 @@ export default async function RequirementsList({
           <table className="tbl">
             <thead>
               <tr>
-                <th className="num">Бюджет</th>
-                <th>Сделка</th>
-                <th>Статус</th>
+                <SortTh base={BASE} f={f} col="budget" label="Бюджет" className="num" />
+                <SortTh base={BASE} f={f} col="deal" label="Сделка" />
+                <SortTh base={BASE} f={f} col="status" label="Статус" />
                 <th>Клиент</th>
-                <th>Ведёт</th>
+                <SortTh base={BASE} f={f} col="agent" label="Ведёт" />
                 <th>Что ищет</th>
-                <th className="num">Подборов</th>
-                <th className="num">Показов</th>
-                <th>Срок</th>
+                <SortTh base={BASE} f={f} col="matches" label="Подборов" className="num" />
+                <SortTh base={BASE} f={f} col="showings" label="Показов" className="num" />
+                <SortTh base={BASE} f={f} col="deadline" label="Срок" />
               </tr>
             </thead>
             <tbody>

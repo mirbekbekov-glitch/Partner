@@ -1,23 +1,13 @@
 import Link from 'next/link';
-import { contactDuplicates, contactList } from '@/lib/db/cabinet';
+import { contactDuplicates, contactList, type ContactListItem } from '@/lib/db/cabinet';
 import { ROLE_RU } from './ContactForm';
+import { parseFilters } from '@/lib/list-params';
+import { SortTh } from '../SortTh';
 
 export const metadata = { title: 'Контакты' };
 
-type Row = {
-  id: string;
-  kind: string;
-  name: string;
-  telegram: string | null;
-  source: string | null;
-  roles: string[] | null;
-  phones: string | null;
-  owner_name: string | null;
-  mine: boolean;
-  objects_count: number;
-  requirements_count: number;
-  open_requirements: number;
-};
+const BASE = '/cabinet/contacts';
+
 
 export default async function ContactsList({
   searchParams,
@@ -31,10 +21,13 @@ export default async function ContactsList({
   };
   const q = one('q');
   const role = one('role');
+  // Разбор фильтров — общий: порядок колонок и постраничные ссылки живут
+  // там же, где у остальных списков.
+  const f = parseFilters(sp);
 
   // Видимость стоит в самом запросе: чужие контакты закрыты инвариантом 4.
   // Раньше их отсекала политика базы, и условия здесь не было.
-  let rows: Row[] = [];
+  let rows: ContactListItem[] = [];
   let dupes: Array<{ a_id: string; b_id: string }> = [];
   let error: string | null = null;
 
@@ -42,7 +35,7 @@ export default async function ContactsList({
     // Пары дубликатов — рядом со списком: пометить их полезнее, чем ждать,
     // пока кто-то зайдёт на карточку и заметит сам.
     [rows, dupes] = await Promise.all([
-      contactList(q) as unknown as Promise<Row[]>,
+      contactList(q, f.sort, f.dir),
       contactDuplicates(),
     ]);
   } catch (e) {
@@ -98,13 +91,14 @@ export default async function ContactsList({
           <table className="tbl">
             <thead>
               <tr>
-                <th>Имя</th>
+                <SortTh base={BASE} f={f} col="name" label="Имя" />
                 <th>Роли</th>
                 <th>Телефон</th>
                 <th>Telegram</th>
-                <th className="num">Объектов</th>
-                <th className="num">Потребностей</th>
-                <th>Источник</th>
+                <SortTh base={BASE} f={f} col="objects" label="Объектов" className="num" />
+                <SortTh base={BASE} f={f} col="requirements" label="Потребностей"
+                        className="num" />
+                <SortTh base={BASE} f={f} col="source" label="Источник" />
               </tr>
             </thead>
             <tbody>

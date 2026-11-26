@@ -1,36 +1,15 @@
 import Link from 'next/link';
-import { objectList } from '@/lib/db/cabinet';
+import { objectList, type ObjectListItem } from '@/lib/db/cabinet';
 import { approvedColleagues } from '@/lib/db/agents';
 import { currentAgent } from '@/lib/db/session';
 import { PAGE_SIZE, parseFilters, money, day } from '@/lib/list-params';
 import { Pager } from '../Pager';
+import { SortTh } from '../SortTh';
 
 export const metadata = { title: 'Объекты' };
 
-type Row = {
-  id: string;
-  kind: string;
-  deal_type: 'rent' | 'sale';
-  address: string;
-  zone: string | null;
-  rooms: number | null;
-  area: number | null;
-  floor: number | null;
-  price: number;
-  currency: string;
-  publication_state: string;
-  actual_at: string;
-  active_mandate_id: string | null;
-  contract_confirmed: boolean | null;
-  listing_agent_name: string | null;
-  owners: string | null;
-  matches_count: number;
-  commission_total: number | null;
-  responsible_agent_id: string | null;
-  responsible_name: string | null;
-  responsible_org_id: string | null;
-  responsible_org_name: string | null;
-};
+const BASE = '/cabinet/objects';
+
 
 const STATE_RU: Record<string, string> = {
   draft: 'черновик',
@@ -63,14 +42,14 @@ export default async function ObjectsList({
   // запроса.
   const agentId = f.src && f.src.includes('-') ? f.src : null;
 
-  let rows: Row[] = [];
+  let rows: ObjectListItem[] = [];
   let error: string | null = null;
 
   try {
     rows = await objectList({
       state: f.state, deal: f.deal, zone: f.zone, q: f.q,
-      source, agentId,
-    }) as unknown as Row[];
+      source, agentId, sort: f.sort, dir: f.dir,
+    });
   } catch (e) {
     error = e instanceof Error ? e.message : 'Не удалось загрузить объекты.';
   }
@@ -127,15 +106,15 @@ export default async function ObjectsList({
           <table className="tbl">
             <thead>
               <tr>
-                <th>Адрес</th>
-                <th>Сделка</th>
-                <th>Состояние</th>
-                <th className="num">Цена</th>
+                <SortTh base={BASE} f={f} col="address" label="Адрес" />
+                <SortTh base={BASE} f={f} col="deal" label="Сделка" />
+                <SortTh base={BASE} f={f} col="state" label="Состояние" />
+                <SortTh base={BASE} f={f} col="price" label="Цена" className="num" />
                 <th className="num">Комиссия</th>
-                <th className="num">Подборов</th>
+                <SortTh base={BASE} f={f} col="matches" label="Подборов" className="num" />
                 <th>Собственник</th>
-                <th>Ведёт</th>
-                <th>Актуально</th>
+                <SortTh base={BASE} f={f} col="agent" label="Ведёт" />
+                <SortTh base={BASE} f={f} col="actual" label="Актуально" />
               </tr>
             </thead>
             <tbody>
@@ -161,7 +140,7 @@ export default async function ObjectsList({
                     </span>
                     {/* Состояние мандата важнее остального: без активного
                         объект нельзя опубликовать. */}
-                    {!o.active_mandate_id ? (
+                    {!o.mandate_id ? (
                       <span className="tbl-note">
                         <span className="warn">нет активного мандата</span>
                       </span>
@@ -177,7 +156,7 @@ export default async function ObjectsList({
                   </td>
                   <td className="num" data-l="Подборов">{o.matches_count}</td>
                   <td data-l="Собственник">
-                    {o.owners ?? <span className="hidden-contact">скрыт</span>}
+                    {o.owner_name ?? <span className="hidden-contact">скрыт</span>}
                   </td>
                   <td data-l="Ведёт">
                     {o.responsible_name ?? '—'}
