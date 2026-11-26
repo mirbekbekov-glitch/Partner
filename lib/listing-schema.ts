@@ -30,7 +30,9 @@ type Listing = {
   price: number;
   currency: string;
   description: string | null;
-  published_at: string;
+  /** Дата публикации. Схема допускает её отсутствие: колонка в базе
+      необязательна, и выдумывать дату ради разметки нельзя. */
+  published_at: string | null;
 };
 
 /**
@@ -86,7 +88,7 @@ export function listingSchema(o: Listing, lang: string, title: string) {
     '@type': 'RealEstateListing',
     url,
     name: title,
-    datePosted: o.published_at,
+    ...(o.published_at ? { datePosted: o.published_at } : {}),
     ...(o.description ? { description: o.description } : {}),
     about,
     offers: {

@@ -1,4 +1,6 @@
 import { listAgents } from '@/lib/db/agents';
+
+type Row = Awaited<ReturnType<typeof listAgents>>[number];
 import { AgentActions } from './AgentActions';
 
 export const metadata = { title: 'Агенты' };
@@ -12,23 +14,6 @@ const STATUS_RU: Record<string, string> = {
 const when = (v: string | null) =>
   v == null ? '—' : new Date(v).toLocaleDateString('ru-RU', { dateStyle: 'medium' });
 
-type Row = {
-  id: string;
-  full_name: string;
-  email: string | null;
-  phone: string | null;
-  telegram_id: number | null;
-  role: string;
-  status: string;
-  created_at: string;
-  organization_name: string | null;
-  org_confirmed: number;
-  certificate_no: string | null;
-  certificate_confirmed: number;
-  objects_count: number;
-  contacts_count: number;
-  requirements_count: number;
-};
 
 export default async function AgentsAdminPage() {
   // Проверка «только админ» — первая строка listAgents(). Раньше её делало
@@ -39,7 +24,7 @@ export default async function AgentsAdminPage() {
   let error: string | null = null;
 
   try {
-    rows = await listAgents() as unknown as Row[];
+    rows = await listAgents();
   } catch (e) {
     error = e instanceof Error ? e.message : 'Список недоступен.';
   }

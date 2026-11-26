@@ -31,7 +31,7 @@ export default async function ActivitiesPage() {
     // Состояние напоминаний рядом со списком: молчание хуже всего — агент
     // должен видеть, отправлено ли напоминание и если нет, то почему.
     [rows, reminders] = await Promise.all([
-      myActivities() as unknown as Promise<ActivityRow[]>,
+      myActivities(),
       myReminders(),
     ]);
   } catch (e) {

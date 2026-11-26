@@ -42,7 +42,7 @@ type Row = {
  */
 async function load(id: string) {
   try {
-    return (await catalogObject(id)) as unknown as Row | null;
+    return await catalogObject(id);
   } catch {
     // База недоступна — это не «объекта нет». Пусть страница ответит
     // ошибкой, а не выдумает 404 о существующем объекте.
@@ -141,7 +141,9 @@ export default async function PublicObject({
     // а не угадывает его по названию улицы.
     [d.cityLabel, o.city],
     ...(o.zone ? [[d.zoneLabel, o.zone] as [string, string]] : []),
-    [d.published, dateIn(lang, o.published_at)],
+    // Дата публикации в базе необязательна. Если её нет, показывается дата
+    // актуальности: она есть всегда, и это ближайшее по смыслу.
+    [d.published, dateIn(lang, o.published_at ?? o.actual_at)],
   ];
 
   // Разметка для поисковика. «<» внутри описания закрыл бы <script>

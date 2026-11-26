@@ -411,13 +411,19 @@ export async function contactPhoneList(contactId: string) {
   const me = await asker();
   const visible = contactVisible('c', me.id, me.admin);
 
-  return all<{ id: string; phone: string; label: string | null; is_primary: number }>(
+  const rows = await all<{
+    id: string; phone: string; label: string | null; is_primary: number;
+  }>(
     `select cp.id, cp.phone, cp.label, cp.is_primary
        from contact_phones cp join contacts c on c.id = cp.contact_id
       where cp.contact_id = ?2 and ${visible.sql}
       order by cp.is_primary desc, cp.created_at`,
     me.id, contactId,
   );
+
+  // 0 и 1 превращаются в признак здесь, как и в остальных запросах: в
+  // браузер должно приходить то, что страница объявляет типом.
+  return rows.map((r) => ({ ...r, is_primary: r.is_primary === 1 }));
 }
 
 /** Пара дубликатов для конкретной записи. */

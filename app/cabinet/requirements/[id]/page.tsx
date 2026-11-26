@@ -5,7 +5,6 @@ import {
 } from '@/lib/db/cabinet';
 import { approvedColleagues } from '@/lib/db/agents';
 import { Activities, type ActivityRow } from '../../Activities';
-import type { RequirementMatch } from '@/lib/types';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
 import { StartDealButton } from '../../deals/StartDealButton';
@@ -36,7 +35,7 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
 
 
 
-  const rows = matches as unknown as RequirementMatch[];
+  const rows = matches;
   const alreadyMatched = new Set(rows.map((r) => r.object_id));
 
   const options = objects
