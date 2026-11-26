@@ -88,7 +88,7 @@ export default defineConfig({
       // Имя бота для ссылки привязки. Не секрет: оно и так видно в чате.
       // Пусто — кабинет честно скажет, что бот не настроен, вместо ссылки
       // в никуда. Собака не нужна, но и не мешает: код её срезает.
-      TELEGRAM_BOT_USERNAME: bindings.text('Liberterra_kg_bot'),
+      TELEGRAM_BOT_USERNAME: bindings.text('Libertrerra_Bot'),
 
       // Собственный адрес сайта: нужен карте сайта и превью при пересылке.
       NEXT_PUBLIC_SITE_URL: bindings.secret(),
