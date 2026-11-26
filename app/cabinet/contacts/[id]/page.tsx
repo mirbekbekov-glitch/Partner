@@ -32,7 +32,10 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
     await Promise.all([
       contactPhoneList(id),
       contactObjects(id),
-      requirementList().then((rows) => rows.filter((r) => r.client_name === contact.name)),
+      // Все потребности этого клиента, а не одна страница: карточка
+      // показывает их целиком.
+      requirementList({ perPage: 200 })
+        .then((p) => p.rows.filter((r) => r.client_name === contact.name)),
       activityFeed('contact', id),
       approvedColleagues(),
       // Кандидаты в дубликаты — только среди своих записей: объединять

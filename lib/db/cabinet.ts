@@ -5,6 +5,7 @@ import { fromMinor } from './money';
 import { commissionShares, commissionTotal, parseRule } from './commission';
 import { contactVisible, dealParty, objectEditable } from './visibility';
 import { searchText } from './normalize';
+import { PAGE_SIZE } from '../list-params';
 
 /**
  * Запросы кабинета: списки и карточки.
@@ -25,6 +26,27 @@ import { searchText } from './normalize';
 
 type Params = (string | number)[];
 
+
+
+/**
+ * Окно страницы.
+ *
+ * Числа подставляются в текст запроса, а не параметрами: индексы ?n в этих
+ * запросах считаются вручную, и ещё два сдвинули бы всю нумерацию. Оба
+ * значения целые и обрезаны по границам, подставить через них нечего.
+ *
+ * Верхняя граница размера страницы — 200: столько же, сколько брал прежний
+ * жёсткий предел. Она защищает не от злого умысла, а от случайного
+ * ?page_size=100000 в адресе.
+ */
+function limitOffset(page?: number | null, perPage?: number | null) {
+  const size = Math.min(Math.max(Math.trunc(perPage ?? PAGE_SIZE) || PAGE_SIZE, 1), 200);
+  const p = Math.min(Math.max(Math.trunc(page ?? 1) || 1, 1), 100_000);
+  return `limit ${size} offset ${(p - 1) * size}`;
+}
+
+/** Страница списка: сами строки и сколько их всего под фильтром. */
+export type Page<T> = { rows: T[]; total: number };
 
 /**
  * Порядок строк списка.
@@ -82,7 +104,9 @@ export async function contactList(
   search?: string | null,
   sort?: string | null,
   dir?: 'asc' | 'desc',
-): Promise<ContactListItem[]> {
+  page?: number | null,
+  role?: string | null,
+): Promise<Page<ContactListItem>> {
   const me = await asker();
   const visible = contactVisible('c', me.id, me.admin);
 
@@ -96,12 +120,20 @@ export async function contactList(
     params.push(`%${text}%`, `%${text.replace(/\D/g, '')}%`);
   }
 
+  // Роль — внутри JSON-массива ролей. Отбор здесь, а не на странице: иначе
+  // фильтровалась бы только текущая страница, и счётчик врал бы.
+  if (role?.trim()) {
+    filter += ` and c.roles like ?${params.length + 1}`;
+    params.push(`%"${role.trim()}"%`);
+  }
+
   const rows = await all<Omit<ContactListItem, 'roles' | 'mine'> & {
-    roles: string; mine: number;
+    roles: string; mine: number; total_count: number;
   }>(
     `select c.id, c.kind, c.name, c.telegram, c.source, c.roles, c.note,
             c.created_at, c.owner_agent_id,
             ag.full_name as owner_name,
+            count(*) over () as total_count,
             (c.owner_agent_id = ?1) as mine,
             (select group_concat(cp.phone, ', ') from contact_phones cp
               where cp.contact_id = c.id) as phones,
@@ -119,15 +151,18 @@ export async function contactList(
         objects: 'objects_count',
         requirements: 'requirements_count',
         source: 'c.source',
-      }, 'c.created_at desc', sort, dir)} limit 200`,
+      }, 'c.created_at desc', sort, dir)} ${limitOffset(page)}`,
     ...params,
   );
 
-  return rows.map((r) => ({
-    ...r,
-    roles: jsonArray<string>(r.roles),
-    mine: r.mine === 1,
-  }));
+  return {
+    total: rows[0]?.total_count ?? 0,
+    rows: rows.map((r) => ({
+      ...r,
+      roles: jsonArray<string>(r.roles),
+      mine: r.mine === 1,
+    })),
+  };
 }
 
 /** Объекты контакта: что он продаёт или сдаёт. */
@@ -219,7 +254,9 @@ export async function objectList(query: {
   agentId?: string | null;
   sort?: string | null;
   dir?: 'asc' | 'desc';
-} = {}): Promise<ObjectListItem[]> {
+  page?: number | null;
+  perPage?: number | null;
+} = {}): Promise<Page<ObjectListItem>> {
   const me = await asker();
   const editable = objectEditable('o', me.id, me.admin);
   const visible = contactVisible('oc', me.id, me.admin);
@@ -267,7 +304,7 @@ export async function objectList(query: {
   const rows = await all<
     Omit<ObjectListItem, 'can_edit' | 'contract_confirmed' | 'commission_total'> & {
       can_edit: number; contract_confirmed: number | null;
-      price_minor: number; commission_rule: string | null;
+      price_minor: number; commission_rule: string | null; total_count: number;
     }
   >(
     `select o.id, o.kind, o.deal_type, o.address, o.city, o.zone, o.rooms, o.area,
@@ -291,7 +328,10 @@ export async function objectList(query: {
               limit 1) as owner_name,
             (${editable.sql}) as can_edit,
             (select count(*) from leads l
-              where l.object_id = o.id and l.status = 'new') as leads_new
+              where l.object_id = o.id and l.status = 'new') as leads_new,
+            -- Сколько объектов под этим фильтром всего. Окно считается до
+            -- limit, поэтому второй запрос за числом не нужен.
+            count(*) over () as total_count
        from objects o
        left join mandates m on m.object_id = o.id and m.status = 'active'
        left join agents la on la.id = m.listing_agent_id
@@ -306,11 +346,14 @@ export async function objectList(query: {
         matches: 'matches_count',
         agent: 'responsible_name',
         actual: 'o.actual_at',
-      }, 'o.actual_at desc', query.sort, query.dir)} limit 200`,
+      }, 'o.actual_at desc', query.sort, query.dir)}
+      ${limitOffset(query.page, query.perPage)}`,
     ...params,
   );
 
-  return rows.map((r) => ({
+  return {
+    total: rows[0]?.total_count ?? 0,
+    rows: rows.map((r) => ({
     ...r,
     can_edit: r.can_edit === 1,
     contract_confirmed: r.contract_confirmed === 1,
@@ -321,7 +364,8 @@ export async function objectList(query: {
     commission_total: fromMinor(
       commissionTotal(r.deal_type, r.price_minor, parseRule(r.commission_rule)),
     ),
-  }));
+    })),
+  };
 }
 
 /** Одна карточка контакта — с той же видимостью, что и список. */
@@ -588,7 +632,9 @@ export async function requirementList(query: {
   mine?: boolean;
   sort?: string | null;
   dir?: 'asc' | 'desc';
-} = {}): Promise<RequirementListItem[]> {
+  page?: number | null;
+  perPage?: number | null;
+} = {}): Promise<Page<RequirementListItem>> {
   const me = await asker();
   const visible = contactVisible('c', me.id, me.admin);
 
@@ -611,7 +657,7 @@ export async function requirementList(query: {
   if (query.mine) where.push('r.agent_id = ?1');
 
   const rows = await all<Omit<RequirementListItem, 'zones' | 'rooms' | 'mine'> & {
-    zones: string; rooms: string; mine: number;
+    zones: string; rooms: string; mine: number; total_count: number;
   }>(
     `select r.id, r.deal_type,
             r.budget_min_minor / 100.0 as budget_min,
@@ -628,7 +674,8 @@ export async function requirementList(query: {
             (select count(*) from matches mt where mt.requirement_id = r.id
                and mt.status = 'showing_done') as showings_count,
             (select count(*) from deals dl where dl.requirement_id = r.id)
-              as deals_count
+              as deals_count,
+            count(*) over () as total_count
        from requirements r
        left join agents ag on ag.id = r.agent_id
       where ${where.join(' and ')}
@@ -640,16 +687,20 @@ export async function requirementList(query: {
         matches: 'matches_count',
         showings: 'showings_count',
         deadline: 'r.deadline',
-      }, 'r.updated_at desc', query.sort, query.dir)} limit 200`,
+      }, 'r.updated_at desc', query.sort, query.dir)}
+      ${limitOffset(query.page, query.perPage)}`,
     ...params,
   );
 
-  return rows.map((r) => ({
-    ...r,
-    zones: jsonArray<string>(r.zones),
-    rooms: jsonArray<number>(r.rooms),
-    mine: r.mine === 1,
-  }));
+  return {
+    total: rows[0]?.total_count ?? 0,
+    rows: rows.map((r) => ({
+      ...r,
+      zones: jsonArray<string>(r.zones),
+      rooms: jsonArray<number>(r.rooms),
+      mine: r.mine === 1,
+    })),
+  };
 }
 
 /** Карточка потребности: бюджет в основных единицах, клиент по инварианту 4. */
@@ -1107,11 +1158,16 @@ export async function cabinetCounters() {
  * снять объект с публикации агент может, а читать телефоны его заявителей
  * нет.
  */
-export async function leadFeed(status?: string | null): Promise<Array<{
+export type LeadFeedItem = {
   id: string; object_id: string; name: string; phone: string;
   message: string | null; status: string; created_at: string;
   agent_id: string | null; address: string | null; agent_name: string | null;
-}>> {
+};
+
+export async function leadFeed(
+  status?: string | null,
+  page?: number | null,
+): Promise<Page<LeadFeedItem>> {
   const me = await asker();
   const editable = objectEditable('o', me.id, me.admin);
 
@@ -1119,17 +1175,20 @@ export async function leadFeed(status?: string | null): Promise<Array<{
   let filter = '';
   if (status) { filter = 'and l.status = ?2'; params.push(status); }
 
-  return all(
+  const rows = await all<LeadFeedItem & { total_count: number }>(
     `select l.id, l.object_id, l.name, l.phone, l.message, l.status,
             l.created_at, l.agent_id,
-            o.address, ag.full_name as agent_name
+            o.address, ag.full_name as agent_name,
+            count(*) over () as total_count
        from leads l
        join objects o on o.id = l.object_id
        left join agents ag on ag.id = l.agent_id
       where ${editable.sql} ${filter}
-      order by l.created_at desc limit 100`,
+      order by l.created_at desc ${limitOffset(page)}`,
     ...params,
   );
+
+  return { total: rows[0]?.total_count ?? 0, rows };
 }
 
 /** Напоминания агента — для страницы задач. */

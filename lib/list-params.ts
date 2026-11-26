@@ -26,6 +26,8 @@ export type Filters = {
   sort: string | null;
   dir: Dir;
   role: string | null;
+  /** Вкладка списка заявок. Проверяется страницей, здесь только переносится. */
+  tab: string | null;
   src: Source;
   zone: string | null;
   state: string | null;
@@ -56,6 +58,7 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
     sort: one('sort')?.trim() || null,
     dir: one('dir') === 'asc' ? 'asc' : 'desc',
     role: one('role')?.trim() || null,
+    tab: one('tab')?.trim() || null,
     zone: one('zone')?.trim() || null,
     state: pick(one('state'), STATES),
     status: pick(one('status'), REQ_STATUSES),
@@ -75,6 +78,7 @@ export function pageHref(base: string, f: Filters, page: number) {
   if (f.q) p.set('q', f.q);
   if (f.src) p.set('src', f.src);
   if (f.role) p.set('role', f.role);
+  if (f.tab) p.set('tab', f.tab);
   if (f.sort) { p.set('sort', f.sort); p.set('dir', f.dir); }
   if (page > 1) p.set('page', String(page));
   const qs = p.toString();

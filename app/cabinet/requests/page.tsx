@@ -1,9 +1,13 @@
 import Link from 'next/link';
-import { requestFeed } from '@/lib/db/requests';
+import { requestCounts, requestFeed } from '@/lib/db/requests';
+import { parseFilters } from '@/lib/list-params';
+import { Pager } from '../Pager';
 import { KIND_LABEL } from '@/lib/request-labels';
 import { RequestActions } from './RequestActions';
 
 export const metadata = { title: 'Заявки клиентов' };
+
+const BASE = '/cabinet/requests';
 
 type Row = {
   id: string;
@@ -60,23 +64,28 @@ export default async function Requests({
 
   // Что показывать, решает лента: чужие контакты она уже закрыла. Здесь
   // только срез по вкладке.
+  const f = parseFilters(sp);
+
   let rows: Row[] = [];
-  let open: Row[] = [];
+  let total = 0;
+  let overdue = 0;
+  let free = 0;
   let error: string | null = null;
 
   try {
-    // Счётчик просроченных — главное число этой страницы, поэтому берём
-    // открытые заявки отдельно от среза вкладки.
-    [rows, open] = await Promise.all([
-      requestFeed(tab as 'open') as unknown as Promise<Row[]>,
-      requestFeed('all') as unknown as Promise<Row[]>,
+    // Счётчики — главные числа этой страницы, и считает их база: страница
+    // показывает двадцать строк, а норматив нарушают все.
+    const [listed, counts] = await Promise.all([
+      requestFeed(tab as 'open', f.page),
+      requestCounts(),
     ]);
+    rows = listed.rows as unknown as Row[];
+    total = listed.total;
+    overdue = counts.overdue;
+    free = counts.free;
   } catch (e) {
     error = e instanceof Error ? e.message : 'Не удалось загрузить заявки.';
   }
-
-  const overdue = open.filter((r) => r.overdue).length;
-  const free = open.filter((r) => r.mine_state === 'available').length;
 
   return (
     <>
@@ -206,6 +215,10 @@ export default async function Requests({
           </table>
         </div>
       )}
+
+      {/* Вкладка подставляется в ссылки страниц: разбор фильтров её только
+          переносит, а проверяет набор значений эта страница. */}
+      <Pager base={BASE} filters={{ ...f, tab }} total={total} />
     </>
   );
 }

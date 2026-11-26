@@ -28,18 +28,19 @@ export default async function RequirementsList({
   // полезен. Закрыто имя клиента: его открывает инвариант 4, и решает это
   // запрос, а не страница.
   let rows: RequirementListItem[] = [];
+  let total = 0;
   let error: string | null = null;
 
   try {
-    rows = await requirementList({
+    ({ rows, total } = await requirementList({
       status: f.status, deal: f.deal, zone: f.zone, q: f.q,
-      sort: f.sort, dir: f.dir,
-    });
+      sort: f.sort, dir: f.dir, page: f.page,
+    }));
   } catch (e) {
     error = e instanceof Error ? e.message : 'Не удалось загрузить потребности.';
   }
 
-  const count = rows.length;
+  const count = total;
 
   return (
     <>
@@ -63,6 +64,14 @@ export default async function RequirementsList({
           ))}
         </select>
         <input name="zone" type="text" placeholder="зона" defaultValue={f.zone ?? ''} />
+        {/* Сортировка переживает фильтрацию: форма отправляется методом
+            get, и всё, чего в ней нет, из адреса пропадает. */}
+        {f.sort ? (
+          <>
+            <input type="hidden" name="sort" value={f.sort} />
+            <input type="hidden" name="dir" value={f.dir} />
+          </>
+        ) : null}
         <button type="submit">Фильтр</button>
         {f.deal || f.status || f.zone || f.q ? (
           <Link href="/cabinet/requirements" className="key reset">сбросить</Link>
@@ -71,7 +80,7 @@ export default async function RequirementsList({
 
       {rows.length === 0 ? (
         <p className="empty">
-          {count === 0 && !f.deal && !f.status && !f.zone && !f.q
+          {total === 0 && !f.deal && !f.status && !f.zone && !f.q
             ? 'Потребностей пока нет.'
             : 'Под эти условия ничего не подошло. Попробуйте ослабить фильтр.'}
         </p>
@@ -131,7 +140,7 @@ export default async function RequirementsList({
         </div>
       )}
 
-      <Pager base="/cabinet/requirements" filters={f} total={count ?? 0} />
+      <Pager base={BASE} filters={f} total={total} />
     </>
   );
 }
