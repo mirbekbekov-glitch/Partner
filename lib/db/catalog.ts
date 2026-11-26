@@ -218,21 +218,29 @@ export async function districts(): Promise<Array<{ id: string; name: string }>> 
 }
 
 /**
- * Районы с числом объектов — для строки районов под поиском.
+ * Районы с числом объектов — для строки районов и схемы под каталогом.
  *
  * Пустой район показывать нельзя: нажатие на него обманет человека и
  * приведёт в пустой каталог. Поэтому считаем, а не перечисляем.
+ *
+ * Считается по выбранному ГОРОДУ. Без этого «Центр» складывал бы центр
+ * Бишкека с центром Оша в одно число, а нажатие на него приводило бы в
+ * список из двух разных городов. Пока город в базе был один, вопроса не
+ * было; с появлением второго это стало прямой ложью в цифре.
  */
 export async function catalogZoneCounts(
   deal?: 'rent' | 'sale' | null,
+  city?: string | null,
 ): Promise<Array<{ zone: string; n: number }>> {
   const params: (string | number)[] = [];
-  let filter = '';
-  if (deal) { filter = 'and o.deal_type = ?'; params.push(deal); }
+  const filters: string[] = [];
+  if (deal) { filters.push('and o.deal_type = ?'); params.push(deal); }
+  if (city) { filters.push('and o.city = ?'); params.push(city); }
 
   return all<{ zone: string; n: number }>(
     `select o.zone as zone, count(*) as n from objects o
-      where o.publication_state = 'published' and o.zone is not null ${filter}
+      where o.publication_state = 'published' and o.zone is not null
+        ${filters.join(' ')}
       group by o.zone order by n desc, o.zone`,
     ...params,
   );

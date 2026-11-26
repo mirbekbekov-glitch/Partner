@@ -25,7 +25,8 @@ import { createRequirement } from '@/lib/db/requirements';
 import { createActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import {
-  catalogCities, catalogCount, catalogObject, catalogPage, catalogZones,
+  catalogCities, catalogCount, catalogObject, catalogPage, catalogZoneCounts,
+  catalogZones,
 } from '@/lib/db/catalog';
 import {
   deletePhoto, listPhotos, photoKey, photoUrl, photosMissingThumb, putPhoto,
@@ -975,6 +976,29 @@ export default {
     check('пустой город за фильтр не считается',
       parseCatalogFilters({ city: '  ' }).city === null
       && !hasAnyFilter(parseCatalogFilters({ city: '  ' })));
+
+    // Районы считаются по выбранному городу. Иначе «Центр» складывал бы
+    // центр Бишкека с центром Оша в одно число, а нажатие на него
+    // приводило бы в список из двух разных городов — прямая ложь в цифре.
+    //
+    // У обоих объектов зона «Центр» нарочно: совпадение названий районов
+    // в разных городах — обычное дело, и именно на нём ошибка и вылезает.
+    await updateObject(osh.id, { zone: 'Центр' });
+
+    const allZones = await catalogZoneCounts(null, null);
+    const oshZones = await catalogZoneCounts(null, 'Ош');
+    const bishkekZones = await catalogZoneCounts(null, 'Бишкек');
+
+    const centre = (list: Array<{ zone: string; n: number }>) =>
+      list.find((z) => z.zone === 'Центр')?.n ?? 0;
+
+    check('без города Центр считает оба города',
+      centre(allZones) === centre(oshZones) + centre(bishkekZones)
+      && centre(allZones) > centre(oshZones));
+    check('с городом Центр считает только его',
+      centre(oshZones) === 1);
+    check('чужой район в чужом городе не появляется',
+      !oshZones.some((z) => z.zone === 'Чүй'));
 
     // Разметка для поисковика. Город там был зашит константой — той же
     // ошибкой, что и в выгрузке: объект из Оша поисковик увидел бы

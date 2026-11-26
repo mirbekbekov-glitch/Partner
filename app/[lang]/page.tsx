@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { catalogCities, catalogPage, catalogZoneCounts } from '@/lib/db/catalog';
+
+/** Город, чью схему районов мы умеем рисовать. Единственный. */
+const BISHKEK = 'Бишкек';
 import {
   CATALOG_PAGE_SIZE, parseCatalogFilters, catalogHref, sortHref, hasAnyFilter,
   firstPhoto, daysSince,
@@ -216,7 +219,8 @@ export default async function Catalog({
   // одинаково, иначе при сбое каталога у человека молча пропадёт фильтр.
   const cities = failed ? [] : await catalogCities();
   const manyCities = cities.length > 1;
-  const zoneCounts = failed ? [] : await catalogZoneCounts(deal);
+  const showMap = !manyCities || f.city === BISHKEK;
+  const zoneCounts = failed ? [] : await catalogZoneCounts(deal, f.city);
   const byZone = new Map(zoneCounts.map((z) => [z.zone, z.n]));
   const zones = zoneCounts.slice(0, 8).map((z) => z.zone);
 
@@ -354,8 +358,16 @@ export default async function Catalog({
             {f.page < pages ? <Link href={catalogHref(lang, f, f.page + 1)}>{d.forward}</Link> : null}
           </div>
         ) : null}
-        <CityMap lang={lang} f={f} counts={byZone}
-                 title={d.mapTitle} hint={d.mapHint} empty={d.mapEmpty} />
+        {/* Схема — карта БИШКЕКА, нарисованная руками. Показывать её
+            поверх ошских объектов значило бы предлагать человеку искать
+            Ош на карте Бишкека. Поэтому она только там, где уместна: при
+            выбранном Бишкеке или когда других городов в каталоге нет.
+            Рисовать схему каждого города — отдельная работа, и пока её
+            нет, честнее не показывать ничего, чем показывать чужую. */}
+        {showMap ? (
+          <CityMap lang={lang} f={f} counts={byZone}
+                   title={d.mapTitle} hint={d.mapHint} empty={d.mapEmpty} />
+        ) : null}
       </div>
 
       <RequestPitch lang={lang} />
