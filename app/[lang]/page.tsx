@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { catalogPage, catalogZoneCounts } from '@/lib/db/catalog';
+import { catalogCities, catalogPage, catalogZoneCounts } from '@/lib/db/catalog';
 import {
   CATALOG_PAGE_SIZE, parseCatalogFilters, catalogHref, sortHref, hasAnyFilter,
   firstPhoto, daysSince,
@@ -52,7 +52,9 @@ type Row = {
   actual_at: string;
 };
 
-function Search({ lang, f, deal }: { lang: Lang; f: CatalogFilters; deal: 'sale' | 'rent' }) {
+function Search({ lang, f, deal, cities }: {
+  lang: Lang; f: CatalogFilters; deal: 'sale' | 'rent'; cities: string[];
+}) {
   const d = t(lang);
   const up = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
   // Две вкладки, а не три. Поиск жилья бинарен: человек либо покупает,
@@ -84,6 +86,20 @@ function Search({ lang, f, deal }: { lang: Lang; f: CatalogFilters; deal: 'sale'
         {f.sort !== 'fresh' ? <input type="hidden" name="sort" value={f.sort} /> : null}
         {f.deal ? <input type="hidden" name="deal" value={f.deal} /> : null}
         <div className="row">
+          {/* Город показывается, только когда их больше одного.
+              Выбор из одного пункта — деталь, которая ничего не решает, а
+              место на пульте занимает; при этом спрятать город в складку
+              «ещё» нельзя: когда городов несколько, это первое, что
+              человек выбирает, а не уточнение к поиску. */}
+          {cities.length > 1 ? (
+            <div className="cell">
+              <label htmlFor="city">{d.cityLabel}</label>
+              <select id="city" name="city" defaultValue={f.city ?? ''}>
+                <option value="">{d.anyKind}</option>
+                {cities.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          ) : null}
           <div className="cell">
             <label htmlFor="q">{d.address}</label>
             <input id="q" name="q" type="search" placeholder={d.addressHint}
@@ -173,6 +189,7 @@ export default async function Catalog({
     const page = await catalogPage({
       deal,
       kind: f.kind,
+      city: f.city,
       zone: f.zone,
       rooms: f.rooms,
       priceMin: f.priceMin,
@@ -194,6 +211,9 @@ export default async function Catalog({
 
   // Районы, в которых реально есть объекты, по убыванию числа: показывать
   // пустой район — обманывать нажатие. Те же числа идут на карту города.
+  // Города нужны даже когда выдача не открылась: пульт должен выглядеть
+  // одинаково, иначе при сбое каталога у человека молча пропадёт фильтр.
+  const cities = failed ? [] : await catalogCities();
   const zoneCounts = failed ? [] : await catalogZoneCounts(deal);
   const byZone = new Map(zoneCounts.map((z) => [z.zone, z.n]));
   const zones = zoneCounts.slice(0, 8).map((z) => z.zone);
@@ -215,7 +235,7 @@ export default async function Catalog({
       </section>
 
       <div className="wrap">
-        <Search lang={lang} f={f} deal={deal} />
+        <Search lang={lang} f={f} deal={deal} cities={cities} />
 
         {/* Районы строкой: самый частый первый шаг — «покажите, что есть
             в Асанбае». Это ссылки, а не украшение. */}

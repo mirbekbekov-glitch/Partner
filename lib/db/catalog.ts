@@ -72,6 +72,7 @@ function view(row: CatalogRow): CatalogItem {
 export type CatalogQuery = {
   deal?: 'rent' | 'sale' | null;
   kind?: string | null;
+  city?: string | null;
   zone?: string | null;
   rooms?: number | null;
   priceMin?: number | null;
@@ -126,6 +127,7 @@ function conditions(query: CatalogQuery): { clause: string; params: (string | nu
 
   if (query.deal) { where.push('o.deal_type = ?'); params.push(query.deal); }
   if (query.kind) { where.push('o.kind = ?'); params.push(query.kind); }
+  if (query.city) { where.push('o.city = ?'); params.push(query.city); }
   if (query.zone) { where.push('o.zone = ?'); params.push(query.zone); }
   if (query.rooms) { where.push('o.rooms = ?'); params.push(query.rooms); }
 
@@ -234,6 +236,22 @@ export async function catalogZoneCounts(
       group by o.zone order by n desc, o.zone`,
     ...params,
   );
+}
+
+/**
+ * Города, которые реально встречаются в опубликованных объектах.
+ *
+ * Нужны фильтру, и по ним же он решает, показываться ли вовсе: пока
+ * город один, выбор из одного пункта — лишняя деталь на экране. Поэтому
+ * список, а не признак «есть ли города»: странице нужно и то и другое.
+ */
+export async function catalogCities(): Promise<string[]> {
+  const rows = await all<{ city: string }>(
+    `select distinct o.city as city from objects o
+      where o.publication_state = 'published'
+      order by o.city`,
+  );
+  return rows.map((r) => r.city);
 }
 
 /** Зоны, которые реально встречаются в опубликованных объектах. */

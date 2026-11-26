@@ -23,6 +23,7 @@ export const SORTS: { key: CatalogSort; column: string; asc: boolean }[] = [
 export type CatalogFilters = {
   deal: 'rent' | 'sale' | null;
   kind: string | null;
+  city: string | null;
   zone: string | null;
   rooms: number | null;
   priceMin: number | null;
@@ -55,6 +56,7 @@ export function parseCatalogFilters(
   return {
     deal: pick(one('deal'), DEALS) as CatalogFilters['deal'],
     kind: pick(one('kind'), KINDS),
+    city: one('city')?.trim() || null,
     zone: one('zone')?.trim() || null,
     rooms: num(one('rooms')),
     priceMin: num(one('from')),
@@ -75,6 +77,7 @@ export function catalogHref(lang: string, f: CatalogFilters, page: number) {
   const p = new URLSearchParams();
   if (f.deal) p.set('deal', f.deal);
   if (f.kind) p.set('kind', f.kind);
+  if (f.city) p.set('city', f.city);
   if (f.zone) p.set('zone', f.zone);
   if (f.rooms) p.set('rooms', String(f.rooms));
   if (f.priceMin != null) p.set('from', String(f.priceMin));
@@ -87,7 +90,7 @@ export function catalogHref(lang: string, f: CatalogFilters, page: number) {
 }
 
 export const hasAnyFilter = (f: CatalogFilters) =>
-  Boolean(f.deal || f.kind || f.zone || f.rooms || f.priceMin != null || f.priceMax != null || f.q);
+  Boolean(f.deal || f.kind || f.city || f.zone || f.rooms || f.priceMin != null || f.priceMax != null || f.q);
 
 /**
  * Первая фотография объекта. В базе photos — массив объектов {url}, поэтому

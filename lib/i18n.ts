@@ -53,7 +53,7 @@ type Dict = {
   objectsCount: (n: number) => string;
   // Страница объекта
   toAll: string; about: string; published: string; roomsLabel: string;
-  areaLabel: string; floorLabel: string; floorOf: string; zoneLabel: string;
+  areaLabel: string; floorLabel: string; floorOf: string; zoneLabel: string; cityLabel: string;
   confirmedPrice: string; notFound: string; notFoundLede: string; seeWhatIsThere: string;
   // Заявка
   viewObject: string; leadNote: string; yourName: string; phone: string;
@@ -116,7 +116,8 @@ const ru: Dict = {
   objectsCount: (n) => `${n} ${plural(n, 'объект', 'объекта', 'объектов')}`,
   toAll: '← Ко всем объектам', about: 'Об объекте', published: 'Опубликован',
   roomsLabel: 'Комнат', areaLabel: 'Площадь', floorLabel: 'Этаж', floorOf: 'из',
-  zoneLabel: 'Район', confirmedPrice: 'Агент подтвердил цену и доступность',
+  zoneLabel: 'Район', cityLabel: 'Город',
+  confirmedPrice: 'Агент подтвердил цену и доступность',
   notFound: 'Страница не найдена',
   notFoundLede: 'Возможно, объект сняли с публикации или продали.',
   seeWhatIsThere: 'Посмотреть, что есть сейчас →',
@@ -199,7 +200,8 @@ const ky: Dict = {
   objectsCount: (n) => `${n} объект`,
   toAll: '← Бардык объекттерге', about: 'Объект жөнүндө', published: 'Жарыяланган',
   roomsLabel: 'Бөлмө', areaLabel: 'Аянты', floorLabel: 'Кабат', floorOf: '/',
-  zoneLabel: 'Район', confirmedPrice: 'Агент бааны жана жеткиликтүүлүктү ырастады',
+  zoneLabel: 'Район', cityLabel: 'Шаар',
+  confirmedPrice: 'Агент бааны жана жеткиликтүүлүктү ырастады',
   notFound: 'Барак табылган жок',
   notFoundLede: 'Объект жарыядан алынган же сатылган болушу мүмкүн.',
   seeWhatIsThere: 'Азыр эмне бар экенин көрүү →',
@@ -282,7 +284,8 @@ const en: Dict = {
   objectsCount: (n) => `${n} ${n === 1 ? 'listing' : 'listings'}`,
   toAll: '← All listings', about: 'About this property', published: 'Published',
   roomsLabel: 'Rooms', areaLabel: 'Area', floorLabel: 'Floor', floorOf: 'of',
-  zoneLabel: 'District', confirmedPrice: 'Agent confirmed the price and availability',
+  zoneLabel: 'District', cityLabel: 'City',
+  confirmedPrice: 'Agent confirmed the price and availability',
   notFound: 'Page not found',
   notFoundLede: 'The listing may have been withdrawn or sold.',
   seeWhatIsThere: 'See what is available now →',
@@ -365,7 +368,8 @@ const zh: Dict = {
   objectsCount: (n) => `${n} 套房源`,
   toAll: '← 返回全部房源', about: '房源介绍', published: '发布时间',
   roomsLabel: '房间数', areaLabel: '面积', floorLabel: '楼层', floorOf: '/',
-  zoneLabel: '区域', confirmedPrice: '经纪人已确认价格与可售状态',
+  zoneLabel: '区域', cityLabel: '城市',
+  confirmedPrice: '经纪人已确认价格与可售状态',
   notFound: '页面未找到',
   notFoundLede: '该房源可能已下架或已售出。',
   seeWhatIsThere: '看看现在有哪些房源 →',

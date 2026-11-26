@@ -24,13 +24,18 @@ import { canSeeContact } from '@/lib/db/access';
 import { createRequirement } from '@/lib/db/requirements';
 import { createActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
-import { catalogObject, catalogPage, catalogZones } from '@/lib/db/catalog';
+import {
+  catalogCities, catalogCount, catalogObject, catalogPage, catalogZones,
+} from '@/lib/db/catalog';
 import {
   deletePhoto, listPhotos, photoKey, photoUrl, photosMissingThumb, putPhoto,
   putThumb, readPhoto, sniff,
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml } from '@/lib/feed';
+import {
+  catalogHref, hasAnyFilter, parseCatalogFilters,
+} from '@/lib/catalog-params';
 import {
   cabinetCounters, contactList, contactObjects, dealList, objectCard,
   objectList, requirementList,
@@ -930,7 +935,50 @@ export default {
     check('пустой город при правке становится Бишкеком',
       (await catalogObject(osh.id))?.city === 'Бишкек');
 
+    // Фильтр по городу. Показывается он, только когда городов больше
+    // одного, и решает это сам список: выбор из одного пункта ничего не
+    // решает, а место на пульте занимает.
+    //
+    // Город возвращаем: проверка выше нарочно сделала его бишкекским.
+    await updateObject(osh.id, { city: 'Ош' });
+
+    const cityList = await catalogCities();
+    check('города витрины — те, что есть у опубликованных объектов',
+      cityList.includes('Ош') && cityList.includes('Бишкек'));
+
+    const onlyOsh = await catalogPage({ city: 'Ош' });
+    check('фильтр по городу отбирает только его объекты',
+      onlyOsh.items.length > 0 && onlyOsh.items.every((i) => i.city === 'Ош'));
+    check('бишкекские при этом не попадают',
+      !onlyOsh.items.some((i) => i.id === shown.id));
+
+    // Счётчик на кнопке «Найти» обязан считать то же, что покажет список.
+    check('счётчик согласен с выдачей',
+      (await catalogCount({ city: 'Ош' })) === onlyOsh.total);
+
+    check('без фильтра видны все города',
+      (await catalogPage({})).items.some((i) => i.city === 'Ош')
+      && (await catalogPage({})).items.some((i) => i.city === 'Бишкек'));
+
+    // Разбор адреса страницы. Без этого фильтр мог бы работать в базе и
+    // при этом теряться по дороге от ссылки до запроса — ровно так и
+    // прошла молча мутация «город теряется при разборе».
+    const parsed = parseCatalogFilters({ city: 'Ош', kind: 'flat', rooms: '2' });
+    check('город читается из адреса страницы', parsed.city === 'Ош');
+    check('город переживает сборку ссылки обратно',
+      catalogHref('ru', parsed, 1).includes('city=%D0%9E%D1%88'));
+    // Город ОДИН, без прочих полей: иначе проверка истинна и без него —
+    // ровно так мутация «город не считается фильтром» и прошла молча.
+    check('один только город уже считается фильтром',
+      hasAnyFilter(parseCatalogFilters({ city: 'Ош' })));
+    check('пустой город за фильтр не считается',
+      parseCatalogFilters({ city: '  ' }).city === null
+      && !hasAnyFilter(parseCatalogFilters({ city: '  ' })));
+
     await withdrawObject(osh.id);
+
+    check('снятый с публикации город из списка уходит',
+      !(await catalogCities()).includes('Ош'));
 
     // Аренда и продажа должны называться по-разному. Проверка на одну
     // продажу этого не ловит: мутация «всё — продажа» проходит молча.
