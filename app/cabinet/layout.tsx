@@ -69,6 +69,9 @@ export default async function CabinetLayout({ children }: { children: React.Reac
             organization={organization?.name ?? null}
             orgConfirmed={agent.org_confirmed === 1}
             knownOrgs={knownOrgs}
+            worksSince={agent.works_since}
+            certificateNo={agent.certificate_no}
+            certificateConfirmed={agent.certificate_confirmed === 1}
             hint="Это можно заполнить, не дожидаясь одобрения. Агентство подтвердит администратор."
           />
         </div>

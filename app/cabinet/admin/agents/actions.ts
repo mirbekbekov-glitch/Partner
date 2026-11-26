@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import {
   approveAgent as approve, blockAgent as block,
-  confirmAgentOrganization, setAgentRole as setRole,
+  confirmAgentCertificate, confirmAgentOrganization, setAgentRole as setRole,
 } from '@/lib/db/agents';
 import { attempt } from '@/lib/db/report';
 
@@ -47,6 +47,28 @@ export async function setAgentRole(formData: FormData): Promise<Result> {
  */
 export async function confirmAgentOrg(formData: FormData): Promise<Result> {
   const error = await attempt(() => confirmAgentOrganization(
+    String(formData.get('agent_id') ?? ''),
+    formData.get('confirmed') === 'true',
+  ));
+  if (error) return { error };
+
+  revalidatePath('/cabinet/admin/agents');
+  return { error: null };
+}
+
+/**
+ * Подтверждение номера в реестре риэлторов.
+ *
+ * Тот же порядок, что у агентства, и по той же причине: номер видит
+ * клиент. Разница в цене ошибки — агентство это репутация чужой фирмы, а
+ * сертификат это утверждение о квалификации, и проверить его клиент не
+ * может вовсе.
+ *
+ * Админу стоит сверить номер с реестром, а не верить строке на экране:
+ * строку вписал тот же человек, чью квалификацию она подтверждает.
+ */
+export async function confirmAgentCert(formData: FormData): Promise<Result> {
+  const error = await attempt(() => confirmAgentCertificate(
     String(formData.get('agent_id') ?? ''),
     formData.get('confirmed') === 'true',
   ));

@@ -23,6 +23,8 @@ type Row = {
   created_at: string;
   organization_name: string | null;
   org_confirmed: number;
+  certificate_no: string | null;
+  certificate_confirmed: number;
   objects_count: number;
   contacts_count: number;
   requirements_count: number;
@@ -130,6 +132,8 @@ function AgentCard({ a }: { a: Row }) {
         role={a.role}
         hasOrg={a.organization_name !== null}
         orgConfirmed={a.org_confirmed === 1}
+        certificateNo={a.certificate_no}
+        certificateConfirmed={a.certificate_confirmed === 1}
       />
     </div>
   );
