@@ -1,22 +1,13 @@
 import Link from 'next/link';
-import { leadFeed } from '@/lib/db/cabinet';
-import { day } from '@/lib/list-params';
+import { leadFeed, type LeadFeedItem } from '@/lib/db/cabinet';
+import { day, parseFilters } from '@/lib/list-params';
+import { Pager } from '../Pager';
 import { LeadActions } from './LeadActions';
 
 export const metadata = { title: 'Заявки' };
 
-type Row = {
-  id: string;
-  object_id: string;
-  name: string;
-  phone: string;
-  message: string | null;
-  status: 'new' | 'in_work' | 'done' | 'spam';
-  created_at: string;
-  agent_id: string | null;
-  address: string | null;
-  agent_name: string | null;
-};
+const BASE = '/cabinet/leads';
+
 
 const STATUS_RU: Record<string, string> = {
   new: 'новая',
@@ -33,16 +24,20 @@ export default async function Leads({
   const sp = await searchParams;
   const raw = Array.isArray(sp.status) ? sp.status[0] : sp.status;
   const status = raw && raw in STATUS_RU ? raw : null;
+  // Разбор общий: постраничные ссылки собираются там же, где у остальных
+  // списков. Статус заявки разбирается отдельно — набор значений свой.
+  const f = parseFilters(sp);
 
   // Видимость стоит в самом запросе: заявки по объектам, за которые
   // отвечает этот агент. Раньше её обеспечивала политика базы, и условия
   // здесь не было вовсе — теперь страховки нет, поэтому предикат общий и
   // живёт в lib/db/visibility.ts.
-  let rows: Row[] = [];
+  let rows: LeadFeedItem[] = [];
+  let total = 0;
   let error: string | null = null;
 
   try {
-    rows = await leadFeed(status) as unknown as Row[];
+    ({ rows, total } = await leadFeed(status, f.page));
   } catch (e) {
     error = e instanceof Error ? e.message : 'Не удалось загрузить заявки.';
   }
@@ -124,6 +119,11 @@ export default async function Leads({
           </table>
         </div>
       )}
+
+      {/* Статус заявки подставляется в ссылки страниц отдельно: разбор
+          фильтров проверяет status по набору значений потребности, и
+          «в работе» или «спам» он бы отбросил. */}
+      <Pager base={BASE} filters={{ ...f, status }} total={total} />
     </>
   );
 }

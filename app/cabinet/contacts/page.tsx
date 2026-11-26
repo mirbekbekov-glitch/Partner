@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { contactDuplicates, contactList, type ContactListItem } from '@/lib/db/cabinet';
 import { ROLE_RU } from './ContactForm';
 import { parseFilters } from '@/lib/list-params';
+import { Pager } from '../Pager';
 import { SortTh } from '../SortTh';
 
 export const metadata = { title: 'Контакты' };
@@ -28,25 +29,25 @@ export default async function ContactsList({
   // Видимость стоит в самом запросе: чужие контакты закрыты инвариантом 4.
   // Раньше их отсекала политика базы, и условия здесь не было.
   let rows: ContactListItem[] = [];
+  let total = 0;
   let dupes: Array<{ a_id: string; b_id: string }> = [];
   let error: string | null = null;
 
   try {
     // Пары дубликатов — рядом со списком: пометить их полезнее, чем ждать,
     // пока кто-то зайдёт на карточку и заметит сам.
-    [rows, dupes] = await Promise.all([
-      contactList(q, f.sort, f.dir),
+    const [listed, pairs] = await Promise.all([
+      contactList(q, f.sort, f.dir, f.page, role && role in ROLE_RU ? role : null),
       contactDuplicates(),
     ]);
+    rows = listed.rows;
+    total = listed.total;
+    dupes = pairs;
   } catch (e) {
     error = e instanceof Error ? e.message : 'Не удалось загрузить контакты.';
   }
 
-  if (role && role in ROLE_RU) {
-    rows = rows.filter((r) => (r.roles ?? []).includes(role));
-  }
-
-  const count = rows.length;
+  const count = total;
 
   // Запись участвует в паре с любой стороны.
   const dupeIds = new Set<string>();
@@ -74,6 +75,14 @@ export default async function ContactsList({
             <option key={v} value={v}>{t}</option>
           ))}
         </select>
+        {/* Сортировка переживает фильтрацию: форма отправляется методом
+            get, и всё, чего в ней нет, из адреса пропадает. */}
+        {f.sort ? (
+          <>
+            <input type="hidden" name="sort" value={f.sort} />
+            <input type="hidden" name="dir" value={f.dir} />
+          </>
+        ) : null}
         <button type="submit">Фильтр</button>
         {q || role ? (
           <Link href="/cabinet/contacts" className="key reset">сбросить</Link>
@@ -82,7 +91,7 @@ export default async function ContactsList({
 
       {rows.length === 0 ? (
         <p className="empty">
-          {count === 0 && !q && !role
+          {total === 0 && !q && !role
             ? 'Контактов пока нет. Собственник или клиент заводится вместе с объектом или потребностью — либо здесь.'
             : 'Под эти условия ничего не подошло.'}
         </p>
@@ -148,6 +157,8 @@ export default async function ContactsList({
           </table>
         </div>
       )}
+
+      <Pager base={BASE} filters={f} total={total} />
     </>
   );
 }
