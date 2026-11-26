@@ -75,36 +75,54 @@ export default async function Leads({
           {status ? 'С таким статусом заявок нет.' : 'Заявок пока нет.'}
         </p>
       ) : (
-        rows.map((l) => (
-          <div className="card" key={l.id}>
-            <div className="row">
-              <strong>{l.name}</strong>
-              {/* Телефон — то, ради чего заявка существует: показываем целиком
-                  и сразу, без «показать номер». Сюда дошли только те, кому он
-                  положен: остальным политика не отдала бы и строки. */}
-              <a href={`tel:${l.phone.replace(/[^\d+]/g, '')}`}>{l.phone}</a>
-              <span className="tag">{STATUS_RU[l.status]}</span>
-              <span className="key">{day(l.created_at)}</span>
-            </div>
-
-            <div className="row" style={{ marginTop: 6 }}>
-              <span className="key">объект</span>
-              <Link href={`/cabinet/objects/${l.object_id}`}>
-                {l.address ?? 'объект удалён'}
-              </Link>
-              {l.agent_name ? (
-                <>
-                  <span className="key">ведёт</span>
-                  <span>{l.agent_name}</span>
-                </>
-              ) : null}
-            </div>
-
-            {l.message ? <p className="act-body">{l.message}</p> : null}
-
-            <LeadActions leadId={l.id} status={l.status} />
-          </div>
-        ))
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Заявитель</th>
+                <th>Объект</th>
+                <th>Сообщение</th>
+                <th>Статус</th>
+                <th>Когда</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((l) => (
+                <tr key={l.id}>
+                  <td>
+                    <span className="tbl-main">{l.name}</span>
+                    {/* Телефон — то, ради чего заявка существует: показываем
+                        целиком и сразу, без «показать номер». Сюда дошли
+                        только те, кому он положен: остальным политика не
+                        отдала бы и строки. */}
+                    <span className="tbl-sub">
+                      <a href={`tel:${l.phone.replace(/[^\d+]/g, '')}`}>{l.phone}</a>
+                    </span>
+                  </td>
+                  <td data-l="Объект">
+                    <Link href={`/cabinet/objects/${l.object_id}`}>
+                      {l.address ?? 'объект удалён'}
+                    </Link>
+                    {l.agent_name ? (
+                      <span className="tbl-sub">ведёт {l.agent_name}</span>
+                    ) : null}
+                  </td>
+                  <td data-l="Сообщение">
+                    {l.message ? <span className="tbl-text">{l.message}</span> : '—'}
+                  </td>
+                  <td data-l="Статус">
+                    <span className="tag">{STATUS_RU[l.status]}</span>
+                  </td>
+                  <td className="nowrap" data-l="Когда">{day(l.created_at)}</td>
+                  <td data-l="Действия">
+                    <LeadActions leadId={l.id} status={l.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   );
