@@ -544,6 +544,52 @@ export default {
     check('через правку профиля почта не подменяется',
       annaRow?.email === 'anna@example.kg', `почта стала ${annaRow?.email}`);
 
+    // -----------------------------------------------------------------
+    // Ожидающий одобрения правит свою карточку
+    // -----------------------------------------------------------------
+    // Это не послабление, а починка. Страница ожидания показывает форму
+    // профиля и прямо зовёт заполнить её, не дожидаясь одобрения: админ
+    // видит в списке заявок одну строку и по почте не поймёт, кто её
+    // подал. Но форма звала requireAgent и потому не работала НИКОГДА —
+    // ожидающий получал «Требуется одобренный агент».
+    //
+    // Нашлось живым входом с настоящей почты: ни один тест сюда не
+    // заглядывал.
+    await loginAs(db, newcomer.id);
+
+    await updateProfile({ full_name: 'Пётр Новичков', phone: '0555 11 22 33' });
+    const pendingRow = await getAgent(newcomer.id);
+    check('ожидающий вписывает своё имя',
+      pendingRow?.full_name === 'Пётр Новичков');
+    check('ожидающий остаётся ожидающим',
+      pendingRow?.status === 'pending', `статус стал ${pendingRow?.status}`);
+
+    await setMyOrganization('Этажи');
+    check('ожидающий заявляет агентство',
+      (await getAgent(newcomer.id))?.org_confirmed === 0);
+
+    // Послабление РОВНО на свою карточку: в саму CRM ожидающего не пускают.
+    await throws('ожидающему CRM по-прежнему закрыта',
+      () => objectList({}), Forbidden);
+
+    // Заблокированному закрыта и своя карточка: доступ отозван целиком.
+    await db.prepare(`update agents set status = 'blocked' where id = ?`)
+      .bind(newcomer.id).run();
+    await throws('заблокированный свою карточку не правит',
+      () => updateProfile({ full_name: 'Кто-то ещё' }), Forbidden);
+    await db.prepare(`update agents set status = 'pending' where id = ?`)
+      .bind(newcomer.id).run();
+
+    // Без входа — никакой карточки. Проверка отдельная, потому что
+    // мутация «requireSelf пускает всех подряд» её не роняла: ни один
+    // тест не пробовал править профиль анонимно, и ошибка прошла бы в
+    // продакшен обращением к пустому агенту.
+    resetCookies();
+    await throws('без входа своя карточка не правится',
+      () => updateProfile({ full_name: 'Никто' }), Forbidden);
+
+    await loginAs(db, anna);
+
     // Админ может всё это, и последнего админа не разжаловать.
     await db.prepare(`update agents set role = 'admin' where id = ?`).bind(anna).run();
     await loginAs(db, anna);

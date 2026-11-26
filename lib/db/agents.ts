@@ -1,7 +1,7 @@
 import 'server-only';
 import { all, batch, flag, newId, now, one, stmt } from './sql';
 import { auditStmt } from './audit';
-import { requireAdmin, requireAgent, type Agent } from './session';
+import { requireAdmin, requireAgent, requireSelf, type Agent } from './session';
 import { normalizeName } from './normalize';
 import { Conflict, Forbidden, Invalid, NotFound } from './errors';
 
@@ -130,7 +130,7 @@ export async function ensureAgentByEmail(
 export async function updateProfile(
   patch: { full_name?: string; phone?: string | null; focus?: 'sale' | 'rent' | 'both' },
 ): Promise<AgentRow> {
-  const agent = await requireAgent();
+  const agent = await requireSelf();
 
   const next: Record<string, string | null> = {};
   if (patch.full_name !== undefined) {
@@ -310,7 +310,7 @@ export async function listOrganizations(): Promise<OrganizationRow[]> {
  * агентство.
  */
 export async function setMyOrganization(name: string): Promise<AgentRow> {
-  const agent = await requireAgent();
+  const agent = await requireSelf();
 
   const clean = name.trim();
   if (clean.length < 2 || clean.length > 120) {
@@ -356,7 +356,7 @@ export async function setMyOrganization(name: string): Promise<AgentRow> {
 
 /** Уйти из агентства. Снять подтверждение может и сам агент: это не повышение прав. */
 export async function clearMyOrganization(): Promise<AgentRow> {
-  const agent = await requireAgent();
+  const agent = await requireSelf();
   const at = now();
 
   await batch([
