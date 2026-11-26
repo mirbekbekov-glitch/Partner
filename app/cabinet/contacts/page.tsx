@@ -82,7 +82,9 @@ export default async function ContactsList({
           ))}
         </select>
         <button type="submit">Фильтр</button>
-        {q || role ? <Link href="/cabinet/contacts" className="key">сбросить</Link> : null}
+        {q || role ? (
+          <Link href="/cabinet/contacts" className="key reset">сбросить</Link>
+        ) : null}
       </form>
 
       {rows.length === 0 ? (
@@ -92,47 +94,65 @@ export default async function ContactsList({
             : 'Под эти условия ничего не подошло.'}
         </p>
       ) : (
-        rows.map((c) => (
-          <div className="card" key={c.id}>
-            <div className="row">
-              <Link href={`/cabinet/contacts/${c.id}`}><strong>{c.name}</strong></Link>
-              {c.kind === 'company' ? <span className="tag">компания</span> : null}
-              {(c.roles ?? []).length > 0 ? (
-                (c.roles ?? []).map((r) => (
-                  <span className="tag" key={r}>{ROLE_RU[r] ?? r}</span>
-                ))
-              ) : (
-                <span className="key">роль не указана</span>
-              )}
-              {!c.mine ? <span className="key">привёл {c.owner_name}</span> : null}
-              {dupeIds.has(c.id) ? (
-                <span className="warn" title="Есть запись с таким же именем — возможно, это один человек">
-                  похоже на дубликат
-                </span>
-              ) : null}
-            </div>
-            <div className="row" style={{ marginTop: 6 }}>
-              <span className="key">телефон</span>
-              <span>{c.phones ?? '—'}</span>
-              {c.telegram ? (
-                <>
-                  <span className="key">telegram</span>
-                  <span>{c.telegram}</span>
-                </>
-              ) : null}
-            </div>
-            <div className="row" style={{ marginTop: 6 }}>
-              <span className="key">объектов</span>
-              <span>{c.objects_count}</span>
-              <span className="key">потребностей</span>
-              <span>
-                {c.requirements_count}
-                {c.open_requirements > 0 ? ` (${c.open_requirements} в работе)` : ''}
-              </span>
-              {c.source ? <span className="key">источник: {c.source}</span> : null}
-            </div>
-          </div>
-        ))
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Имя</th>
+                <th>Роли</th>
+                <th>Телефон</th>
+                <th>Telegram</th>
+                <th className="num">Объектов</th>
+                <th className="num">Потребностей</th>
+                <th>Источник</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    <Link className="tbl-main" href={`/cabinet/contacts/${c.id}`}>
+                      {c.name}
+                    </Link>
+                    {c.kind === 'company' ? (
+                      <span className="tbl-sub">компания</span>
+                    ) : null}
+                    {!c.mine ? (
+                      <span className="tbl-sub">привёл {c.owner_name}</span>
+                    ) : null}
+                    {dupeIds.has(c.id) ? (
+                      <span className="tbl-note">
+                        <span
+                          className="warn"
+                          title="Есть запись с таким же именем — возможно, это один человек"
+                        >
+                          похоже на дубликат
+                        </span>
+                      </span>
+                    ) : null}
+                  </td>
+                  <td data-l="Роли">
+                    {(c.roles ?? []).length > 0 ? (
+                      (c.roles ?? []).map((r) => (
+                        <span className="tag" key={r}>{ROLE_RU[r] ?? r}</span>
+                      ))
+                    ) : (
+                      <span className="key">не указана</span>
+                    )}
+                  </td>
+                  <td data-l="Телефон">{c.phones ?? '—'}</td>
+                  <td data-l="Telegram">{c.telegram ?? '—'}</td>
+                  <td className="num" data-l="Объектов">{c.objects_count}</td>
+                  <td className="num" data-l="Потребностей">
+                    {c.requirements_count}
+                    {c.open_requirements > 0 ? ` (${c.open_requirements} в работе)` : ''}
+                  </td>
+                  <td data-l="Источник">{c.source ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   );
