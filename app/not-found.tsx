@@ -15,7 +15,9 @@ const d = t(DEFAULT_LANG);
 // not-found, а она про язык адреса ничего не знает. Русское «Страница не
 // найдена» во вкладке над китайской страницей выглядело бы ошибкой,
 // поэтому здесь только имя — оно читается одинаково на всех четырёх.
-export const metadata = { title: 'Liberterra' };
+// absolute: иначе шаблон из корневого макета дописал бы «— Liberterra»
+// второй раз и вкладка читалась бы «Liberterra — Liberterra».
+export const metadata = { title: { absolute: 'Liberterra' } };
 
 export default function NotFound() {
   return (
