@@ -50,19 +50,31 @@ export default async function RequirementsList({
       <p className="sub">Всего {count ?? 0}. Клиент виден тем, кому он положен.</p>
 
       <form className="filters" method="get">
-        <input name="q" type="search" placeholder="по тексту требований" defaultValue={f.q ?? ''} />
-        <select name="deal" defaultValue={f.deal ?? ''}>
-          <option value="">сделка: любая</option>
-          <option value="sale">покупка</option>
-          <option value="rent">аренда</option>
-        </select>
-        <select name="status" defaultValue={f.status ?? ''}>
-          <option value="">статус: любой</option>
-          {Object.entries(STATUS_RU).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
-        <input name="zone" type="text" placeholder="зона" defaultValue={f.zone ?? ''} />
+        <label className="fld">
+          <span>Текст требований</span>
+          <input name="q" type="search" defaultValue={f.q ?? ''} />
+        </label>
+        <label className="fld">
+          <span>Сделка</span>
+          <select name="deal" defaultValue={f.deal ?? ''}>
+            <option value="">любая</option>
+            <option value="sale">покупка</option>
+            <option value="rent">аренда</option>
+          </select>
+        </label>
+        <label className="fld">
+          <span>Статус</span>
+          <select name="status" defaultValue={f.status ?? ''}>
+            <option value="">любой</option>
+            {Object.entries(STATUS_RU).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+        </label>
+        <label className="fld">
+          <span>Зона</span>
+          <input name="zone" type="text" defaultValue={f.zone ?? ''} />
+        </label>
         <button type="submit">Фильтр</button>
         {f.deal || f.status || f.zone || f.q ? (
           <Link href="/cabinet/requirements" className="key reset">сбросить</Link>

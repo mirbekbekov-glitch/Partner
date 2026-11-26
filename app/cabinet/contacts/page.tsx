@@ -67,13 +67,19 @@ export default async function ContactsList({
       </p>
 
       <form className="filters" method="get">
-        <input name="q" type="search" placeholder="имя" defaultValue={q ?? ''} />
-        <select name="role" defaultValue={role ?? ''}>
-          <option value="">роль: любая</option>
-          {Object.entries(ROLE_RU).map(([v, t]) => (
-            <option key={v} value={v}>{t}</option>
-          ))}
-        </select>
+        <label className="fld">
+          <span>Имя</span>
+          <input name="q" type="search" defaultValue={q ?? ''} />
+        </label>
+        <label className="fld">
+          <span>Роль</span>
+          <select name="role" defaultValue={role ?? ''}>
+            <option value="">любая</option>
+            {Object.entries(ROLE_RU).map(([v, t]) => (
+              <option key={v} value={v}>{t}</option>
+            ))}
+          </select>
+        </label>
         <button type="submit">Фильтр</button>
         {q || role ? (
           <Link href="/cabinet/contacts" className="key reset">сбросить</Link>
