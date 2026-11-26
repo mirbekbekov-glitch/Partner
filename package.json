@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test:forms": "./tests/check-forms.sh",
     "test:d1": "node tests/d1/run.mjs",
-    "test": "npm run test:d1 && npm run test:forms && npm run test:public",
+    "test": "npm run typecheck && npm run test:d1 && npm run test:forms && npm run test:public",
     "test:public": "./tests/check-public.sh"
   },
   "dependencies": {
