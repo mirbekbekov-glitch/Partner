@@ -31,7 +31,9 @@ export const LOCALE: Record<Lang, string> = {
 type Dict = {
   // Шапка и подвал
   forAgents: string; forAgentsShort: string; themeSwitch: string; agency: string; city: string; phones: string; sections: string;
-  agencyLine: string; cabinetLine: string;
+  agencyLine: (place: string) => string; cabinetLine: string;
+  /** Страна — подставляется вместо города, когда городов несколько. */
+  country: string;
   // Герой
   heroTitle: string; heroEm: string;
   // Поиск
@@ -96,7 +98,8 @@ const plural = (n: number, one: string, few: string, many: string) => {
 
 const ru: Dict = {
   forAgents: 'Вход для агентов', agency: 'Liberterra', phones: 'Телефоны',
-  sections: 'Разделы', agencyLine: 'Агентство недвижимости, Бишкек',
+  sections: 'Разделы', agencyLine: (place) => `Агентство недвижимости, ${place}`,
+  country: 'Кыргызстан',
   cabinetLine: 'Кабинет и CRM — по входу для агентов.',
   heroTitle: 'Найди своё пространство для комфортной', heroEm: 'работы и жилья',
   address: 'Адрес или район', addressHint: 'Чүй, Асанбай, Джал…',
@@ -180,7 +183,8 @@ const ru: Dict = {
 
 const ky: Dict = {
   forAgents: 'Агенттер үчүн кирүү', agency: 'Liberterra', phones: 'Телефондор',
-  sections: 'Бөлүмдөр', agencyLine: 'Кыймылсыз мүлк агенттиги, Бишкек',
+  sections: 'Бөлүмдөр', agencyLine: (place) => `Кыймылсыз мүлк агенттиги, ${place}`,
+  country: 'Кыргызстан',
   cabinetLine: 'Кабинет жана CRM — агенттер үчүн кирүү аркылуу.',
   heroTitle: 'Ыңгайлуу жашоо жана жумуш үчүн', heroEm: 'өз мейкиндигиңди тап',
   address: 'Дарек же район', addressHint: 'Чүй, Асанбай, Жал…',
@@ -264,7 +268,8 @@ const ky: Dict = {
 
 const en: Dict = {
   forAgents: 'Agent login', agency: 'Liberterra', phones: 'Phones',
-  sections: 'Sections', agencyLine: 'Real estate agency, Bishkek',
+  sections: 'Sections', agencyLine: (place) => `Real estate agency, ${place}`,
+  country: 'Kyrgyzstan',
   cabinetLine: 'The agent cabinet and CRM are behind the agent login.',
   heroTitle: 'Find your space for comfortable', heroEm: 'living and work',
   address: 'Address or district', addressHint: 'Chuy, Asanbay, Jal…',
@@ -348,7 +353,8 @@ const en: Dict = {
 
 const zh: Dict = {
   forAgents: '经纪人登录', agency: 'Liberterra', phones: '电话',
-  sections: '栏目', agencyLine: '比什凯克房地产中介',
+  sections: '栏目', agencyLine: (place) => `${place}房地产中介`,
+  country: '吉尔吉斯斯坦',
   cabinetLine: '经纪人工作台与 CRM 需登录后使用。',
   heroTitle: '找到适合您的', heroEm: '居住与工作空间',
   address: '地址或区域', addressHint: '楚河、阿桑拜、扎尔…',
@@ -443,4 +449,24 @@ export function freshWordIn(lang: Lang, days: number): string {
   if (days === 0) return d.today;
   if (days === 1) return d.yesterday;
   return d.daysAgo(days);
+}
+
+/**
+ * Что писать вместо города: сам город или страну.
+ *
+ * Пока все объекты в одном городе, привязка к нему работает на доверие:
+ * местное агентство человек выбирает именно как местное. Появятся объекты
+ * в других городах — «Бишкек» в подвале станет неправдой, и вместо него
+ * встанет страна.
+ *
+ * Считается по каталогу, а не правится руками: иначе этот текст устареет
+ * ровно в тот день, когда кто-то заведёт объект в Оше, и никто об этом не
+ * вспомнит.
+ *
+ * Пустой каталог — город по умолчанию: сайт без объектов всё равно
+ * бишкекский, и говорить «Кыргызстан» не о чем.
+ */
+export function placeName(cities: string[], d: Dict): string {
+  if (cities.length > 1) return d.country;
+  return cities[0] ?? d.city;
 }

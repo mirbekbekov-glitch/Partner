@@ -10,7 +10,7 @@ import {
   SORTS, publicMoney, type CatalogFilters,
 } from '@/lib/catalog-params';
 import { thumbOf } from '@/lib/photo-url';
-import { t, kindName, freshWordIn, LANGS, isLang, type Lang } from '@/lib/i18n';
+import { t, kindName, freshWordIn, LANGS, isLang, type Lang, placeName } from '@/lib/i18n';
 import { CatalogHeader } from '../CatalogHeader';
 import { HeroArt } from '../HeroArt';
 import { FindButton } from '../FindButton';
@@ -235,7 +235,7 @@ export default async function Catalog({
       <section className="hero">
         <HeroArt />
         <div className="hero-in wrap">
-          <span className="eyebrow">Liberterra · {d.city}</span>
+          <span className="eyebrow">Liberterra · {placeName(cities, d)}</span>
           <h1>{d.heroTitle} <em>{d.heroEm}</em></h1>
         </div>
       </section>

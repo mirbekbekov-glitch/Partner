@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { districts as loadDistricts } from '@/lib/db/catalog';
-import { t, isLang, LANGS, type Lang } from '@/lib/i18n';
+import { catalogCities, districts as loadDistricts } from '@/lib/db/catalog';
+import { t, isLang, LANGS, type Lang, placeName } from '@/lib/i18n';
 import { CatalogHeader } from '../../CatalogHeader';
 import { CatalogFooter } from '../../CatalogFooter';
 import { RequestForm } from '../../RequestForm';
@@ -36,13 +36,16 @@ export default async function RequestPage({
   // объявлений.
   const districts = (await loadDistricts()).map((r) => r.name);
 
+  // Город в шапке — тот же, что в подвале: по каталогу, а не руками.
+  const place = placeName(await catalogCities(), d);
+
   return (
     <>
       <CatalogHeader lang={lang} />
 
       <section className="hero hero-slim">
         <div className="hero-in wrap">
-          <span className="eyebrow">Liberterra · {d.city}</span>
+          <span className="eyebrow">Liberterra · {place}</span>
           <h1>{d.reqTitle}</h1>
           <p className="lede">{d.reqLede}</p>
           <ul className="props">

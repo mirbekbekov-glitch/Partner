@@ -38,6 +38,7 @@ import {
   catalogHref, hasAnyFilter, parseCatalogFilters,
 } from '@/lib/catalog-params';
 import { listingSchema } from '@/lib/listing-schema';
+import { placeName, t } from '@/lib/i18n';
 import {
   cabinetCounters, contactList, contactObjects, dealList, objectCard,
   objectList, requirementList,
@@ -999,6 +1000,22 @@ export default {
       centre(oshZones) === 1);
     check('чужой район в чужом городе не появляется',
       !oshZones.some((z) => z.zone === 'Чүй'));
+
+    // Как сайт себя называет. Пока город один — он; городов несколько —
+    // страна. Текст считается по каталогу, а не правится руками: иначе
+    // «Агентство недвижимости, Бишкек» в подвале устареет ровно в тот
+    // день, когда кто-то заведёт объект в Оше, и никто не вспомнит.
+    const ru = t('ru');
+    check('при нескольких городах в подвале страна',
+      placeName(await catalogCities(), ru) === 'Кыргызстан');
+    check('при одном городе — он сам',
+      placeName(['Ош'], ru) === 'Ош');
+    check('пустой каталог остаётся бишкекским',
+      placeName([], ru) === 'Бишкек');
+    check('подпись собирается на всех языках',
+      t('ky').agencyLine('Ош').includes('Ош')
+      && t('en').agencyLine('Osh').includes('Osh')
+      && t('zh').agencyLine('奥什').includes('奥什'));
 
     // Разметка для поисковика. Город там был зашит константой — той же
     // ошибкой, что и в выгрузке: объект из Оша поисковик увидел бы
