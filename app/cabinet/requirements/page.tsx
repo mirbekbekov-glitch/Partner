@@ -77,7 +77,7 @@ export default async function RequirementsList({
         <input name="zone" type="text" placeholder="зона" defaultValue={f.zone ?? ''} />
         <button type="submit">Фильтр</button>
         {f.deal || f.status || f.zone || f.q ? (
-          <Link href="/cabinet/requirements" className="key">сбросить</Link>
+          <Link href="/cabinet/requirements" className="key reset">сбросить</Link>
         ) : null}
       </form>
 
@@ -88,53 +88,59 @@ export default async function RequirementsList({
             : 'Под эти условия ничего не подошло. Попробуйте ослабить фильтр.'}
         </p>
       ) : (
-        rows.map((r) => (
-          <div className="card" key={r.id}>
-            <div className="row">
-              <Link href={`/cabinet/requirements/${r.id}`}>
-                <strong>
-                  {money(r.budget_min)} – {money(r.budget_max)}
-                </strong>
-              </Link>
-              <span className="tag">{STATUS_RU[r.status] ?? r.status}</span>
-              <span className="key">{r.deal_type === 'sale' ? 'покупка' : 'аренда'}</span>
-            </div>
-
-            <div className="row" style={{ marginTop: 6 }}>
-              <span className="key">клиент</span>
-              {r.client_name ? (
-                <span>{r.client_name}</span>
-              ) : (
-                <span className="hidden-contact">скрыт</span>
-              )}
-              <span className="key">ведёт</span>
-              <span>{r.agent_name ?? '—'}</span>
-              {r.deadline ? (
-                <>
-                  <span className="key">срок</span>
-                  <span>{day(r.deadline)}</span>
-                </>
-              ) : null}
-            </div>
-
-            <div className="row" style={{ marginTop: 6 }}>
-              {r.zones?.length ? <span className="key">{r.zones.join(', ')}</span> : null}
-              {r.rooms?.length ? <span>{r.rooms.join(', ')} комн.</span> : null}
-              <span className="key">подборов</span>
-              <span>{r.matches_count}</span>
-              {r.showings_count > 0 ? (
-                <span className="key">показов {r.showings_count}</span>
-              ) : null}
-              {r.deals_count > 0 ? <span className="tag">в сделке</span> : null}
-            </div>
-
-            {r.requirements_text ? (
-              <div className="row" style={{ marginTop: 6 }}>
-                <span>{r.requirements_text}</span>
-              </div>
-            ) : null}
-          </div>
-        ))
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th className="num">Бюджет</th>
+                <th>Сделка</th>
+                <th>Статус</th>
+                <th>Клиент</th>
+                <th>Ведёт</th>
+                <th>Что ищет</th>
+                <th className="num">Подборов</th>
+                <th className="num">Показов</th>
+                <th>Срок</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="num" data-l="Бюджет">
+                    <Link className="tbl-main" href={`/cabinet/requirements/${r.id}`}>
+                      {money(r.budget_min)} – {money(r.budget_max)}
+                    </Link>
+                  </td>
+                  <td data-l="Сделка">{r.deal_type === 'sale' ? 'покупка' : 'аренда'}</td>
+                  <td data-l="Статус">
+                    <span className="tag">{STATUS_RU[r.status] ?? r.status}</span>
+                    {r.deals_count > 0 ? (
+                      <span className="tbl-note"><span className="tag">в сделке</span></span>
+                    ) : null}
+                  </td>
+                  <td data-l="Клиент">
+                    {r.client_name ?? <span className="hidden-contact">скрыт</span>}
+                  </td>
+                  <td data-l="Ведёт">{r.agent_name ?? '—'}</td>
+                  <td data-l="Что ищет">
+                    {[
+                      r.zones?.length ? r.zones.join(', ') : null,
+                      r.rooms?.length ? `${r.rooms.join(', ')} комн.` : null,
+                    ].filter(Boolean).join(' · ') || '—'}
+                    {r.requirements_text ? (
+                      <span className="tbl-sub">{r.requirements_text}</span>
+                    ) : null}
+                  </td>
+                  <td className="num" data-l="Подборов">{r.matches_count}</td>
+                  <td className="num" data-l="Показов">{r.showings_count}</td>
+                  <td className="nowrap" data-l="Срок">
+                    {r.deadline ? day(r.deadline) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <Pager base="/cabinet/requirements" filters={f} total={count ?? 0} />

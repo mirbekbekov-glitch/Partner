@@ -63,7 +63,9 @@ export default async function Leads({
           ))}
         </select>
         <button type="submit">Фильтр</button>
-        {status ? <Link href="/cabinet/leads" className="key">сбросить</Link> : null}
+        {status ? (
+          <Link href="/cabinet/leads" className="key reset">сбросить</Link>
+        ) : null}
       </form>
 
       {error ? <p className="error">{error}</p> : null}
