@@ -163,11 +163,11 @@ export default async function ObjectsList({
                         объект нельзя опубликовать. */}
                     {!o.mandate_id ? (
                       <span className="tbl-note">
-                        <span className="warn">нет активного мандата</span>
+                        <span className="warn">без мандата</span>
                       </span>
                     ) : o.contract_confirmed === false ? (
                       <span className="tbl-note">
-                        <span className="warn">договор требует подтверждения</span>
+                        <span className="warn">договор не подтверждён</span>
                       </span>
                     ) : null}
                   </td>
@@ -179,7 +179,10 @@ export default async function ObjectsList({
                   <td data-l="Собственник">
                     {o.owner_name ?? <span className="hidden-contact">скрыт</span>}
                   </td>
-                  <td data-l="Ведёт">
+                  {/* nowrap: в 96 px «Айбек Мурзаев» переносился по слогам,
+                      а «частный агент» под ним — ещё раз, и строка таблицы
+                      раздувалась до четырёх строк текста из-за двух слов. */}
+                  <td className="nowrap" data-l="Ведёт">
                     {o.responsible_name ?? '—'}
                     <span className="tbl-sub">
                       {o.responsible_org_name ?? 'частный агент'}

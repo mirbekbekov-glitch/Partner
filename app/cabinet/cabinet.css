@@ -218,7 +218,7 @@ form.stack.card { max-width: 760px; }
 .tbl th,
 .tbl td {
   text-align: left;
-  padding: 9px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
@@ -249,6 +249,9 @@ form.stack.card { max-width: 760px; }
 .tbl-main { font-weight: 700; }
 .tbl-sub { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
 .tbl-note { display: block; margin-top: 4px; }
+/* Пометка о мандате в одну строку: разорванная пополам, она добавляла
+   строке таблицы целую строку текста. */
+.tbl-note .warn { white-space: nowrap; }
 
 /* Узкий экран: таблица разбирается на карточки. Горизонтальная прокрутка
    девяти колонок на телефоне нечитаема, а подписи колонок подставляются
@@ -272,6 +275,11 @@ form.stack.card { max-width: 760px; }
     font-size: 13px;
   }
   .tbl .num { text-align: left; }
+  /* В карточке девять строк «подпись: значение» одного веса, и цена
+     теряется среди них. На телефоне она крупнее остальных: по ней
+     карточку и просматривают. */
+  .tbl td[data-l='Цена'] { font-size: 16px; font-weight: 700; padding-top: 4px; }
+  .tbl td[data-l='Цена']::before { font-weight: 400; }
   .tbl td:first-child { min-width: 0; }
   /* В ячейке с подписью пояснение дописывается в ту же строку, а в первой —
      остаётся отдельной строкой: там оно идёт сразу за названием, и без

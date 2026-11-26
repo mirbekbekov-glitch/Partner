@@ -84,8 +84,17 @@ export function pageHref(base: string, f: Filters, page: number) {
 export const money = (v: number | null, c = 'USD') =>
   v == null ? '—' : `${new Intl.NumberFormat('ru-RU').format(v)} ${c}`;
 
+/**
+ * Дата в списках кабинета.
+ *
+ * Короткая, а не «28 нояб. 2026 г.»: во всех четырёх таблицах дата стоит
+ * колонкой, и словесный месяц занимал там на треть больше места, чем
+ * цифры, — за счёт соседних колонок, которые из-за этого переносились.
+ * В прозе эта функция не используется ни разу: только ячейки таблиц и
+ * мелкие подписи.
+ */
 export const day = (v: string | null) =>
-  v == null ? '—' : new Date(v).toLocaleDateString('ru-RU', { dateStyle: 'medium' });
+  v == null ? '—' : new Date(v).toLocaleDateString('ru-RU', { dateStyle: 'short' });
 
 /**
  * Ссылка на тот же список, отсортированный по колонке.
