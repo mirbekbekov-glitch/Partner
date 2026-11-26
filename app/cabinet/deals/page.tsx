@@ -1,8 +1,11 @@
 import Link from 'next/link';
-import { dealList } from '@/lib/db/cabinet';
-import { money, day } from '@/lib/list-params';
+import { dealList, type DealListItem } from '@/lib/db/cabinet';
+import { money, day, parseFilters, type Filters } from '@/lib/list-params';
+import { SortTh } from '../SortTh';
 
 export const metadata = { title: 'Сделки' };
+
+const BASE = '/cabinet/deals';
 
 export const DEAL_STATUS_RU: Record<string, string> = {
   deposit: 'аванс',
@@ -13,38 +16,22 @@ export const DEAL_STATUS_RU: Record<string, string> = {
   failed: 'сорвана',
 };
 
-type Row = {
-  id: string;
-  status: string;
-  created_at: string;
-  closed_at: string | null;
-  final_price: number | null;
-  failure_reason: string | null;
-  object_id: string;
-  address: string;
-  deal_type: string;
-  object_price: number;
-  currency: string;
-  listing_agent_name: string | null;
-  closing_agent_name: string | null;
-  commission_total: number | null;
-  listing_share: number | null;
-  closing_share: number | null;
-  is_indicative: boolean;
-  client_name: string | null;
-  can_act: boolean;
-};
 
-export default async function DealsList() {
+export default async function DealsList({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const f = parseFilters(await searchParams);
   // Сделку видят только её стороны: предикат стоит в запросе. Суммы до
   // закрытия индикативны и считаются на лету, после закрытия отдаются
   // зафиксированные — записывать индикативные нельзя, записанные означали
   // бы, что деньги уже поделены.
-  let rows: Row[] = [];
+  let rows: DealListItem[] = [];
   let error: string | null = null;
 
   try {
-    rows = await dealList() as unknown as Row[];
+    rows = await dealList(f.sort, f.dir);
   } catch (e) {
     error = e instanceof Error ? e.message : 'Не удалось загрузить сделки.';
   }
@@ -66,13 +53,13 @@ export default async function DealsList() {
           потребности.
         </p>
       ) : (
-        <DealTable rows={open} />
+        <DealTable rows={open} f={f} />
       )}
 
       {done.length > 0 ? (
         <>
           <h2>Завершённые ({done.length})</h2>
-          <DealTable rows={done} />
+          <DealTable rows={done} f={f} />
         </>
       ) : null}
     </>
@@ -86,21 +73,21 @@ export default async function DealsList() {
  * комиссия, доли сторон, — а их сравнивают между строками. На узком экране
  * таблица разбирается на карточки силами cabinet.css.
  */
-function DealTable({ rows }: { rows: Row[] }) {
+function DealTable({ rows, f }: { rows: DealListItem[]; f: Filters }) {
   return (
     <div className="tbl-wrap">
       <table className="tbl">
         <thead>
           <tr>
-            <th>Объект</th>
-            <th>Статус</th>
+            <SortTh base={BASE} f={f} col="address" label="Объект" />
+            <SortTh base={BASE} f={f} col="status" label="Статус" />
             <th>Клиент</th>
             <th>Listing</th>
             <th>Closing</th>
-            <th className="num">Цена</th>
+            <SortTh base={BASE} f={f} col="price" label="Цена" className="num" />
             <th className="num">Комиссия</th>
             <th className="num">Доли</th>
-            <th>Начата</th>
+            <SortTh base={BASE} f={f} col="created" label="Начата" />
           </tr>
         </thead>
         <tbody>
