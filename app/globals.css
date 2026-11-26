@@ -429,6 +429,9 @@ textarea {
  * ширина, поэтому ограничение снимается, а ширину держат обёртки полос.
  */
 main:has(.nav) { max-width: none; padding: 0; }
+/* Та же причина, что и у шапки: странице входа нужен весь экран, чтобы
+   встать по центру, а не колонка в 900 px с отступами. */
+main:has(.auth) { max-width: none; padding: 0; }
 
 .wrap { max-width: 1180px; margin: 0 auto;
   padding-left: max(18px, env(safe-area-inset-left, 0px));
@@ -796,6 +799,42 @@ main:has(.nav) { max-width: none; padding: 0; }
    молча отбрасывалась как ботовская. */
 .honeypot { position: absolute; left: -9999px; width: 1px; height: 1px;
   overflow: hidden; opacity: 0; pointer-events: none; }
+
+/* --- Вход в кабинет ------------------------------------------------------
+   Единственная страница, которую агент видит до кабинета, и до сих пор
+   она выглядела служебной заглушкой: без знака, без карточки, прижата к
+   левому верхнему углу пустого экрана. Шапку каталога сюда ставить не за
+   чем — на странице входа нечего искать и не на что переключаться, —
+   поэтому здесь свой, короткий набор: знак, карточка, путь назад. */
+.auth { min-height: 100dvh; display: grid; place-items: center; padding: 40px 18px; }
+.auth-box { width: 100%; max-width: 400px; display: flex; flex-direction: column;
+  align-items: center; gap: 20px; }
+.auth-brand img { height: 28px; }
+.auth-card { width: 100%; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-lg); box-shadow: var(--sh-md); padding: 28px 26px; }
+.auth-card h1 { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 6px; }
+.auth-sub { margin: 0 0 22px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.auth-form { display: flex; flex-direction: column; }
+.auth-form label { font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+.auth-form input[type='email'] { width: 100%; padding: 11px 12px; font-size: 15px;
+  font-weight: 500; border-radius: var(--r-md); transition: border-color .18s; }
+.auth-form input[type='email']:focus { border-color: var(--accent); }
+.auth-form button { margin-top: 14px; padding: 12px 20px; border-radius: var(--r-md);
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  transition: background .18s, transform .18s; }
+.auth-form button:hover:not(:disabled) { background: var(--accent-hover); }
+.auth-form .error { margin-top: 14px; }
+/* Отправлено: тот же размер карточки, но без поля — иначе человек
+   принимается вводить почту второй раз. Подзаголовок про одобрение
+   администратором тоже уходит: он объясняет, что будет ПОСЛЕ входа, а
+   сейчас на экране один ответ — письмо отправлено. */
+.auth-card:has(.auth-sent) .auth-sub { display: none; }
+.auth-sent p { margin: 0; font-size: 15px; line-height: 1.55; }
+.auth-sent .auth-hint { margin-top: 10px; color: var(--muted); font-size: 13px; }
+.auth-back { margin: 0; font-size: 14px; }
+.auth-back a { color: var(--muted); text-decoration: none; font-weight: 600; }
+.auth-back a:hover { color: var(--accent); }
 
 /* --- Выбор языка -------------------------------------------------------- */
 .lang { position: relative; }
