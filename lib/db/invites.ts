@@ -78,17 +78,24 @@ export async function inviteAgent(input: InviteInput): Promise<Invite> {
 
   const name = (input.full_name ?? '').trim();
 
-  const before = await one<{ id: string }>('select id from agents where email = ?', email);
-  const agent = await ensureAgentByEmail(email, name || null);
+  const before = await one<{ id: string; status: string }>(
+    'select id, status from agents where email = ?', email,
+  );
 
   // Заблокированному ссылка не выдаётся. Вход ему всё равно откажет — но
   // отказать надо ЗДЕСЬ: иначе админ отправляет ссылку, человек по ней
   // приходит и видит «доступ закрыт», а выглядит это так, будто доступ
   // закрылся только что. Разблокировка — отдельное осознанное действие,
   // а не побочный смысл приглашения.
-  if (agent.status === 'blocked') {
+  //
+  // Проверка стоит ДО ensureAgentByEmail, а не после: та заодно обновляет
+  // имя, и при проверке после отказа заблокированный агент оказывался бы
+  // переименован. Отклонённое действие не должно оставлять следа.
+  if (before?.status === 'blocked') {
     throw new Forbidden('Этому агенту доступ закрыт. Сначала снимите блокировку');
   }
+
+  const agent = await ensureAgentByEmail(email, name || null);
 
   const token = randomToken();
   const at = now();

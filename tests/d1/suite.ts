@@ -840,8 +840,22 @@ export default {
     await db.prepare(`update agents set status = 'blocked' where email = ?`)
       .bind('nurlan@example.kg').run();
     await throws('заблокированному ссылку не выдают',
-      () => inviteAgent({ email: 'nurlan@example.kg', origin: 'https://liberterra.kg' }),
+      () => inviteAgent({
+        email: 'nurlan@example.kg', full_name: 'Переименованный',
+        origin: 'https://liberterra.kg',
+      }),
       Forbidden);
+    // Отказ не должен оставлять следа. Заведение агента заодно обновляет
+    // имя, и если проверять блокировку ПОСЛЕ него, отклонённое приглашение
+    // всё равно переименовывало бы человека.
+    check('и отказ не переименовал его по пути',
+      (await db.prepare('select full_name from agents where email = ?')
+        .bind('nurlan@example.kg').first<{ full_name: string }>())?.full_name
+        === 'Нурлан Орозов');
+    check('и лишней ссылки в базе не осталось',
+      ((await db.prepare(`select count(*) as n from login_tokens
+                           where email = ? and used_at is null`)
+        .bind('nurlan@example.kg').first<{ n: number }>())?.n ?? -1) === 1);
     await db.prepare(`update agents set status = 'approved' where email = ?`)
       .bind('nurlan@example.kg').run();
 
