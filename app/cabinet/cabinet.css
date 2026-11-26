@@ -1,0 +1,169 @@
+/*
+ * Стили кабинета. Подключаются только из app/cabinet/layout.tsx, поэтому
+ * переделка CRM не задевает публичный каталог. Цвета берутся из токенов
+ * globals.css: они уже переключаются вместе с темой, второй набор для
+ * тёмной темы не нужен.
+ */
+
+.crm-shell {
+  --crm-side-w: 240px;
+  --crm-side-bg: var(--panel);
+  --crm-side-line: var(--line);
+  --crm-link-fg: var(--muted);
+  --crm-link-hover-bg: var(--sunk);
+  --crm-link-active-fg: var(--accent);
+  --crm-link-active-bg: color-mix(in srgb, var(--accent) 10%, transparent);
+  --crm-content-max: 1440px;
+  --crm-gap: 32px;
+
+  display: grid;
+  grid-template-columns: var(--crm-side-w) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+/* Корневой <main> ограничивает ширину в 900px и даёт отступы. Для кабинета
+   с сайдбаром это снимается, как и для публичной шапки (main:has(.nav)). */
+main:has(> .crm-shell) { max-width: none; margin: 0; padding: 0; }
+
+.crm-content {
+  min-width: 0;
+  width: 100%;
+  max-width: var(--crm-content-max);
+  margin: 0 auto;
+  padding: 24px var(--crm-gap) 64px;
+}
+
+/* ── Сайдбар ─────────────────────────────────────────────── */
+.crm-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--crm-side-bg);
+  border-right: 1px solid var(--crm-side-line);
+  overflow-y: auto;
+}
+
+.crm-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 16px 12px;
+}
+.crm-side-title { font-weight: 800; letter-spacing: .01em; }
+
+.crm-nav { display: flex; flex-direction: column; gap: 2px; padding: 4px 8px; }
+.crm-nav-sep {
+  margin: 14px 10px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+
+.crm-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--r-md);
+  color: var(--crm-link-fg);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+.crm-link:hover { background: var(--crm-link-hover-bg); color: var(--fg); }
+.crm-link[aria-current='page'] {
+  background: var(--crm-link-active-bg);
+  color: var(--crm-link-active-fg);
+}
+.crm-link svg { flex: none; }
+.crm-me { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.crm-side-foot {
+  margin-top: auto;
+  padding: 8px;
+  border-top: 1px solid var(--crm-side-line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.crm-side-foot form { margin: 0; }
+.crm-side-foot button.ghost { width: 100%; text-align: left; }
+
+/* Кнопки мобильного меню на широком экране скрыты. */
+.crm-mobilebar, .crm-close, .crm-backdrop { display: none; }
+
+/* ── Узкий экран: сайдбар выезжает поверх контента ───────── */
+@media (max-width: 900px) {
+  .crm-shell { grid-template-columns: minmax(0, 1fr); --crm-gap: 16px; }
+
+  .crm-mobilebar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--crm-side-bg);
+    border-bottom: 1px solid var(--crm-side-line);
+  }
+  .crm-mobilebar-title { font-weight: 800; }
+  .crm-burger, .crm-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: transparent;
+    color: var(--fg);
+    cursor: pointer;
+  }
+
+  .crm-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(0, 0, 0, .45);
+  }
+  .crm-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 50;
+    width: min(280px, 85vw);
+    transform: translateX(-100%);
+    transition: transform .2s ease;
+    box-shadow: var(--sh-lg);
+  }
+  .crm-sidebar[data-open='true'] { transform: none; }
+  .crm-close { display: inline-flex; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crm-sidebar { transition: none; }
+}
+
+/* ── Полоса без навигации (аккаунт не найден, заявка, блок) ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 12px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+.topbar .who { display: flex; align-items: center; gap: 8px; margin-right: auto; }
+.topbar form { margin: 0; }
+@media (max-width: 560px) {
+  .topbar { flex-wrap: wrap; gap: 10px; }
+  .topbar .who { margin-right: 0; gap: 12px; }
+}

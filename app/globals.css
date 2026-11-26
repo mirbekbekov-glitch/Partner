@@ -216,19 +216,6 @@ button:disabled { opacity: 0.55; cursor: default; }
 }
 
 
-/* Верхняя полоса кабинета */
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding-bottom: 12px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--line);
-  font-size: 0.9rem;
-}
-
-.topbar .who { display: flex; align-items: center; gap: 8px; margin-right: auto; }
-.topbar form { margin: 0; }
 
 input[type='email'],
 input[type='tel'],
@@ -306,11 +293,6 @@ a.tile:hover { border-color: var(--accent); }
 
 .pager { display: flex; gap: 16px; align-items: center; margin-top: 20px; }
 
-/* Верхняя полоса: на узком экране переносится, а не уезжает за край */
-@media (max-width: 560px) {
-  .topbar { flex-wrap: wrap; gap: 10px; }
-  .topbar .who { margin-right: 0; gap: 12px; }
-}
 
 /* Заголовок с действием справа */
 .head {
