@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { dealList, type DealListItem } from '@/lib/db/cabinet';
 import { money, day, parseFilters, type Filters } from '@/lib/list-params';
 import { SortTh } from '../SortTh';
+import { Board } from './Board';
 
 export const metadata = { title: 'Сделки' };
 
@@ -22,7 +23,9 @@ export default async function DealsList({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const f = parseFilters(await searchParams);
+  const sp = await searchParams;
+  const f = parseFilters(sp);
+  const view = (Array.isArray(sp.view) ? sp.view[0] : sp.view) === 'board' ? 'board' : 'table';
   // Сделку видят только её стороны: предикат стоит в запросе. Суммы до
   // закрытия индикативны и считаются на лету, после закрытия отдаются
   // зафиксированные — записывать индикативные нельзя, записанные означали
@@ -38,6 +41,10 @@ export default async function DealsList({
   const open = rows.filter((r) => r.status !== 'closed' && r.status !== 'failed');
   const done = rows.filter((r) => r.status === 'closed' || r.status === 'failed');
 
+  // Вид живёт в адресе, как фильтры и сортировка: доской можно поделиться,
+  // и перезагрузка не сбрасывает выбор.
+  const board = view === 'board';
+
   return (
     <>
       <h1>Сделки</h1>
@@ -46,12 +53,24 @@ export default async function DealsList({
         от текущей цены объекта.
       </p>
 
+      <div className="tabs-row">
+        <Link href={BASE} className="chip" aria-current={!board ? 'true' : undefined}>
+          Таблицей
+        </Link>
+        <Link href={`${BASE}?view=board`} className="chip"
+              aria-current={board ? 'true' : undefined}>
+          Доской
+        </Link>
+      </div>
+
       <h2>В работе ({open.length})</h2>
       {open.length === 0 ? (
         <p className="empty">
           Открытых сделок нет. Сделка начинается с подбора — на карточке объекта или
           потребности.
         </p>
+      ) : board ? (
+        <Board rows={open} />
       ) : (
         <DealTable rows={open} f={f} />
       )}
