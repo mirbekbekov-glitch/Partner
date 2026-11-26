@@ -156,7 +156,7 @@ export function ContactForm({
         <button type="submit" disabled={pending}>
           {pending ? 'Сохраняем…' : mode === 'create' ? 'Создать контакт' : 'Сохранить'}
         </button>
-        <Link className="key" href={draft?.id ? `/cabinet/contacts/${draft.id}` : '/cabinet/contacts'}>
+        <Link className="btn ghostlink" href={draft?.id ? `/cabinet/contacts/${draft.id}` : '/cabinet/contacts'}>
           отмена
         </Link>
       </div>

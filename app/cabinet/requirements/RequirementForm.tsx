@@ -141,7 +141,7 @@ export function RequirementForm({
         <button type="submit" disabled={pending}>
           {pending ? 'Сохраняем…' : mode === 'create' ? 'Создать потребность' : 'Сохранить'}
         </button>
-        <Link className="key"
+        <Link className="btn ghostlink"
               href={draft?.id ? `/cabinet/requirements/${draft.id}` : '/cabinet/requirements'}>
           отмена
         </Link>

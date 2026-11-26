@@ -234,7 +234,7 @@ export function ObjectForm({
         <button type="submit" disabled={pending}>
           {pending ? 'Сохраняем…' : mode === 'create' ? 'Создать объект' : 'Сохранить'}
         </button>
-        <Link className="key" href={draft?.id ? `/cabinet/objects/${draft.id}` : '/cabinet/objects'}>
+        <Link className="btn ghostlink" href={draft?.id ? `/cabinet/objects/${draft.id}` : '/cabinet/objects'}>
           отмена
         </Link>
       </div>

@@ -324,6 +324,14 @@ button.ghost {
    48 и 28 — и повисал между разделами, не принадлежа ни одному. */
 .stack h2 { margin: 16px 0 0; }
 .field { display: flex; flex-direction: column; gap: 4px; }
+/* Обязательное поле помечено звёздочкой — как в публичной форме заявки.
+   Метку ставит не разметка, а сам атрибут required: подпись и проверка
+   браузера не могут разойтись, и про новое поле не забудут. Списки сюда
+   не включены намеренно: required у списка с готовым значением ничего не
+   требует от человека, и звёздочка на нём — шум. */
+.field:has(input:required, textarea:required) > label::after {
+  content: ' *'; color: var(--accent); font-weight: 700;
+}
 .field input { max-width: 340px; }
 .field .key { margin: 0; }
 .field p { margin: 0; }
