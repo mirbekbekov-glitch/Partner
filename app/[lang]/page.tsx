@@ -1,9 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { catalogCities, catalogPage, catalogZoneCounts } from '@/lib/db/catalog';
-
-/** Город, чью схему районов мы умеем рисовать. Единственный. */
-const BISHKEK = 'Бишкек';
+import { planFor } from '@/lib/city-plans';
 import {
   CATALOG_PAGE_SIZE, parseCatalogFilters, catalogHref, sortHref, hasAnyFilter,
   firstPhoto, daysSince,
@@ -219,7 +217,12 @@ export default async function Catalog({
   // одинаково, иначе при сбое каталога у человека молча пропадёт фильтр.
   const cities = failed ? [] : await catalogCities();
   const manyCities = cities.length > 1;
-  const showMap = !manyCities || f.city === BISHKEK;
+
+  // Схема рисуется, только когда ясно, какого она города, и такая схема
+  // есть. Городов несколько и ни один не выбран — схемы нет: показать
+  // раскладку одного города поверх объектов всех значило бы соврать.
+  // Город один — он и есть ответ, даже если фильтр не трогали.
+  const plan = planFor(manyCities ? f.city : (f.city ?? cities[0] ?? 'Бишкек'));
   const zoneCounts = failed ? [] : await catalogZoneCounts(deal, f.city);
   const byZone = new Map(zoneCounts.map((z) => [z.zone, z.n]));
   const zones = zoneCounts.slice(0, 8).map((z) => z.zone);
@@ -364,8 +367,8 @@ export default async function Catalog({
             выбранном Бишкеке или когда других городов в каталоге нет.
             Рисовать схему каждого города — отдельная работа, и пока её
             нет, честнее не показывать ничего, чем показывать чужую. */}
-        {showMap ? (
-          <CityMap lang={lang} f={f} counts={byZone}
+        {plan ? (
+          <CityMap lang={lang} f={f} counts={byZone} plan={plan}
                    title={d.mapTitle} hint={d.mapHint} empty={d.mapEmpty} />
         ) : null}
       </div>

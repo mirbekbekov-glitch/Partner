@@ -39,6 +39,7 @@ import {
 } from '@/lib/catalog-params';
 import { listingSchema } from '@/lib/listing-schema';
 import { placeName, t } from '@/lib/i18n';
+import { citiesWithPlan, planFor } from '@/lib/city-plans';
 import {
   cabinetCounters, contactList, contactObjects, dealList, objectCard,
   objectList, requirementList,
@@ -1000,6 +1001,26 @@ export default {
       centre(oshZones) === 1);
     check('чужой район в чужом городе не появляется',
       !oshZones.some((z) => z.zone === 'Чүй'));
+
+    // Схемы районов по городам. Схема — не карта, и вся её ценность в
+    // правде расположения: местный должен узнать город с первого
+    // взгляда. Поэтому город попадает в список, только когда раскладку
+    // назвал тот, кто город знает, а не тот, кто догадался.
+    check('у Бишкека схема есть', planFor('Бишкек') !== null);
+    check('у города без схемы её нет, и это не сбой', planFor('Ош') === null);
+    check('пустой город схемы не получает',
+      planFor(null) === null && planFor('') === null);
+
+    // Названия в схеме обязаны совпадать с тем, что агенты пишут в поле
+    // зоны: иначе ячейка никогда не наберёт ни одного объекта и навсегда
+    // останется приглушённой.
+    const plan = planFor('Бишкек');
+    check('в схеме есть Центр — та же зона, что у объектов витрины',
+      plan?.cells.some((c) => c.name === 'Центр'));
+    check('у схемы есть ось и названа она городской улицей',
+      plan?.avenue === 'Чүй');
+    check('схем ровно столько, сколько городов описали руками',
+      citiesWithPlan().join() === 'Бишкек');
 
     // Как сайт себя называет. Пока город один — он; городов несколько —
     // страна. Текст считается по каталогу, а не правится руками: иначе
