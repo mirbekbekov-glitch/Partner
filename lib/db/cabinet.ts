@@ -346,10 +346,24 @@ export async function linkableObjects() {
   );
 }
 
-/** Карточка объекта для кабинета: цена в основных единицах. */
+/**
+ * Карточка объекта для кабинета: цена в основных единицах, снимки списком.
+ *
+ * Снимки РАЗБИРАЮТСЯ здесь, а не у вызывающего. В D1 колонка `photos` —
+ * это текст с JSON, тогда как Postgres отдавал `jsonb` уже разобранным.
+ * При переезде разница осталась незамеченной, потому что страница правки
+ * приводила ответ к нужному типу через `as unknown as`: приведение
+ * заглушило проверку типов, и страница падала на любом объекте уже в
+ * браузере — «.map is not a function».
+ *
+ * Разбор именно здесь, рядом с запросом: то же самое делают objectView и
+ * витрина, и всякий, кто читает `photos` из базы, обязан его сделать.
+ * Отдавать наружу сырую строку значит ждать, что об этом вспомнит каждый
+ * вызывающий — один уже не вспомнил.
+ */
 export async function objectCard(id: string) {
   await asker();
-  return one<{
+  const row = await one<{
     id: string; kind: string; deal_type: 'rent' | 'sale'; address: string;
     zone: string | null; rooms: number | null; area: number | null;
     floor: number | null; floors_total: number | null; price: number;
@@ -364,6 +378,8 @@ export async function objectCard(id: string) {
        from objects o where o.id = ?`,
     id,
   );
+
+  return row && { ...row, photos: jsonArray<string>(row.photos) };
 }
 
 /** Активный мандат объекта — для блока договора на карточке. */

@@ -30,8 +30,8 @@ import {
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import {
-  cabinetCounters, contactList, contactObjects, dealList, objectList,
-  requirementList,
+  cabinetCounters, contactList, contactObjects, dealList, objectCard,
+  objectList, requirementList,
 } from '@/lib/db/cabinet';
 import {
   approveAgent, blockAgent, clearMyOrganization, confirmAgentOrganization,
@@ -960,6 +960,25 @@ export default {
     check('миниатюра удаляется вместе со снимком',
       (await env.PHOTOS.get(thumbKey(withThumb.key))) === null);
     await deletePhoto(withPhotos.id, noThumb.key);
+
+    // -----------------------------------------------------------------
+    // Снимки доходят до формы правки списком, а не строкой
+    // -----------------------------------------------------------------
+    // В D1 колонка photos — текст с JSON; Postgres отдавал jsonb уже
+    // разобранным. При переезде разница осталась незамеченной, потому что
+    // страница правки приводила ответ через `as unknown as`. Проверка
+    // типов замолчала, а страница падала в браузере на ЛЮБОМ объекте:
+    // «.map is not a function». Нашлось это только загрузкой снимка на
+    // живом сайте — ни один тест кабинета сюда не заглядывал.
+    await updateObject(withPhotos.id, { photos: ['/photos/a.jpg', '/photos/b.jpg'] });
+    const forEdit = await objectCard(withPhotos.id);
+
+    check('карточка кабинета отдаёт снимки массивом, а не строкой',
+      Array.isArray(forEdit?.photos));
+    check('снимки в карточке те же, что записаны',
+      forEdit?.photos.join('|') === '/photos/a.jpg|/photos/b.jpg');
+
+    await updateObject(withPhotos.id, { photos: [] });
 
     await deletePhoto(withPhotos.id, shot.key);
     check('снимок удаляется', (await listPhotos(withPhotos.id)).length === 0);

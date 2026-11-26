@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { objectCard } from '@/lib/db/cabinet';
 import { canEditObject } from '@/lib/db/access';
-import { ObjectForm, type ObjectDraft } from '../../ObjectForm';
+import { ObjectForm } from '../../ObjectForm';
 import { updateObject } from '../../form-actions';
 
 export const metadata = { title: 'Правка объекта' };
@@ -25,7 +25,13 @@ export default async function EditObjectPage({
       <h1>Правка объекта</h1>
       <p className="sub">{object.address}</p>
       <div className="card">
-        <ObjectForm action={updateObject} draft={object as unknown as ObjectDraft} mode="edit" />
+        {/* Без приведения типа. Раньше здесь стояло `as unknown as
+            ObjectDraft`, и оно скрывало настоящее расхождение: objectCard
+            отдавал снимки строкой с JSON, а форма ждала массив. Проверка
+            типов молчала, страница падала в браузере. Теперь objectCard
+            отдаёт массив, и приведение больше не нужно — а если тип снова
+            разойдётся, сборка скажет об этом вместо посетителя. */}
+        <ObjectForm action={updateObject} draft={object} mode="edit" />
       </div>
     </>
   );
