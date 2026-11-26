@@ -381,7 +381,7 @@ div.tile { background: var(--sunk); }
    стала на 18 px выше — это цена того, чтобы по выбранному фильтру было
    видно, какое поле он сужает. */
 .fld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.fld > span { font-size: 11px; font-weight: 700; letter-spacing: .08em;
+.fld > span { font-size: 12px; font-weight: 700; letter-spacing: .08em;
   text-transform: uppercase; color: var(--muted); }
 .filters .fld input { min-width: 120px; }
 .filters .fld input[type='search'] { min-width: 180px; }
@@ -522,8 +522,13 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* --- Шапка: тёмная, липкая --------------------------------------------- */
 .nav { position: sticky; top: 0; z-index: 30; background: var(--panel);
   border-bottom: 1px solid var(--line); }
-.nav-in { display: flex; align-items: center; gap: 20px; padding-block: 13px; }
-.brand { display: flex; align-items: center; margin-right: 4px; }
+/* Отступ строки уменьшен с 13 до 9: кнопки в ней выросли с 34 до 40 px
+   ради пальца, и без этого липкая шапка стала бы выше на семь пикселей
+   на каждом экране. Так она осталась прежней высоты. */
+.nav-in { display: flex; align-items: center; gap: 20px; padding-block: 9px; }
+/* Отступ сверху и снизу — ради пальца: сам знак 20–25 px высотой, и без
+   него ссылка на главную была вдвое ниже соседних кнопок. */
+.brand { display: flex; align-items: center; margin-right: 4px; padding-block: 10px; }
 .brand img { height: 25px; width: auto; display: block; }
 /* Знак для тёмного фона прячется в светлой теме и наоборот. Условия
    повторяют те, по которым переключаются сами цвета: системная тёмная,
@@ -536,11 +541,13 @@ main:has(.auth) { max-width: none; padding: 0; }
 :root[data-theme='dark'] .brand .on-light { display: none; }
 :root[data-theme='dark'] .brand .on-dark { display: block; }
 .nav .spacer { margin-left: auto; }
+/* Отступ сверху и снизу — ради пальца, а не ради вида: без него ссылка
+   была 20 px высотой при соседях в 40. Ширину он не меняет. */
 .nav-link { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600;
-  white-space: nowrap; transition: color .18s; }
+  white-space: nowrap; padding-block: 10px; transition: color .18s; }
 .nav-link:hover { color: var(--accent); }
 .enter { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: var(--r-full);
-  padding: 9px 18px; font-weight: 700; font-size: 14px; text-decoration: none; white-space: nowrap;
+  padding: 11px 18px; font-weight: 700; font-size: 14px; text-decoration: none; white-space: nowrap;
   transition: background .18s, transform .18s; }
 .enter:hover { background: var(--accent-hover); transform: translateY(-1px); }
 .enter .narrow { display: none; }
@@ -655,7 +662,7 @@ main:has(.auth) { max-width: none; padding: 0; }
 .console .row { display: grid; gap: 10px; padding: 14px;
   grid-template-columns: 1.5fr 1fr .8fr 1fr auto; }
 .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.cell label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+.cell label { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
 .cell input, .cell select { border: 1px solid var(--line); background: var(--bg); color: var(--fg);
   border-radius: var(--r-md); padding: 11px 12px; font-size: 15px; font-weight: 500;
@@ -681,7 +688,7 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* Купить или снять — две кнопки, а не выпадающий список: это первое и
    самое крупное решение на странице, и оно должно быть видно целиком. */
 .seg { border: 0; margin: 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
-.seg legend { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+.seg legend { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); margin-bottom: 8px; }
 .seg label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
   border: 1px solid var(--line); border-radius: var(--r-full); padding: 10px 18px;
@@ -844,7 +851,7 @@ main:has(.auth) { max-width: none; padding: 0; }
   overflow: hidden; margin: 22px 0 0; }
 .spec { flex: 1 1 128px; min-width: 0; background: var(--panel); padding: 14px 16px;
   display: flex; flex-direction: column; gap: 4px; }
-.spec dt { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+.spec dt { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
 .spec dd { margin: 0; font-size: 17px; font-weight: 700; }
 .desc { margin: 24px 0 0; font-size: 16px; line-height: 1.65; white-space: pre-wrap; }
@@ -899,7 +906,7 @@ main:has(.auth) { max-width: none; padding: 0; }
 .auth-card h1 { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 6px; }
 .auth-sub { margin: 0 0 22px; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .auth-form { display: flex; flex-direction: column; }
-.auth-form label { font-size: 11px; font-weight: 700; letter-spacing: .1em;
+.auth-form label { font-size: 12px; font-weight: 700; letter-spacing: .1em;
   text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
 .auth-form input[type='email'] { width: 100%; padding: 11px 12px; font-size: 15px;
   font-weight: 500; border-radius: var(--r-md); transition: border-color .18s; }
@@ -923,7 +930,7 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* --- Выбор языка -------------------------------------------------------- */
 .lang { position: relative; }
 .lang-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--sunk);
-  color: var(--fg); border: 0; border-radius: var(--r-full); padding: 7px 12px;
+  color: var(--fg); border: 0; border-radius: var(--r-full); padding: 11px 12px;
   font-size: 12px; font-weight: 700; line-height: 1; font-family: var(--mono); cursor: pointer;
   transition: background .18s, color .18s; }
 .lang-btn:hover, .lang-btn[aria-expanded='true'] { background: var(--ink); color: #fff; }
@@ -979,7 +986,7 @@ main:has(.auth) { max-width: none; padding: 0; }
   .nav .spacer { display: none; }
   .lang { margin-left: auto; }
   .brand img { height: 20px; }
-  .enter { padding: 8px 12px; font-size: 13px; }
+  .enter { padding: 11px 12px; font-size: 13px; }
   .enter .wide { display: none; }
   .enter .narrow { display: inline; }
 }
@@ -994,9 +1001,14 @@ main:has(.auth) { max-width: none; padding: 0; }
    сходится от 356 px по-русски и от 375 по-кыргызски — кыргызские слова
    длиннее, и считать надо по ним. Ниже порога подпись уходит. */
 @media (max-width: 380px) {
+  /* Зазор 6 вместо 8: кыргызская строка на 360 px сходилась впритык, в
+     доли пикселя, и от любого округления уезжала на вторую. */
+  .nav-in { gap: 6px; }
   .lang-now { display: none; }
-  .lang-btn { padding: 7px 9px; }
-  .brand img { height: 19px; }
+  .lang-btn { padding: 11px; }
+  /* 20, а не 19: со своими отступами знак добирает ровно до 40 px по
+     высоте — как соседние кнопки. */
+  .brand img { height: 20px; }
   /* Прижимает «Вход» к правому краю — и в одну строку, и если она всё же
      перенесётся: тогда кнопка встанет справа второй строкой, как будто
      так и задумано, а не в левый угол. */
@@ -1114,8 +1126,11 @@ main:has(.auth) { max-width: none; padding: 0; }
 }
 
 /* Переключатель темы: такой же тихий, как выбор языка, и рядом с ним. */
+/* 40 px, а не 34: палец на телефоне промахивается мимо 34, а строка
+   шапки и так 62 px высотой — место было. Ширина выросла на шесть
+   пикселей, и строка по-прежнему сходится от 360 px; замерено. */
 .theme-btn { display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; background: var(--sunk); color: var(--fg); border: 0;
+  width: 40px; height: 40px; background: var(--sunk); color: var(--fg); border: 0;
   border-radius: var(--r-full); cursor: pointer; transition: background .18s, color .18s; }
 .theme-btn:hover { background: var(--ink); color: #fff; }
 
