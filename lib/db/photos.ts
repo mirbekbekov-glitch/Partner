@@ -1,7 +1,7 @@
 import 'server-only';
 import { env } from 'cloudflare:workers';
 import { newId } from './sql';
-import { requireAgent } from './session';
+import { requireAdmin, requireAgent } from './session';
 import { canEditObject } from './access';
 import { Forbidden, Invalid, NotFound } from './errors';
 import { fullKeyOf, thumbKey } from '../photo-url';
@@ -177,6 +177,91 @@ export async function putPhoto(
 export async function listPhotos(objectId: string): Promise<string[]> {
   const listed = await bucket().list({ prefix: `objects/${objectId}/` });
   return listed.objects.map((o) => o.key).filter((k) => !isThumb(k));
+}
+
+/**
+ * Снимки без миниатюр — для пересчёта.
+ *
+ * Зачем это нужно, хотя загрузка кладёт миниатюру всегда. Два случая.
+ * Снимки, загруженные до того, как сжатие появилось. И снимки из
+ * браузеров без OffscreenCanvas: там миниатюру сделать нечем, и форма
+ * сознательно отправляет снимок без неё — потерять снимок хуже, чем
+ * отдать его тяжёлым. Второй случай не исторический, он будет
+ * повторяться.
+ *
+ * Без миниатюры страница не ломается: маршрут отдачи подставит полный
+ * снимок. Но карточка в списке потянет двухтысячепиксельный файл вместо
+ * семидесяти килобайт, и так — на каждой карточке.
+ *
+ * Только админу: это обзор всего хранилища разом, а не своих объектов.
+ *
+ * Листается постранично. R2 отдаёт тысячу ключей за раз, и молча взять
+ * первую тысячу значило бы, что пересчёт однажды тихо перестанет
+ * доходить до конца.
+ */
+export async function photosMissingThumb(
+  cursor?: string,
+): Promise<{ keys: string[]; cursor: string | null; scanned: number }> {
+  await requireAdmin();
+
+  const page = await bucket().list({ prefix: 'objects/', limit: 1000, cursor });
+
+  const present = new Set(page.objects.map((o) => o.key));
+  const keys = page.objects
+    .map((o) => o.key)
+    .filter((k) => !isThumb(k) && !present.has(thumbKey(k)));
+
+  return {
+    keys,
+    cursor: page.truncated ? page.cursor : null,
+    scanned: page.objects.length,
+  };
+}
+
+/**
+ * Положить миниатюру к снимку, который уже лежит.
+ *
+ * Отдельно от putPhoto намеренно: тот заводит НОВЫЙ снимок со случайным
+ * ключом и проверяет лимит в двадцать штук. Пересчёт же ничего не
+ * добавляет — он достраивает недостающее к существующему, и лимит здесь
+ * ни при чём.
+ *
+ * Права те же, что на правку объекта, и ключ обязан принадлежать этому
+ * объекту: иначе чужим ключом можно подменить миниатюру соседнего.
+ *
+ * Миниатюра проверяется по содержимому, как и снимок: она приходит из
+ * браузера, то есть снаружи.
+ */
+export async function putThumb(
+  objectId: string,
+  key: string,
+  thumb: Blob,
+): Promise<void> {
+  await requireAgent();
+
+  if (!(await canEditObject(objectId))) {
+    throw new Forbidden('Пересчитывать миниатюры может тот, кто отвечает за объект');
+  }
+  if (!key.startsWith(`objects/${objectId}/`) || isThumb(key)) {
+    throw new Invalid('Снимок не от этого объекта');
+  }
+  if (!(await bucket().head(key))) {
+    throw new NotFound('Снимка нет в хранилище');
+  }
+  if (thumb.size === 0 || thumb.size > MAX_BYTES) {
+    throw new Invalid('Миниатюра неподходящего размера');
+  }
+
+  const bytes = new Uint8Array(await thumb.arrayBuffer());
+  const kind = sniff(bytes);
+  if (!kind) throw new Invalid('Миниатюра не похожа на снимок');
+
+  await bucket().put(thumbKey(key), bytes, {
+    httpMetadata: {
+      contentType: kind.type,
+      cacheControl: 'public, max-age=31536000, immutable',
+    },
+  });
 }
 
 /** Убрать снимок. Ключ обязан принадлежать этому объекту — иначе чужой. */

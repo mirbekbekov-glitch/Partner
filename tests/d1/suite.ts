@@ -26,7 +26,8 @@ import { createActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import { catalogObject, catalogPage, catalogZones } from '@/lib/db/catalog';
 import {
-  deletePhoto, listPhotos, photoKey, photoUrl, putPhoto, readPhoto, sniff,
+  deletePhoto, listPhotos, photoKey, photoUrl, photosMissingThumb, putPhoto,
+  putThumb, readPhoto, sniff,
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import {
@@ -955,6 +956,66 @@ export default {
       && (await env.PHOTOS.get(thumbKey(noThumb.key))) === null);
     check('вместо непринятой миниатюры отдаётся снимок',
       (await readPhoto(thumbKey(noThumb.key)))?.type === 'image/jpeg');
+
+    // -----------------------------------------------------------------
+    // Пересчёт миниатюр
+    // -----------------------------------------------------------------
+    // Нужен двум видам снимков: загруженным до появления сжатия и
+    // пришедшим из браузеров без OffscreenCanvas. Второй случай не
+    // исторический — он будет повторяться.
+    //
+    // Сам пересчёт делает браузер: уменьшить картинку в Worker'е нечем.
+    // Здесь проверяется серверная половина — кого пускают, что находят и
+    // что кладут.
+
+    // anna к этому месту уже админ — её повысили в блоке про роли.
+    const missing = await photosMissingThumb();
+
+    // shot и noThumb миниатюр не имеют, withThumb имеет.
+    check('перечень находит снимки без миниатюр',
+      missing.keys.includes(shot.key) && missing.keys.includes(noThumb.key));
+    check('снимок с миниатюрой в перечень не попадает',
+      !missing.keys.includes(withThumb.key));
+    check('сами миниатюры за снимки не считаются',
+      missing.keys.every((k) => !k.includes('@thumb')));
+
+    // Обзор всего хранилища — не дело рядового агента.
+    await loginAs(db, vera);
+    await throws('перечень закрыт для не-админа',
+      () => photosMissingThumb(), Forbidden);
+
+    // Права на запись — те же, что на правку объекта.
+    await throws('чужую миниатюру не достроить',
+      () => putThumb(withPhotos.id, shot.key, webpThumb), Forbidden);
+
+    await loginAs(db, anna);
+
+    // Ключ обязан принадлежать объекту: иначе чужим ключом подменяется
+    // миниатюра соседнего объекта.
+    await throws('ключ от другого объекта пересчёт не принимает',
+      () => putThumb(withPhotos.id, `objects/${shown.id}/чужой.jpg`, webpThumb), Invalid);
+
+    // Пересчёт достраивает к существующему, а не заводит новое: снимка
+    // нет — и достраивать нечего.
+    await throws('миниатюра без снимка не кладётся',
+      () => putThumb(withPhotos.id, `objects/${withPhotos.id}/${'0'.repeat(8)}.jpg`, webpThumb),
+      NotFound);
+
+    // Содержимое проверяется и здесь: миниатюра приходит снаружи.
+    await throws('подделка вместо миниатюры отвергается',
+      () => putThumb(withPhotos.id, shot.key, fakeThumb), Invalid);
+
+    await putThumb(withPhotos.id, shot.key, webpThumb);
+    check('пересчёт кладёт миниатюру к старому снимку',
+      (await readPhoto(thumbKey(shot.key)))?.type === 'image/webp');
+    check('пересчёт не завёл нового снимка',
+      (await listPhotos(withPhotos.id)).length === 3);
+
+    const after = await photosMissingThumb();
+    check('пересчитанный снимок из перечня уходит',
+      !after.keys.includes(shot.key));
+
+    await loginAs(db, anna);
 
     await deletePhoto(withPhotos.id, withThumb.key);
     check('миниатюра удаляется вместе со снимком',

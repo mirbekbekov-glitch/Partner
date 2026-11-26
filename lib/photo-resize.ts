@@ -107,3 +107,27 @@ export function size(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
   return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} МБ`;
 }
+
+/**
+ * Миниатюра из снимка, который уже лежит в хранилище.
+ *
+ * Нужна пересчёту: у старых снимков и у снимков из браузеров без
+ * OffscreenCanvas миниатюры нет, а исходного файла с телефона давно нет
+ * тоже — есть только то, что в хранилище. Его и уменьшаем.
+ *
+ * Пусто означает «не смог»: браузер не умеет или файл не читается.
+ * Пересчёт тогда просто пропускает снимок — остаться без миниатюры не
+ * страшно, маршрут отдачи подставит полный.
+ */
+export async function thumbnailFrom(blob: Blob): Promise<Blob | null> {
+  if (!canResize()) return null;
+
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const thumb = await encode(bitmap, THUMB_SIDE, THUMB_QUALITY);
+    bitmap.close();
+    return thumb;
+  } catch {
+    return null;
+  }
+}
