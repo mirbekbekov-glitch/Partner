@@ -273,6 +273,9 @@ form.stack.card { max-width: 760px; }
   }
   .tbl .num { text-align: left; }
   .tbl td:first-child { min-width: 0; }
+  /* Пустая ячейка на телефоне исчезает вместе с подписью: «Действия:» без
+     кнопок — это строка ни о чём. */
+  .tbl td:empty { display: none; }
   /* В ячейке с подписью пояснение дописывается в ту же строку, а в первой —
      остаётся отдельной строкой: там оно идёт сразу за названием, и без
      переноса слиплось бы с ним. */
@@ -309,3 +312,19 @@ form.stack.card { max-width: 760px; }
 .th-arrow { min-width: 10px; font-size: 11px; }
 .tbl th[aria-sort] { color: var(--fg); }
 .tbl th.num .th-sort { justify-content: flex-end; }
+
+/* Свободный текст в ячейке — заметка, сообщение с сайта, пожелания.
+   Ограничен по ширине: одна длинная запись иначе растянет колонку и
+   сожмёт все остальные. Переносы строк сохраняются, их автор ставил. */
+.tbl-text {
+  display: block;
+  max-width: 36ch;
+  white-space: pre-wrap;
+}
+@media (max-width: 760px) {
+  .tbl-text { max-width: none; }
+}
+
+/* Кнопки действий внутри ячейки: сверху отступа не нужно, его даёт сама
+   ячейка. На узкой колонке встают в столбик. */
+.tbl .actions { margin-top: 0; gap: 6px; }

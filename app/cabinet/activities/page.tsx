@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { myActivities, myReminders } from '@/lib/db/cabinet';
-import { ActivityRowView, KIND_RU, type ActivityRow } from '../Activities';
+import {
+  ActivityActions, ActivityMeta, activityWhen, KIND_RU, type ActivityRow,
+} from '../Activities';
 
 export const metadata = { title: 'Задачи' };
 
@@ -90,6 +92,12 @@ const REMINDER_RU: Record<string, string> = {
   no_channel: 'напомнить нечем: Telegram не привязан',
 };
 
+/**
+ * Один раздел списка дел — таблицей.
+ *
+ * Колонка «К чему» идёт первой намеренно: иначе список дел превращается в
+ * набор фраз без контекста, и непонятно, по какому объекту звонить.
+ */
 function Section({
   title,
   rows,
@@ -108,39 +116,86 @@ function Section({
       <h2>
         {warn ? <span className="warn">{title}</span> : title}
       </h2>
-      {rows.map((a) => (
-        <div className="card" key={a.id}>
-          {/* Куда относится запись — важнее её текста: иначе список дел
-              превращается в набор фраз без контекста. */}
-          <div className="row">
-            {a.entity_title && a.entity_type && ENTITY_PATH[a.entity_type] ? (
-              <Link href={`/cabinet/${ENTITY_PATH[a.entity_type]}/${a.entity_id}`}>
-                <strong>{a.entity_title}</strong>
-              </Link>
-            ) : (
-              <strong>{a.entity_title ?? 'запись скрыта'}</strong>
-            )}
-            <span className="key">{KIND_RU[a.kind] ?? a.kind}</span>
-          </div>
-          <ActivityRowView a={a} />
-          {(() => {
-            const r = reminders.get(a.id);
-            if (!r) return null;
-            const problem = r.status === 'no_channel' || r.status === 'failed';
-            return (
-              <div className="row" style={{ marginTop: 4 }}>
-                <span className={problem ? 'warn' : 'key'}>
-                  {REMINDER_RU[r.status] ?? r.status}
-                </span>
-                {r.last_error ? <span className="key">{r.last_error}</span> : null}
-                {r.status === 'no_channel' ? (
-                  <Link className="key" href="/cabinet/profile">как это исправить →</Link>
-                ) : null}
-              </div>
-            );
-          })()}
-        </div>
-      ))}
+      <div className="tbl-wrap">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>К чему</th>
+              <th>Тип</th>
+              <th>Запись</th>
+              <th>Состояние</th>
+              <th>Напоминание</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((a) => {
+              const r = reminders.get(a.id);
+              const problem = r?.status === 'no_channel' || r?.status === 'failed';
+
+              return (
+                <tr key={a.id}>
+                  <td>
+                    {a.entity_title && a.entity_type && ENTITY_PATH[a.entity_type] ? (
+                      <Link
+                        className="tbl-main"
+                        href={`/cabinet/${ENTITY_PATH[a.entity_type]}/${a.entity_id}`}
+                      >
+                        {a.entity_title}
+                      </Link>
+                    ) : (
+                      <span className="tbl-main">{a.entity_title ?? 'запись скрыта'}</span>
+                    )}
+                    {!a.mine ? <span className="tbl-sub">{a.agent_name}</span> : null}
+                  </td>
+                  <td data-l="Тип">
+                    <span className="tag">{KIND_RU[a.kind] ?? a.kind}</span>
+                  </td>
+                  <td data-l="Запись">
+                    {a.body ? <span className="tbl-text">{a.body}</span> : '—'}
+                  </td>
+                  <td data-l="Состояние">
+                    {a.done ? (
+                      <span className="key">выполнено {activityWhen(a.done_at)}</span>
+                    ) : null}
+                    {a.overdue ? (
+                      <span className="tbl-note"><span className="warn">просрочено</span></span>
+                    ) : null}
+                    {a.due_at && !a.done ? (
+                      <span className="nowrap">{activityWhen(a.due_at)}</span>
+                    ) : null}
+                    {a.is_shared ? <span className="tbl-sub">общая</span> : null}
+                  </td>
+                  <td data-l="Напоминание">
+                    {r ? (
+                      <>
+                        <span className={problem ? 'warn' : 'key'}>
+                          {REMINDER_RU[r.status] ?? r.status}
+                        </span>
+                        {r.last_error ? (
+                          <span className="tbl-sub">{r.last_error}</span>
+                        ) : null}
+                        {r.status === 'no_channel' ? (
+                          <span className="tbl-note">
+                            <Link className="key" href="/cabinet/profile">
+                              как это исправить →
+                            </Link>
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td data-l="Действия">
+                    <ActivityActions a={a} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

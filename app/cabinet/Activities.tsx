@@ -36,7 +36,16 @@ export type ActivityRow = {
 const when = (v: string | null) =>
   v == null ? '' : new Date(v).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 
-function Row({ a }: { a: ActivityRow }) {
+/**
+ * Кнопки «выполнено» и «удалить».
+ *
+ * Отдельно от разметки строки: на карточке сущности они стоят под текстом
+ * записи, а в таблице задач — в своей колонке. Логика при этом одна.
+ *
+ * Править и отмечать можно только своё: политика чужую строку не находит,
+ * поэтому у чужой записи кнопок нет вовсе.
+ */
+export function ActivityActions({ a }: { a: ActivityRow }) {
   const [, toggle, toggling] = useActionState<ActivityResult, FormData>(
     async (_p, fd) => toggleActivity(fd),
     { error: null },
@@ -46,47 +55,62 @@ function Row({ a }: { a: ActivityRow }) {
     { error: null },
   );
 
+  if (!a.mine) return null;
+
+  return (
+    <div className="actions">
+      <form action={toggle} style={{ display: 'inline' }}>
+        <input type="hidden" name="id" value={a.id} />
+        <input type="hidden" name="done" value={a.done ? 'false' : 'true'} />
+        <button type="submit" disabled={toggling} className="ghost">
+          {a.done ? 'вернуть в работу' : 'выполнено'}
+        </button>
+      </form>
+      <form
+        action={del}
+        style={{ display: 'inline' }}
+        onSubmit={(e) => {
+          if (!window.confirm('Удалить запись? Она исчезнет без возможности вернуть.')) {
+            e.preventDefault();
+          }
+        }}
+      >
+        <input type="hidden" name="id" value={a.id} />
+        <button type="submit" disabled={deleting} className="ghost">удалить</button>
+      </form>
+      {delState.error ? <span className="error inline-error">{delState.error}</span> : null}
+    </div>
+  );
+}
+
+/** Состояние записи одной строкой: тип, срок, общая ли, чья. */
+export function ActivityMeta({ a }: { a: ActivityRow }) {
+  return (
+    <>
+      {a.done ? <span className="key">выполнено {when(a.done_at)}</span> : null}
+      {a.overdue ? <span className="warn">просрочено</span> : null}
+      {a.due_at && !a.done ? <span className="key">срок {when(a.due_at)}</span> : null}
+      {a.is_shared ? (
+        <span className="key" title="Видна тем, кто работает по этой сущности">общая</span>
+      ) : null}
+    </>
+  );
+}
+
+export const activityWhen = when;
+
+function Row({ a }: { a: ActivityRow }) {
   return (
     <div className="act">
       <div className="row">
         <span className="tag">{KIND_RU[a.kind] ?? a.kind}</span>
-        {a.done ? <span className="key">выполнено {when(a.done_at)}</span> : null}
-        {a.overdue ? <span className="warn">просрочено</span> : null}
-        {a.due_at && !a.done ? <span className="key">срок {when(a.due_at)}</span> : null}
-        {a.is_shared ? (
-          <span className="key" title="Видна тем, кто работает по этой сущности">общая</span>
-        ) : null}
+        <ActivityMeta a={a} />
         {!a.mine ? <span className="key">{a.agent_name}</span> : null}
       </div>
 
       {a.body ? <p className="act-body">{a.body}</p> : null}
 
-      {/* Править и отмечать можно только своё: политика чужую строку не
-          находит, поэтому кнопки чужой активности не показываем. */}
-      {a.mine ? (
-        <div className="actions">
-          <form action={toggle} style={{ display: 'inline' }}>
-            <input type="hidden" name="id" value={a.id} />
-            <input type="hidden" name="done" value={a.done ? 'false' : 'true'} />
-            <button type="submit" disabled={toggling} className="ghost">
-              {a.done ? 'вернуть в работу' : 'выполнено'}
-            </button>
-          </form>
-          <form
-            action={del}
-            style={{ display: 'inline' }}
-            onSubmit={(e) => {
-              if (!window.confirm('Удалить запись? Она исчезнет без возможности вернуть.')) {
-                e.preventDefault();
-              }
-            }}
-          >
-            <input type="hidden" name="id" value={a.id} />
-            <button type="submit" disabled={deleting} className="ghost">удалить</button>
-          </form>
-          {delState.error ? <span className="error inline-error">{delState.error}</span> : null}
-        </div>
-      ) : null}
+      <ActivityActions a={a} />
     </div>
   );
 }
