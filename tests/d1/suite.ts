@@ -25,8 +25,8 @@ import { createRequirement } from '@/lib/db/requirements';
 import { createActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import {
-  catalogCities, catalogCount, catalogObject, catalogPage, catalogZoneCounts,
-  catalogZones,
+  catalogAgent, catalogCities, catalogCount, catalogObject, catalogPage,
+  catalogZoneCounts, catalogZones,
 } from '@/lib/db/catalog';
 import {
   deleteAvatar, deletePhoto, listPhotos, photoKey, photoUrl,
@@ -45,8 +45,8 @@ import {
 } from '@/lib/db/telegram';
 import { POST as telegramWebhook } from '@/app/api/telegram/webhook/route';
 import {
-  cabinetCounters, contactList, contactObjects, dealList, objectCard,
-  objectList, requirementList,
+  activeMandateOf, cabinetCounters, contactList, contactObjects, dealList,
+  objectCard, objectList, requirementList,
 } from '@/lib/db/cabinet';
 import {
   approveAgent, blockAgent, clearMyOrganization, confirmAgentOrganization,
@@ -800,6 +800,71 @@ export default {
       (await catalogObject(hidden.id)) === null);
     check('опубликованный по прямой ссылке отдаётся',
       (await catalogObject(shown.id))?.id === shown.id);
+
+    // -----------------------------------------------------------------
+    // Агент на публичной карточке
+    // -----------------------------------------------------------------
+    // Витрина годами не отдавала об агенте ничего. Теперь отдаёт четыре
+    // поля — и ни одним больше. Проверяется прежде всего то, чего в
+    // выдаче быть НЕ должно: утечка отсюда необратима, страницу видит
+    // любой.
+
+    await loginAs(db, anna);
+    await updateProfile({ works_since: 2015, certificate_no: 'КР-777' });
+
+    const shownAgent = await catalogAgent(shown.id);
+    check('витрина называет агента, ведущего объект',
+      shownAgent?.full_name === (await getAgent(anna))?.full_name);
+    check('стаж отдаётся годом начала', shownAgent?.works_since === 2015);
+
+    // Главное: непроверенный сертификат наружу не уходит вовсе.
+    check('незаверенный сертификат витрина не отдаёт',
+      shownAgent?.certificate_no === null,
+      `просочилось: ${shownAgent?.certificate_no}`);
+
+    await confirmAgentCertificate(anna, true);
+    check('подтверждённый — отдаёт',
+      (await catalogAgent(shown.id))?.certificate_no === 'КР-777');
+
+    // Снял админ подтверждение — поле исчезает снова.
+    await confirmAgentCertificate(anna, false);
+    check('снятое подтверждение убирает номер из выдачи',
+      (await catalogAgent(shown.id))?.certificate_no === null);
+
+    // Состав выдачи. Та же проверка, что защищает объекты витрины, и по
+    // той же причине: сюда легко дописать «ещё одно поле».
+    const agentKeys = Object.keys((await catalogAgent(shown.id)) ?? {});
+    const forbiddenAgent = ['phone', 'email', 'id', 'telegram_id', 'role',
+      'status', 'organization_id', 'certificate_confirmed'];
+    check('в выдаче агента нет ни телефона, ни почты, ни идентификатора',
+      forbiddenAgent.every((k) => !agentKeys.includes(k)),
+      `просочилось: ${agentKeys.join(', ')}`);
+
+    // А в самой таблице эти колонки есть — иначе проверка была бы пустой.
+    const agentRow = await db.prepare('select * from agents where id = ?')
+      .bind(anna).first<Record<string, unknown>>();
+    check('а в таблице агентов эти колонки есть',
+      Boolean(agentRow) && 'phone' in (agentRow ?? {}) && 'email' in (agentRow ?? {}));
+
+    // Неопубликованный объект агента не раскрывает.
+    //
+    // Проверять на `hidden` было бы самообманом: у него нет мандата, и
+    // соединение пусто независимо от фильтра по публикации — проверка
+    // проходила бы, даже если фильтр убрать. Поэтому заводим объект
+    // С МАНДАТОМ, но без публикации: только так видно, что дело в
+    // состоянии объекта, а не в отсутствии договора.
+    const draftWithMandate = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Черновиковая 1',
+      price_minor: 1_500_000,
+    });
+    await createMandate({ object_id: draftWithMandate.id, kind: 'non_exclusive' });
+
+    check('у черновика есть активный мандат — значит проверка не пустая',
+      Boolean(await activeMandateOf(draftWithMandate.id)));
+    check('но агента витрина по нему не отдаёт',
+      (await catalogAgent(draftWithMandate.id)) === null);
+
+    await updateProfile({ works_since: null, certificate_no: null });
 
     // -----------------------------------------------------------------
     // Фид для площадок

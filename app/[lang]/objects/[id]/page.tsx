@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { catalogObject } from '@/lib/db/catalog';
+import { catalogObject, catalogAgent } from '@/lib/db/catalog';
 import { allPhotos, firstPhoto, daysSince, publicMoney } from '@/lib/catalog-params';
 import { t, kindName, freshWordIn, LOCALE, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { AGENCY_PHONES } from '@/lib/agency';
@@ -56,6 +56,17 @@ async function load(id: string) {
 const dateIn = (lang: Lang, iso: string) =>
   new Intl.DateTimeFormat(LOCALE[lang], { dateStyle: 'short' }).format(new Date(iso));
 
+/** Буквы вместо фотографии: пустой кружок читается как «фото не
+ *  загрузилось», а две буквы — как сознательный выбор. */
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('');
+}
+
 export async function generateMetadata(
   { params }: { params: Promise<{ lang: string; id: string }> },
 ): Promise<Metadata> {
@@ -102,6 +113,14 @@ export default async function PublicObject({
   // Снятый с публикации объект исчезает из витрины, и страница честно
   // становится 404 — вместо того чтобы показывать устаревшую цену.
   if (!o) notFound();
+
+  // Кто ведёт объект. Витрина отдаёт ровно три поля — имя, год начала
+  // работы и номер в реестре, и только подтверждённый администратором.
+  // Телефона и почты агента здесь нет: звонок идёт в отдел продаж.
+  // Запрос необязательный: если агента не нашли, страница просто обходится
+  // без блока, а не ломается.
+  const agent = await catalogAgent(o.id).catch(() => null);
+  const years = agent?.works_since ? new Date().getFullYear() - agent.works_since : null;
 
   const photos = allPhotos(o.photos);
   const days = daysSince(o.actual_at);
@@ -191,6 +210,35 @@ export default async function PublicObject({
               <p className="note">{d.leadNote}</p>
               <LeadForm lang={lang} objectId={o.id} address={o.address} />
             </div>
+            {agent ? (
+              <div className="agent-card">
+                <span className="key">{d.agentLeads}</span>
+                <div className="agent-row">
+                  {agent.avatar_key ? (
+                    <div className="avatar">
+                      <Photo
+                        src={`/photos/${agent.avatar_key}`}
+                        fallback={<span className="initials">{initials(agent.full_name)}</span>}
+                      />
+                    </div>
+                  ) : (
+                    <div className="avatar"><span className="initials">{initials(agent.full_name)}</span></div>
+                  )}
+                  <div>
+                    <b>{agent.full_name}</b>
+                    {years !== null && years >= 0 ? (
+                      <span className="mini">{d.agentYears(years)}</span>
+                    ) : null}
+                  </div>
+                </div>
+                {agent.certificate_no ? (
+                  <p className="registry">
+                    {d.agentRegistry(agent.certificate_no)}
+                    <span className="key">{d.agentRegistryNote}</span>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="callout">
               <b>{d.callNow}</b>
               <span className="mini">{d.salesDept}</span>

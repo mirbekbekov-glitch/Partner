@@ -57,6 +57,11 @@ type Dict = {
   toAll: string; about: string; published: string; roomsLabel: string;
   areaLabel: string; floorLabel: string; floorOf: string; zoneLabel: string; cityLabel: string;
   confirmedPrice: string; notFound: string; notFoundLede: string; seeWhatIsThere: string;
+  // Блок агента на странице объекта. Открыты ровно три поля: имя, стаж и
+  // подтверждённый номер в реестре. Телефон агента здесь намеренно
+  // отсутствует — звонки идут в отдел продаж, а не минуя его.
+  agentLeads: string; agentYears: (n: number) => string;
+  agentRegistry: (no: string) => string; agentRegistryNote: string;
   // Заявка
   viewObject: string; leadNote: string; yourName: string; phone: string;
   phoneNote: string; whenConvenient: string; sendRequest: string; sending: string;
@@ -121,6 +126,17 @@ const ru: Dict = {
   roomsLabel: 'Комнат', areaLabel: 'Площадь', floorLabel: 'Этаж', floorOf: 'из',
   zoneLabel: 'Район', cityLabel: 'Город',
   confirmedPrice: 'Агент подтвердил цену и доступность',
+  agentLeads: 'Объект ведёт',
+  // «год», «года», «лет»: иначе строка читается как машинный перевод.
+  agentYears: (n) =>
+    `в недвижимости ${n} ${
+      n % 10 === 1 && n % 100 !== 11
+        ? 'год'
+        : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)
+          ? 'года'
+          : 'лет'}`,
+  agentRegistry: (no) => `В реестре риэлторов: ${no}`,
+  agentRegistryNote: 'Номер сверен администратором',
   notFound: 'Страница не найдена',
   notFoundLede: 'Возможно, объект сняли с публикации или продали.',
   seeWhatIsThere: 'Посмотреть, что есть сейчас →',
@@ -206,6 +222,10 @@ const ky: Dict = {
   roomsLabel: 'Бөлмө', areaLabel: 'Аянты', floorLabel: 'Кабат', floorOf: '/',
   zoneLabel: 'Район', cityLabel: 'Шаар',
   confirmedPrice: 'Агент бааны жана жеткиликтүүлүктү ырастады',
+  agentLeads: 'Объектти алып баруучу',
+  agentYears: (n) => `кыймылсыз мүлктө ${n} жыл`,
+  agentRegistry: (no) => `Риэлторлор реестринде: ${no}`,
+  agentRegistryNote: 'Номер администратор тарабынан текшерилген',
   notFound: 'Барак табылган жок',
   notFoundLede: 'Объект жарыядан алынган же сатылган болушу мүмкүн.',
   seeWhatIsThere: 'Азыр эмне бар экенин көрүү →',
@@ -291,6 +311,10 @@ const en: Dict = {
   roomsLabel: 'Rooms', areaLabel: 'Area', floorLabel: 'Floor', floorOf: 'of',
   zoneLabel: 'District', cityLabel: 'City',
   confirmedPrice: 'Agent confirmed the price and availability',
+  agentLeads: 'Listing agent',
+  agentYears: (n) => `${n} ${n === 1 ? 'year' : 'years'} in real estate`,
+  agentRegistry: (no) => `Realtor registry no.: ${no}`,
+  agentRegistryNote: 'Verified by the administrator',
   notFound: 'Page not found',
   notFoundLede: 'The listing may have been withdrawn or sold.',
   seeWhatIsThere: 'See what is available now →',
@@ -376,6 +400,10 @@ const zh: Dict = {
   roomsLabel: '房间数', areaLabel: '面积', floorLabel: '楼层', floorOf: '/',
   zoneLabel: '区域', cityLabel: '城市',
   confirmedPrice: '经纪人已确认价格与可售状态',
+  agentLeads: '负责经纪人',
+  agentYears: (n) => `从事房地产 ${n} 年`,
+  agentRegistry: (no) => `房地产经纪人登记号：${no}`,
+  agentRegistryNote: '已由管理员核验',
   notFound: '页面未找到',
   notFoundLede: '该房源可能已下架或已售出。',
   seeWhatIsThere: '看看现在有哪些房源 →',
