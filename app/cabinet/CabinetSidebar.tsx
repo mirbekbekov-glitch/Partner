@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -52,14 +52,37 @@ export function CabinetSidebar({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
+  const burgerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+
   // Перешли на другую страницу — меню на узком экране закрывается.
   useEffect(() => setOpen(false), [pathname]);
 
+  // Пока меню открыто: Escape закрывает, фон под ним не прокручивается,
+  // а при расширении окна до десктопного меню закрывается само — иначе
+  // блокировка прокрутки осталась бы без видимой причины.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    const wide = window.matchMedia('(min-width: 901px)');
+    const onWide = () => wide.matches && setOpen(false);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    wide.addEventListener('change', onWide);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      wide.removeEventListener('change', onWide);
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  // Фокус уходит в меню при открытии и возвращается на кнопку при закрытии.
+  useEffect(() => {
+    if (open) closeRef.current?.focus();
+    else if (wasOpen.current) burgerRef.current?.focus();
+    wasOpen.current = open;
   }, [open]);
 
   const isActive = (href: string, exact?: boolean) =>
@@ -81,6 +104,7 @@ export function CabinetSidebar({
     <>
       <div className="crm-mobilebar">
         <button
+          ref={burgerRef}
           type="button"
           className="crm-burger"
           aria-label="Открыть меню"
@@ -99,6 +123,7 @@ export function CabinetSidebar({
         <div className="crm-side-head">
           <span className="crm-side-title">Liberterra CRM</span>
           <button
+            ref={closeRef}
             type="button"
             className="crm-close"
             aria-label="Закрыть меню"
