@@ -817,10 +817,20 @@ main:has(.auth) { max-width: none; padding: 0; }
 .price-big { font-size: clamp(30px, 4vw, 42px); font-weight: 800; letter-spacing: -.03em;
   margin: 14px 0 0; }
 .price-big small { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
-.specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 1px;
+/* Характеристики.
+   Не сетка, а ряд с переносом — и в этом вся разница. Сетка считала
+   колонки от ширины: на широком экране их выходило пять, а фактов у
+   квартиры шесть, и последний ряд оставлял четыре пустые ячейки — серую
+   плашку во всю ширину, которая читается как поломка. Починить это
+   сеткой нельзя: сколько будет колонок и сколько фактов (у участка нет
+   ни комнат, ни этажа), заранее не знает никто.
+   У ряда с переносом последние плитки просто растягиваются на
+   оставшееся место, сколько бы их ни было. */
+.specs { display: flex; flex-wrap: wrap; gap: 1px;
   background: var(--line); border: 1px solid var(--line); border-radius: var(--r-lg);
   overflow: hidden; margin: 22px 0 0; }
-.spec { background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.spec { flex: 1 1 128px; min-width: 0; background: var(--panel); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px; }
 .spec dt { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
 .spec dd { margin: 0; font-size: 17px; font-weight: 700; }
@@ -1126,9 +1136,6 @@ main:has(.auth) { max-width: none; padding: 0; }
     padding: 12px 20px; border-radius: var(--r-full);
     font-weight: 700; text-decoration: none; margin-top: 4px;
   }
-  /* Нечётная последняя плитка растягивается на ряд: иначе рядом с ней
-     остаётся пустая серая ячейка, и это выглядит поломкой. */
-  .specs .spec:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
 
 /* Галерея посадочной страницы. Первый снимок во всю ширину — он решает,
