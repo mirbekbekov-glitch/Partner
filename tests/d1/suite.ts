@@ -850,6 +850,28 @@ export default {
     check('название агентства рядом с телефоном',
       withPhone.includes('<organization>Liberterra</organization>'));
 
+    // У агентства обычно две линии, и в объявлении полезны обе: по одной
+    // не дозвонились — звонят по второй.
+    setEnv({ ...(env as unknown as Record<string, unknown>),
+      FEED_PHONE: '+996 505 804 402, +996 500 804 402', FEED_ORG: 'Liberterra' });
+    const twoPhones = await feedXml('https://liberterra.kg');
+
+    check('оба номера агентства в фиде',
+      twoPhones.includes('<phone>+996505804402</phone>')
+      && twoPhones.includes('<phone>+996500804402</phone>'));
+    check('оба номера в одном контакте, а не в двух',
+      twoPhones.split('<sales-agent>').length - 1
+      === twoPhones.split('<offer ').length - 1);
+
+    // Человек правит настройку руками: лишняя запятая, перенос строки и
+    // повтор не должны ни ломать файл, ни плодить один номер дважды.
+    setEnv({ ...(env as unknown as Record<string, unknown>),
+      FEED_PHONE: '0505 804 402,\n, 0505804402 ; мусор', FEED_ORG: 'Liberterra' });
+    const messy = await feedXml('https://liberterra.kg');
+
+    check('повтор номера не удваивается, мусор отброшен',
+      (messy.split('<phone>').length - 1) === (messy.split('<offer ').length - 1));
+
     // Мусор вместо номера — не номер. Лучше без контакта, чем с ломаным.
     setEnv({ ...(env as unknown as Record<string, unknown>), FEED_PHONE: '12' });
     check('непохожий на номер телефон в фид не идёт',

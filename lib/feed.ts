@@ -75,13 +75,23 @@ const CATEGORY: Record<string, string> = {
  */
 function salesAgent(): string {
   const raw = (env as unknown as { FEED_PHONE?: string }).FEED_PHONE ?? '';
-  const digits = normalizePhone(raw);
-  if (digits.length !== 9) return '';
+
+  // Номеров может быть несколько: у агентства обычно две линии, и в
+  // объявлении полезны обе — по одной не дозвонились, звонят по второй.
+  // Разделитель любой разумный, потому что настройку правит человек.
+  const phones = raw
+    .split(/[,;\n]/)
+    .map((part) => normalizePhone(part))
+    .filter((digits) => digits.length === 9)
+    // Один и тот же номер дважды в объявлении выглядит небрежностью.
+    .filter((digits, i, all) => all.indexOf(digits) === i);
+
+  if (phones.length === 0) return '';
 
   const organization = (env as unknown as { FEED_ORG?: string }).FEED_ORG ?? '';
 
   return '    <sales-agent>\n'
-    + `      <phone>+996${digits}</phone>\n`
+    + phones.map((d) => `      <phone>+996${d}</phone>\n`).join('')
     + (organization ? `      <organization>${esc(organization)}</organization>\n` : '')
     + '    </sales-agent>\n';
 }
