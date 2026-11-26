@@ -99,7 +99,9 @@ form.stack.card { max-width: 760px; }
   color: var(--crm-link-active-fg);
 }
 .crm-link svg { flex: none; }
-.crm-me { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Имя переносится, а не обрезается: «Айбек Мурза…» в сайдбаре на 240 px
+   не сообщает ничего, чего не сообщало бы полное имя в две строки. */
+.crm-me { min-width: 0; overflow-wrap: anywhere; }
 
 .crm-side-foot {
   margin-top: auto;
@@ -112,7 +114,20 @@ form.stack.card { max-width: 760px; }
 .crm-side-foot form { margin: 0; }
 /* Стрелка «откроется в новой вкладке»: бледнее подписи и прижата вправо. */
 .crm-link-out { margin-left: auto; opacity: .55; }
-.crm-side-foot button.ghost { width: 100%; text-align: left; }
+/* «Выйти» выглядит как строка меню, а не как кнопка в рамке. В рамке она
+   была самым заметным элементом низа сайдбара — заметнее каталога и
+   профиля, рядом с которыми стоит, — хотя нужна реже всего. */
+.crm-side-foot button.ghost {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border-color: transparent;
+  color: var(--crm-link-fg);
+  padding: 9px 10px;
+  border-radius: var(--r-md);
+  font-size: 14px;
+}
+.crm-side-foot button.ghost:hover { background: var(--crm-link-hover-bg); color: var(--fg); }
 
 /* Кнопки мобильного меню на широком экране скрыты. */
 .crm-mobilebar, .crm-close, .crm-backdrop { display: none; }
