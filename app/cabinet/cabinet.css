@@ -6,7 +6,7 @@
  */
 
 .crm-shell {
-  --crm-side-w: 240px;
+  --crm-side-w: 264px;
   --crm-side-bg: var(--panel);
   --crm-side-line: var(--line);
   --crm-link-fg: var(--muted);
@@ -70,12 +70,12 @@ form.stack.card { max-width: 760px; }
   justify-content: space-between;
   padding: 18px 16px 12px;
 }
-.crm-side-title { font-weight: 800; letter-spacing: .01em; }
+.crm-side-title { font-weight: 800; letter-spacing: .01em; font-size: 1.0625rem; }
 
 .crm-nav { display: flex; flex-direction: column; gap: 2px; padding: 4px 8px; }
 .crm-nav-sep {
   margin: 14px 10px 4px;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .06em;
@@ -86,11 +86,13 @@ form.stack.card { max-width: 760px; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 10px;
+  padding: 10px 12px;
   border-radius: var(--r-md);
   color: var(--crm-link-fg);
   text-decoration: none;
-  font-size: 0.875rem;
+  /* Кегль меню равен кеглю текста страницы. Левая колонка — то, по чему
+     ходят весь день; мельче основного текста она читается как сноска. */
+  font-size: 1rem;
   font-weight: 600;
 }
 .crm-link:hover { background: var(--crm-link-hover-bg); color: var(--fg); }
@@ -123,9 +125,9 @@ form.stack.card { max-width: 760px; }
   background: none;
   border-color: transparent;
   color: var(--crm-link-fg);
-  padding: 9px 10px;
+  padding: 10px 12px;
   border-radius: var(--r-md);
-  font-size: 0.875rem;
+  font-size: 1rem;
 }
 .crm-side-foot button.ghost:hover { background: var(--crm-link-hover-bg); color: var(--fg); }
 
@@ -241,7 +243,9 @@ form.stack.card { max-width: 760px; }
 .tbl thead th {
   background: var(--sunk);
   color: var(--muted);
-  font-size: 0.75rem;
+  /* Заголовки колонок прописными: на 12 px прописные читаются хуже
+     строчных того же кегля, поэтому здесь на ступень крупнее. */
+  font-size: 0.8125rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .04em;
@@ -265,7 +269,7 @@ form.stack.card { max-width: 760px; }
    ячеек на ступень. Раньше весь ряд шёл одним кеглем, и сильнейший
    контраст в таблице не указывал ни на что. */
 .tbl-main { font-weight: 700; font-size: 1rem; }
-.tbl-sub { display: block; color: var(--muted); font-size: 0.8125rem; margin-top: 2px; }
+.tbl-sub { display: block; color: var(--muted); font-size: 0.875rem; margin-top: 2px; }
 .tbl-note { display: block; margin-top: 4px; }
 /* Пометка о мандате в одну строку: разорванная пополам, она добавляла
    строке таблицы целую строку текста. */
@@ -329,7 +333,7 @@ form.stack.card { max-width: 760px; }
 .digest-main { font-size: 0.9375rem; line-height: 1.45; max-width: 75ch; }
 /* Текст записи приписан к её предмету той же строкой, но тише: предмет —
    то, по чему строку узнают, а текст уточняет. */
-.digest-main .key { font-size: 0.8125rem; }
+.digest-main .key { font-size: 0.875rem; }
 
 /* ── Полоса фильтров ─────────────────────────────────────── */
 /* Отдельная панель, а не линия под полями: над таблицей линия читается
@@ -414,7 +418,7 @@ form.stack.card { max-width: 760px; }
   letter-spacing: .04em;
 }
 .board-head .key { font-weight: 400; }
-.board-empty { margin: 0; color: var(--muted); font-size: 0.8125rem; }
+.board-empty { margin: 0; color: var(--muted); font-size: 0.875rem; }
 
 .board-card {
   background: var(--panel);
@@ -429,7 +433,7 @@ form.stack.card { max-width: 760px; }
 .board-card:last-child { margin-bottom: 0; }
 
 .board-title { display: block; font-weight: 700; margin-bottom: 4px; }
-.board-line { margin: 2px 0 0; font-size: 0.8125rem; }
+.board-line { margin: 2px 0 0; font-size: 0.875rem; }
 .board-money { margin: 6px 0 0; font-family: var(--mono); font-size: 0.9375rem; }
 
 /* Кнопки перехода: мышь не единственный способ двигать сделку. */
@@ -454,10 +458,10 @@ form.stack.card { max-width: 760px; }
 /* Выданная ссылка-приглашение. Поле во всю ширину: ссылка длинная, и
    обрезанная по середине читается как сломанная. */
 .invite-out { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
-.invite-out input { width: 100%; font-size: 0.8125rem; }
+.invite-out input { width: 100%; font-size: 0.9375rem; }
 .invite-out .tag { margin-left: 8px; }
 
 /* Передача задачи коллеге: список и кнопка рядом, в одну строку с
    остальными действиями. Форма своя, потому что действие своё. */
 .hand-over { display: inline-flex; align-items: center; gap: 6px; }
-.hand-over select { font-size: 0.8125rem; padding: 4px 6px; }
+.hand-over select { font-size: 0.9375rem; padding: 4px 6px; }
