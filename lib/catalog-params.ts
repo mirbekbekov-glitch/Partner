@@ -29,7 +29,6 @@ export type CatalogFilters = {
   rooms: number | null;
   priceMin: number | null;
   priceMax: number | null;
-  q: string | null;
   sort: CatalogSort;
   page: number;
 };
@@ -63,7 +62,6 @@ export function parseCatalogFilters(
     rooms: num(one('rooms')),
     priceMin: num(one('from')),
     priceMax: num(one('to')),
-    q: one('q')?.trim() || null,
     sort: (SORTS.some((s) => s.key === one('sort')) ? one('sort') : 'fresh') as CatalogSort,
     page: Number.isFinite(page) && page > 0 ? page : 1,
   };
@@ -85,7 +83,6 @@ export function catalogHref(lang: string, f: CatalogFilters, page: number) {
   if (f.rooms) p.set('rooms', String(f.rooms));
   if (f.priceMin != null) p.set('from', String(f.priceMin));
   if (f.priceMax != null) p.set('to', String(f.priceMax));
-  if (f.q) p.set('q', f.q);
   if (f.sort !== 'fresh') p.set('sort', f.sort);
   if (page > 1) p.set('page', String(page));
   const qs = p.toString();
@@ -93,7 +90,7 @@ export function catalogHref(lang: string, f: CatalogFilters, page: number) {
 }
 
 export const hasAnyFilter = (f: CatalogFilters) =>
-  Boolean(f.deal || f.kind || f.region || f.city || f.zone || f.rooms || f.priceMin != null || f.priceMax != null || f.q);
+  Boolean(f.deal || f.kind || f.region || f.city || f.zone || f.rooms || f.priceMin != null || f.priceMax != null);
 
 /**
  * Первая фотография объекта. В базе photos — массив объектов {url}, поэтому

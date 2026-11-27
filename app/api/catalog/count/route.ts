@@ -35,7 +35,6 @@ export async function GET(request: Request) {
       rooms: f.rooms,
       priceMin: f.priceMin,
       priceMax: f.priceMax,
-      q: f.q,
     });
 
     // Счётчик — подсказка, а не данные: кешировать его незачем, но и
