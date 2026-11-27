@@ -470,6 +470,19 @@ export async function mergeContacts(
     mergeId, keepId,
   );
 
+  // Что именно пропадёт из object_ownerships: роль входит в ключ, и если
+  // обе записи указаны в одной роли по одному объекту, лишняя снимается.
+  // Снимается НАВСЕГДА, поэтому выписываем до удаления — иначе в журнале
+  // останется только число «снято: 1», и какая это была связь, не узнать.
+  const droppedOwnerships = await all<{ object_id: string; role: string; share: number | null }>(
+    `select object_id, role, share from object_ownerships oo
+      where oo.contact_id = ?1
+        and exists (select 1 from object_ownerships k
+                     where k.object_id = oo.object_id
+                       and k.contact_id = ?2 and k.role = oo.role)`,
+    mergeId, keepId,
+  );
+
   const at = now();
   const roles = [...new Set([
     ...jsonArray<string>(keep.roles), ...jsonArray<string>(merge.roles),
@@ -536,7 +549,27 @@ export async function mergeContacts(
     auditStmt('contacts', keepId, 'update', agent.id, {
       merged_from: { from: mergeId, to: keepId },
     }),
-    auditStmt('contacts', mergeId, 'delete', agent.id, { name: merge.name }),
+    // Присоединённая запись удаляется, и вернуть её нечем: отмены у
+    // объединения нет. Значит журнал — единственное место, где её
+    // содержимое вообще остаётся, и писать туда одно имя мало. Здесь
+    // лежит всё, из чего запись можно собрать руками: вид, telegram,
+    // источник, роли, заметка, владелец и когда она появилась.
+    //
+    // Телефонов здесь нет намеренно, и это не пропуск: они не удаляются,
+    // а переезжают к остающейся записи. Общее правило журнала — не
+    // складывать в него телефоны при каждой правке — остаётся в силе.
+    auditStmt('contacts', mergeId, 'delete', agent.id, {
+      name: merge.name,
+      kind: merge.kind,
+      telegram: merge.telegram,
+      source: merge.source,
+      roles: jsonArray<string>(merge.roles),
+      note: merge.note,
+      owner_agent_id: merge.owner_agent_id,
+      created_at: merge.created_at,
+      merged_into: keepId,
+      dropped_ownerships: droppedOwnerships,
+    }),
   ]);
 
   return {

@@ -5,6 +5,7 @@ import {
 } from '@/lib/db/cabinet';
 import { approvedColleagues } from '@/lib/db/agents';
 import { canEditObject } from '@/lib/db/access';
+import { inFeed } from '@/lib/feed';
 import { missingFields } from '@/lib/mhouse-feed';
 import { Activities, type ActivityRow } from '../../Activities';
 import { CreateMatchForm } from '../../CreateMatchForm';
@@ -84,9 +85,15 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
           <span className="key">Актуально на</span>
           <span>{when(object.actual_at)}</span>
         </div>
-        {/* Чего не хватает для выгрузки на площадки. Показывается здесь,
-            а не выясняется из отчёта площадки через сутки: пробел видно
-            тому, кто может его закрыть, и тогда, когда он открыл карточку. */}
+        {/* Выгрузка на площадки. Две разные причины не доехать, и обе
+            должны быть видны тому, кто может их закрыть: вид объекта,
+            который яндексовский фид не берёт, и незаполненные поля, без
+            которых объявление не примет MHouse.
+
+            Вид спрашивается у самой выгрузки, а состав незаполненного — у
+            того же missingFields, которым пользуется фид MHouse.
+            Повторять их списки здесь значило бы однажды написать «не
+            попадает» о том, что уже попадает. */}
         <div className="row" style={{ marginTop: 8 }}>
           <span className="key">Выгрузка</span>
           {feedGaps.length === 0 ? (
@@ -95,6 +102,13 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
             <span className="warn">не хватает: {feedGaps.join(', ')}</span>
           )}
         </div>
+        {object.publication_state === 'published' && !inFeed(object.kind) ? (
+          <p className="warn" style={{ marginTop: 8 }}>
+            В выгрузку на Яндекс этот объект не попадает: формат для
+            коммерческой недвижимости пока не определён. На MHouse и на
+            сайте он показывается как обычно.
+          </p>
+        ) : null}
         <div className="row" style={{ marginTop: 8 }}>
           <span className="key">Мандат</span>
           {mandate ? (
