@@ -11,6 +11,7 @@ import { currentAgent } from '@/lib/db/session';
 import { toMinor } from '@/lib/db/money';
 import { attempt, explain } from '@/lib/db/report';
 import { describeObject, type DraftResult } from '@/lib/ai/describe';
+import { geocode, type Spot } from '@/lib/geocode';
 
 export type FormResult = { error: string | null };
 export type { DraftResult };
@@ -216,4 +217,48 @@ export async function draftDescription(formData: FormData): Promise<DraftResult>
     currency: str(formData.get('currency')),
     notes: str(formData.get('description')),
   });
+}
+
+
+/**
+ * Догадка о координатах по тому, что уже введено в карточке.
+ *
+ * Проверка на агента — по той же причине, что и у генерации описания:
+ * действие ходит НАРУЖУ, мимо слоя доступа, и без этой строки любой, кто
+ * дотянулся до него, ходил бы в чужую службу от нашего имени.
+ *
+ * Ничего не сохраняется: точка возвращается в форму, агент видит её на
+ * карте и сохраняет вместе с остальными полями — или двигает, или
+ * убирает. Догадка, записанная молча, однажды отправит покупателя не в
+ * тот двор.
+ */
+export async function findOnMap(formData: FormData): Promise<{
+  point: Spot | null;
+  error?: string;
+}> {
+  if (!(await currentAgent())) {
+    return { point: null, error: 'Поиск по адресу доступен одобренным агентам.' };
+  }
+
+  // Город и район сужают поиск: «Московская» есть и в Бишкеке, и в Оше.
+  const query = [
+    str(formData.get('address')),
+    str(formData.get('zone')),
+    str(formData.get('city')) ?? 'Бишкек',
+  ].filter(Boolean).join(', ');
+
+  if (!str(formData.get('address'))) {
+    return { point: null, error: 'Сначала впишите адрес.' };
+  }
+
+  try {
+    const point = await geocode(query);
+    return point
+      ? { point }
+      : { point: null, error: 'По такому адресу ничего не нашлось — поставьте точку сами.' };
+  } catch {
+    // Служба чужая и может молчать. Это не повод ронять форму: карта
+    // остаётся, точку всегда можно поставить рукой.
+    return { point: null, error: 'Служба карт не ответила — поставьте точку сами.' };
+  }
 }
