@@ -1742,6 +1742,12 @@ export default {
     check('серия и тип дома на языке площадки',
       mhFull.includes('<serie>элитка</serie>')
       && mhFull.includes('<building-type>монолитный</building-type>'));
+    // Микрорайон площадки — это наш район. Отдельного поля в карточке
+    // нет, и значение берётся из того единственного, которое агент
+    // заполняет: иначе два поля разошлись бы в первую же правку.
+    check('микрорайон уходит в фид из нашего района',
+      mhFull.includes('<micro-district>Центр</micro-district>'));
+
     check('контакт MHouse называет имя и роль подающего',
       mhFull.includes('<owner-type>агент</owner-type>')
       && mhFull.includes('<name>Liberterra</name>'));
