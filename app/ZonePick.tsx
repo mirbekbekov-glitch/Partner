@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
+import { zoneMatch } from '@/lib/geo';
 
 /**
  * Выбор района.
@@ -25,11 +26,14 @@ import { useEffect, useId, useRef, useState } from 'react';
 export type ZoneOption = { zone: string; n: number };
 
 export function ZonePick({
-  label, value, options, anyLabel, searchHint, emptyHint,
+  label, value, options, onPick, anyLabel, searchHint, emptyHint,
 }: {
   label: string;
-  value: string | null;
+  value: string;
   options: ZoneOption[];
+  /** Выбор уходит наверх: район зависит от города, и хранить его
+      отдельно от города значило бы развести их при смене города. */
+  onPick: (zone: string) => void;
   anyLabel: string;
   searchHint: string;
   emptyHint: string;
@@ -37,7 +41,6 @@ export function ZonePick({
   const id = useId();
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
-  const [picked, setPicked] = useState(value ?? '');
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
 
@@ -48,12 +51,9 @@ export function ZonePick({
 
   useEffect(() => setReady(true), []);
 
-  // Поиск нечувствителен к регистру и к «ё»: «Кок-Жар» набирают и так,
-  // и «кокжар», и дефис вспоминают не все.
-  const norm = (s: string) => s.toLowerCase().replace(/ё/g, 'е').replace(/[\s-]/g, '');
-  const found = query.trim() === ''
-    ? options
-    : options.filter((o) => norm(o.zone).includes(norm(query)));
+  // Сравнение живёт в словаре географии: там же сказано, почему «6 мкр»,
+  // «6 м-н» и «6 микрорайон» — одно и то же место.
+  const found = options.filter((o) => zoneMatch(o.zone, query));
   const rows: Array<ZoneOption | null> = [null, ...found];
 
   useEffect(() => {
@@ -74,8 +74,10 @@ export function ZonePick({
     el?.scrollIntoView({ block: 'nearest' });
   }, [open, cursor, query]);
 
+  const picked = value;
+
   const choose = (zone: string) => {
-    setPicked(zone);
+    onPick(zone);
     setOpen(false);
     setQuery('');
     btn.current?.focus();
@@ -153,7 +155,7 @@ export function ZonePick({
       ) : null}
 
       <noscript>
-        <select name="zone" defaultValue={value ?? ''} className="pick-plain">
+        <select name="zone" defaultValue={value} className="pick-plain">
           <option value="">{anyLabel}</option>
           {options.map((o) => <option key={o.zone} value={o.zone}>{o.zone}</option>)}
         </select>

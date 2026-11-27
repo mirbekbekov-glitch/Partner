@@ -94,6 +94,8 @@ export type CatalogQuery = {
   deal?: 'rent' | 'sale' | null;
   kind?: string | null;
   city?: string | null;
+  /** Города региона: фильтр по региону — это фильтр по его городам. */
+  cities?: string[] | null;
   zone?: string | null;
   rooms?: number | null;
   priceMin?: number | null;
@@ -151,6 +153,13 @@ function conditions(query: CatalogQuery): { clause: string; params: (string | nu
   if (query.deal) { where.push('o.deal_type = ?'); params.push(query.deal); }
   if (query.kind) { where.push('o.kind = ?'); params.push(query.kind); }
   if (query.city) { where.push('o.city = ?'); params.push(query.city); }
+  // Региона в базе нет и быть не должно: регион — это свойство города,
+  // а не объекта, и храни мы его в карточке, он разошёлся бы с городом
+  // в первый же день. Поэтому регион превращается в список городов.
+  else if (query.cities && query.cities.length > 0) {
+    where.push(`o.city in (${query.cities.map(() => '?').join(', ')})`);
+    params.push(...query.cities);
+  }
   if (query.zone) { where.push('o.zone = ?'); params.push(query.zone); }
   if (query.rooms) { where.push('o.rooms = ?'); params.push(query.rooms); }
 
@@ -263,11 +272,16 @@ export async function districts(): Promise<Array<{ id: string; name: string }>> 
 export async function catalogZoneCounts(
   deal?: 'rent' | 'sale' | null,
   city?: string | null,
+  cities?: string[] | null,
 ): Promise<Array<{ zone: string; n: number }>> {
   const params: (string | number)[] = [];
   const filters: string[] = [];
   if (deal) { filters.push('and o.deal_type = ?'); params.push(deal); }
   if (city) { filters.push('and o.city = ?'); params.push(city); }
+  else if (cities && cities.length > 0) {
+    filters.push(`and o.city in (${cities.map(() => '?').join(', ')})`);
+    params.push(...cities);
+  }
 
   return all<{ zone: string; n: number }>(
     `select o.zone as zone, count(*) as n from objects o
