@@ -44,7 +44,7 @@ import {
 } from '@/lib/catalog-params';
 import { listingSchema } from '@/lib/listing-schema';
 import { placeName, t } from '@/lib/i18n';
-import { citiesWithZones, zonesOf } from '@/lib/city-zones';
+import { citiesOf, regionOf, regions, zoneMatch, zonesOf } from '@/lib/geo';
 import {
   completeTelegramLink, startTelegramLink, sweepTelegramLinks, unlinkTelegram,
 } from '@/lib/db/telegram';
@@ -1966,10 +1966,15 @@ export default {
     await loginAs(db, anna);
     setEnv(env as unknown as Record<string, unknown>);
 
-    // Районы по городам. Вся ценность списка в правде расположения:
-    // местный должен узнать город с первого взгляда. Поэтому город
-    // попадает сюда, только когда районы назвал тот, кто город знает,
-    // а не тот, кто догадался.
+    // География: регион → город → район. Три уровня нужны не ради
+    // стройности, а потому что так спрашивает человек и потому что
+    // площадка задумана шире одной области.
+    check('регионы перечислены', regions().length > 1);
+    check('город знает свой регион', regionOf('Бишкек') === 'Чуйская область');
+    check('город вне словаря региона не выдумывает', regionOf('Ташкент') === null);
+    check('у региона есть города', citiesOf('Иссык-Кульская область').includes('Каракол'));
+    check('без региона города всех регионов', citiesOf(null).includes('Ош'));
+
     check('у Бишкека районы перечислены', zonesOf('Бишкек').length > 0);
     check('у города без списка его нет, и это не сбой', zonesOf('Ош').length === 0);
     check('пустой город районов не получает',
@@ -1980,11 +1985,16 @@ export default {
     const bishkek = zonesOf('Бишкек');
     check('в списке есть Центр — та же зона, что у объектов витрины',
       bishkek.includes('Центр'));
-    check('порядок районов с севера на юг, а не по алфавиту',
-      bishkek.indexOf('Тунгуч') < bishkek.indexOf('Центр')
-      && bishkek.indexOf('Центр') < bishkek.indexOf('Асанбай'));
-    check('списков ровно столько, сколько городов описали руками',
-      citiesWithZones().join() === 'Бишкек');
+    check('микрорайоны в списке есть, и они первые',
+      bishkek[0] === '3 микрорайон' && bishkek.includes('6 микрорайон'));
+
+    // Номер микрорайона пишут тремя способами, и каждый обязан найтись:
+    // человек не должен угадывать, как его записали в карточке.
+    check('«6 мкр», «6 м-н» и «6 микрорайон» — одно место',
+      zoneMatch('6 микрорайон', '6 мкр') && zoneMatch('6 микрорайон', '6 м-н')
+      && zoneMatch('6 микрорайон', '6микрорайон'));
+    check('дефисы и регистр не мешают', zoneMatch('Кок-Жар', 'кокжар'));
+    check('чужой район не находится', !zoneMatch('Асанбай', 'джал'));
 
     // Как сайт себя называет. Пока город один — он; городов несколько —
     // страна. Текст считается по каталогу, а не правится руками: иначе

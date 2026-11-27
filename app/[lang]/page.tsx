@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { catalogCities, catalogPage, catalogZoneCounts } from '@/lib/db/catalog';
-import { zonesOf } from '@/lib/city-zones';
+import { GEO, citiesOf, regionOf, zonesOf } from '@/lib/geo';
 import {
   CATALOG_PAGE_SIZE, parseCatalogFilters, catalogHref, sortHref, hasAnyFilter,
   firstPhoto, daysSince,
@@ -12,7 +12,7 @@ import { t, kindName, freshWordIn, LANGS, isLang, type Lang, placeName } from '@
 import { CatalogHeader } from '../CatalogHeader';
 import { HeroArt } from '../HeroArt';
 import { FindButton } from '../FindButton';
-import { ZonePick } from '../ZonePick';
+import { GeoPick, type GeoData } from '../GeoPick';
 import { RequestPitch } from '../RequestPitch';
 import { CatalogFooter } from '../CatalogFooter';
 import { Facade } from '../Facade';
@@ -54,9 +54,8 @@ type Row = {
   actual_at: string;
 };
 
-function Search({ lang, f, deal, cities, zones }: {
-  lang: Lang; f: CatalogFilters; deal: 'sale' | 'rent'; cities: string[];
-  zones: Array<{ zone: string; n: number }>;
+function Search({ lang, f, deal, geo }: {
+  lang: Lang; f: CatalogFilters; deal: 'sale' | 'rent'; geo: GeoData;
 }) {
   const d = t(lang);
   const up = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
@@ -94,34 +93,23 @@ function Search({ lang, f, deal, cities, zones }: {
               место на пульте занимает; при этом спрятать город в складку
               «ещё» нельзя: когда городов несколько, это первое, что
               человек выбирает, а не уточнение к поиску. */}
-          {cities.length > 1 ? (
-            <div className="cell">
-              <label htmlFor="city">{d.cityLabel}</label>
-              <select id="city" name="city" defaultValue={f.city ?? ''}>
-                <option value="">{d.anyKind}</option>
-                {cities.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          ) : null}
           <div className="cell wide">
             <label htmlFor="q">{d.address}</label>
             <input id="q" name="q" type="search" placeholder={d.addressHint}
                    defaultValue={f.q ?? ''} autoComplete="off" />
           </div>
-          {/* Район — список, а не строка ввода, и на пульте, а не в
-              складке «ещё». Район — второй вопрос после «купить или
-              снять», и спрашивать его надо там же, где остальные.
-              Списком, потому что строкой человек пишет «джал», «Джал-23»
-              и «Jal», а в карточке стоит «Джал»: три написания из
-              четырёх не находили ничего. Список свой, с поиском: районов
-              два десятка, и набрать «ас» быстрее, чем искать «Асанбай»
-              глазами. Рядом с районом — число объектов: оно говорит,
-              стоит ли нажимать. */}
-          {zones.length > 0 ? (
-            <ZonePick label={d.zoneLabel} value={f.zone} options={zones}
-                      anyLabel={d.anyKind} searchHint={d.zoneSearch}
-                      emptyHint={d.zoneNone} />
-          ) : null}
+          {/* Где искать: регион, город, район — три связанных поля.
+              Район списком с поиском, а не строкой ввода: строкой
+              человек пишет «джал», «Джал-23» и «Jal», а в карточке
+              стоит «Джал», и три написания из четырёх не находили
+              ничего. Районов у города четыре десятка, и набрать «ас»
+              быстрее, чем искать «Асанбай» глазами. */}
+          <GeoPick value={{ region: f.region, city: f.city, zone: f.zone }}
+                   regions={geo.regions} citiesOf={geo.cities} zonesOf={geo.zones}
+                   counts={geo.counts}
+                   regionLabel={d.regionLabel} cityLabel={d.cityLabel}
+                   zoneLabel={d.zoneLabel} anyLabel={d.anyKind}
+                   searchHint={d.zoneSearch} emptyHint={d.zoneNone} />
           <div className="cell">
             <label htmlFor="kind">{d.kind}</label>
             <select id="kind" name="kind" defaultValue={f.kind ?? ''}>
@@ -193,6 +181,11 @@ export default async function Catalog({
   // Только витрина: в ней нет ни комиссии, ни агента, ни собственника.
   // Это свойство не страницы, а модуля — состав колонок задан там одним
   // списком, и дописать в него «ведёт» мимо рецензии нельзя.
+  // Регион — свойство города, а не объекта: фильтр по региону
+  // разворачивается в список его городов. Город выбран — регион уже не
+  // нужен: город точнее.
+  const regionCities = f.region && !f.city ? citiesOf(f.region) : null;
+
   let total = 0;
   let rows: Row[] = [];
   let failed = false;
@@ -202,6 +195,7 @@ export default async function Catalog({
       deal,
       kind: f.kind,
       city: f.city,
+      cities: regionCities,
       zone: f.zone,
       rooms: f.rooms,
       priceMin: f.priceMin,
@@ -228,28 +222,40 @@ export default async function Catalog({
   const cities = failed ? [] : await catalogCities();
   const manyCities = cities.length > 1;
 
-  const zoneCounts = failed ? [] : await catalogZoneCounts(deal, f.city);
 
-  // В списке — все районы города, а не только те, где сейчас есть
-  // объекты: человек ищет свой район и должен его там найти, даже если
-  // ответом будет «пока ничего». Число объектов стоит рядом и отвечает
-  // на вопрос «стоит ли нажимать» честнее, чем отсутствие строки.
+  const zoneCounts = failed ? [] : await catalogZoneCounts(deal, f.city, regionCities);
+
+  // Словарь для пульта: регионы, города каждого региона, районы каждого
+  // города. К словарным названиям подмешиваются те, что встретились в
+  // самих объявлениях: агент мог написать в карточке посёлок, которого
+  // в словаре нет, и потерять такие объекты нельзя.
   //
-  // Порядок — с севера на юг, как город лежит на самом деле, и только
-  // для города, который виден целиком: городов несколько и ни один не
-  // выбран — раскладка одного поверх объектов всех соврёт. Район,
-  // которого в раскладке нет, встаёт следом: агент мог написать в
-  // карточке посёлок, которого в списке не было.
-  const order = zonesOf(manyCities ? f.city : (f.city ?? cities[0] ?? 'Бишкек'));
-  const rank = (z: string) => {
-    const i = order.indexOf(z);
-    return i < 0 ? order.length : i;
+  // Числа — только у районов: сколько объектов сейчас в районе, видно
+  // из выдачи, и это отвечает на вопрос «стоит ли нажимать». У города
+  // и региона такого числа нет, и выдумывать его незачем.
+  const geoCities: Record<string, string[]> = {};
+  for (const r of GEO) geoCities[r.name] = r.cities.map((c) => c.name);
+  for (const city of cities) {
+    const r = regionOf(city) ?? d.otherPlaces;
+    const list = geoCities[r] ?? (geoCities[r] = []);
+    if (!list.includes(city)) list.push(city);
+  }
+
+  const shown = f.city ?? (cities.length === 1 ? cities[0] : null);
+  const geoZones: Record<string, string[]> = {};
+  if (shown) {
+    const order = zonesOf(shown);
+    const extra = zoneCounts.map((z) => z.zone).filter((z) => !order.includes(z));
+    if (f.zone && !order.includes(f.zone) && !extra.includes(f.zone)) extra.push(f.zone);
+    geoZones[shown] = [...order, ...extra.sort((a, b) => a.localeCompare(b, 'ru'))];
+  }
+
+  const geo = {
+    regions: Object.keys(geoCities),
+    cities: geoCities,
+    zones: geoZones,
+    counts: Object.fromEntries(zoneCounts.map((z) => [z.zone, z.n])),
   };
-  const named = new Map(zoneCounts.map((z) => [z.zone, z.n]));
-  for (const z of order) if (!named.has(z)) named.set(z, 0);
-  if (f.zone && !named.has(f.zone)) named.set(f.zone, 0);
-  const zoneList = [...named].map(([zone, n]) => ({ zone, n }))
-    .sort((a, b) => rank(a.zone) - rank(b.zone) || a.zone.localeCompare(b.zone, 'ru'));
 
   // Строкой над выдачей — самые населённые районы: это быстрый путь,
   // а не полный список, полный живёт в поле «Район» на пульте.
@@ -272,7 +278,7 @@ export default async function Catalog({
       </section>
 
       <div className="wrap">
-        <Search lang={lang} f={f} deal={deal} cities={cities} zones={zoneList} />
+        <Search lang={lang} f={f} deal={deal} geo={geo} />
 
         {/* Районы строкой: самый частый первый шаг — «покажите, что есть
             в Асанбае». Это ссылки, а не украшение. */}

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { catalogCount } from '@/lib/db/catalog';
 import { parseCatalogFilters } from '@/lib/catalog-params';
+import { citiesOf } from '@/lib/geo';
 
 /**
  * Сколько объектов найдётся — для счётчика на кнопке «Найти».
@@ -26,6 +27,10 @@ export async function GET(request: Request) {
       // странице каталога.
       deal: f.deal ?? 'sale',
       kind: f.kind,
+      // Город и регион считались мимо счётчика: на кнопке стояло число
+      // по всей стране, а выдача приходила по одному городу.
+      city: f.city,
+      cities: f.region && !f.city ? citiesOf(f.region) : null,
       zone: f.zone,
       rooms: f.rooms,
       priceMin: f.priceMin,
