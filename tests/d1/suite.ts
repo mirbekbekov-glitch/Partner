@@ -335,6 +335,13 @@ export default {
     // Главный случай — запись БЕЗ связей с объектами. При неправильном
     // порядке RESTRICT промолчит, и потребности исчезнут без единой ошибки.
     const dupe = await createContact({ name: 'Иван Иванов', phone: '0555 40 50 60' });
+
+    // Обе записи — собственники ОДНОГО объекта в ОДНОЙ роли. Роль входит
+    // в ключ связи, поэтому при объединении лишняя связь снимается
+    // навсегда. Это единственное, что объединение действительно теряет, и
+    // в журнале должно остаться, ЧТО именно снято, а не только сколько.
+    await setObjectOwnership(obj.id, ivan.id, 'owner');
+    await setObjectOwnership(obj.id, dupe.id, 'owner');
     await db.prepare(
       `insert into requirements (id, contact_id, deal_type, agent_id, status,
                                  created_at, updated_at)
@@ -347,6 +354,32 @@ export default {
     ).bind(ivan.id).first<{ n: number }>();
     const gone = await db.prepare('select count(*) as n from requirements')
       .first<{ n: number }>();
+
+    // Присоединённая запись удаляется без возможности вернуть, и журнал —
+    // единственное место, где её содержимое остаётся. До этого там лежало
+    // ОДНО ИМЯ, хотя README обещал содержимое: по имени запись не собрать.
+    const mergedAudit = await db.prepare(
+      `select diff from audit_log
+        where entity_type = 'contacts' and entity_id = ? and action = 'delete'
+        order by id desc limit 1`,
+    ).bind(dupe.id).first<{ diff: string }>();
+    const buried = JSON.parse(mergedAudit?.diff ?? '{}') as Record<string, unknown>;
+
+    check('журнал хранит имя удалённой записи', buried.name === 'Иван Иванов');
+    check('и её вид', buried.kind === 'person');
+    check('и владельца', buried.owner_agent_id === anna);
+    check('и дату появления', typeof buried.created_at === 'string');
+    check('и куда её влили', buried.merged_into === ivan.id);
+    // Телефонов в журнале быть не должно: они не удаляются, а переезжают.
+    check('а телефонов в журнале нет', !('phones' in buried) && !('phone' in buried));
+
+    const dropped = buried.dropped_ownerships as Array<{ object_id: string; role: string }>;
+    check('и снятая связь собственности выписана целиком',
+      Array.isArray(dropped) && dropped.length === 1
+      && dropped[0]?.object_id === obj.id && dropped[0]?.role === 'owner',
+      JSON.stringify(dropped));
+    check('а отчёт об объединении её посчитал', report.ownerships_dropped === 1,
+      `снято ${report.ownerships_dropped}`);
 
     check('объединение переносит потребность, а не теряет её',
       (reqAfter?.n ?? 0) === 1 && (gone?.n ?? 0) === 1,
