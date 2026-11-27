@@ -108,7 +108,7 @@ const plural = (n: number, one: string, few: string, many: string) => {
 
 const ru: Dict = {
   forAgents: 'Вход для агентов', agency: 'Liberterra', phones: 'Телефоны',
-  sections: 'Разделы', agencyLine: (place) => `Агентство недвижимости, ${place}`,
+  sections: 'Разделы', agencyLine: (place) => `Платформа для профессионалов, ${place}`,
   country: 'Кыргызстан',
   cabinetLine: 'Кабинет и CRM — по входу для агентов.',
   heroTitle: 'Найдите своё пространство для комфортной', heroEm: 'работы и жилья',
@@ -214,7 +214,7 @@ const ru: Dict = {
 
 const ky: Dict = {
   forAgents: 'Агенттер үчүн кирүү', agency: 'Liberterra', phones: 'Телефондор',
-  sections: 'Бөлүмдөр', agencyLine: (place) => `Кыймылсыз мүлк агенттиги, ${place}`,
+  sections: 'Бөлүмдөр', agencyLine: (place) => `Кесипкөйлөр үчүн платформа, ${place}`,
   country: 'Кыргызстан',
   cabinetLine: 'Кабинет жана CRM — агенттер үчүн кирүү аркылуу.',
   heroTitle: 'Ыңгайлуу жашоо жана жумуш үчүн', heroEm: 'өз мейкиндигиңизди табыңыз',
@@ -310,7 +310,7 @@ const ky: Dict = {
 
 const en: Dict = {
   forAgents: 'Agent login', agency: 'Liberterra', phones: 'Phones',
-  sections: 'Sections', agencyLine: (place) => `Real estate agency, ${place}`,
+  sections: 'Sections', agencyLine: (place) => `A platform for professionals, ${place}`,
   country: 'Kyrgyzstan',
   cabinetLine: 'The agent cabinet and CRM are behind the agent login.',
   heroTitle: 'Find your space for comfortable', heroEm: 'living and work',
@@ -406,7 +406,7 @@ const en: Dict = {
 
 const zh: Dict = {
   forAgents: '经纪人登录', agency: 'Liberterra', phones: '电话',
-  sections: '栏目', agencyLine: (place) => `${place}房地产中介`,
+  sections: '栏目', agencyLine: (place) => `${place}房产专业人士平台`,
   country: '吉尔吉斯斯坦',
   cabinetLine: '经纪人工作台与 CRM 需登录后使用。',
   heroTitle: '找到适合您的', heroEm: '居住与工作空间',
