@@ -4,6 +4,7 @@ import { requireAgent } from './session';
 import { fromMinor } from './money';
 import { commissionShares, commissionTotal, parseRule, partnerAmount } from './commission';
 import { panoramasFrom } from './panoramas';
+import { editsFrom } from './photo-edits';
 import { contactVisible, dealParty, objectEditable } from './visibility';
 import { searchText } from './normalize';
 import { PAGE_SIZE } from '../list-params';
@@ -615,7 +616,7 @@ export async function objectCard(id: string) {
     land_area: number | null; rental_term: string | null;
     commercial_type: string | null; room_location: string | null;
     parking_type: string | null; build_year: number | null;
-    panoramas: string | null;
+    panoramas: string | null; photo_edits: string | null;
   }>(
     `select o.id, o.kind, o.subkind, o.deal_type, o.address, o.city, o.zone,
             o.rooms, o.area,
@@ -625,7 +626,7 @@ export async function objectCard(id: string) {
             o.latitude, o.longitude, o.region, o.district, o.micro_district,
             o.house_number, o.building_type, o.serie, o.land_area,
             o.rental_term, o.commercial_type, o.room_location, o.parking_type,
-            o.build_year, o.panoramas
+            o.build_year, o.panoramas, o.photo_edits
        from objects o where o.id = ?`,
     id,
   );
@@ -636,6 +637,7 @@ export async function objectCard(id: string) {
     ...row,
     photos: jsonArray<string>(row.photos),
     panoramas: panoramasFrom(row.panoramas),
+    edits: editsFrom(row.photo_edits),
   };
 }
 

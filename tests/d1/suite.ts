@@ -46,6 +46,7 @@ import {
   deletePanorama, panoramasOf, putPanorama, renamePanorama, setLinks,
 } from '@/lib/db/panoramas';
 import { checkPanorama, meanLuma, sharpness } from '@/lib/photo-check';
+import { fixLight, greyWorld, levelsOf } from '@/lib/photo-fix';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
 import { mhouseOffers, mhouseXml, missingFields } from '@/lib/mhouse-feed';
@@ -3103,6 +3104,37 @@ export default {
     // вычистить снимки соседнего объекта.
     await throws('ключ от другого объекта не принимается',
       () => deletePhoto(withPhotos.id, `objects/${shown.id}/подделка.jpg`), Invalid);
+
+    // Поправка света — арифметика, и проверяется как арифметика.
+    const grayLine = (v: number, n: number) => {
+      const a = new Uint8ClampedArray(n * 4);
+      for (let i = 0; i < n; i++) {
+        a[i * 4] = v; a[i * 4 + 1] = v; a[i * 4 + 2] = v; a[i * 4 + 3] = 255;
+      }
+      return a;
+    };
+
+    const dim = grayLine(60, 64);
+    check('тёмный кадр светлеет', fixLight(dim) && dim[0] > 60);
+
+    const ramp = new Uint8ClampedArray(256 * 4);
+    for (let i = 0; i < 256; i++) {
+      ramp[i * 4] = i; ramp[i * 4 + 1] = i; ramp[i * 4 + 2] = i; ramp[i * 4 + 3] = 255;
+    }
+    const rampBefore = Array.from(ramp);
+    check('ровный кадр не трогается',
+      !fixLight(ramp) && Array.from(ramp).every((v, i) => v === rampBefore[i]));
+
+    // Жёлтый налёт от лампы: красного и зелёного больше синего, и баланс
+    // должен их сблизить, а не перекрасить комнату целиком.
+    const warm = new Uint8ClampedArray(64 * 4);
+    for (let i = 0; i < 64; i++) {
+      warm[i * 4] = 200; warm[i * 4 + 1] = 180; warm[i * 4 + 2] = 120; warm[i * 4 + 3] = 255;
+    }
+    const spreadBefore = warm[0] - warm[2];
+    fixLight(warm);
+    check('жёлтый налёт ослабляется', warm[0] - warm[2] < spreadBefore,
+      `${spreadBefore} → ${warm[0] - warm[2]}`);
 
     // -----------------------------------------------------------------
     // Панорамы тура

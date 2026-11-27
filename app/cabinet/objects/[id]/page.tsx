@@ -17,6 +17,7 @@ import { ContactCell } from '../../HiddenContact';
 import { ObjectActions } from '../ObjectActions';
 import { CommissionForm } from '../CommissionForm';
 import { TourEditor } from '../TourEditor';
+import { PhotoEditor } from '../PhotoEditor';
 import { StartDealButton } from '../../deals/StartDealButton';
 import { MatchStatus } from '../../MatchStatus';
 import { TransferForm, type Colleague } from '../../TransferForm';
@@ -342,6 +343,23 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
           </>
         )}
       </div>
+
+      {/* Обработка снимков: свет и стирание лишнего. Блок для того, кто
+          отвечает за объект, — он же и отвечает за то, что стёр. */}
+      {canEdit === true && object.photos.length > 0 ? (
+        <>
+          <h2>Обработка снимков</h2>
+          <div className="card">
+            <PhotoEditor
+              objectId={object.id}
+              photos={object.photos.map((url) => ({
+                url,
+                edit: object.edits.find((e) => e.url === url),
+              }))}
+            />
+          </div>
+        </>
+      ) : null}
 
       {/* Переходы между комнатами: расставляет их агент, и только он
           знает, где в этой квартире дверь. Блок появляется, когда

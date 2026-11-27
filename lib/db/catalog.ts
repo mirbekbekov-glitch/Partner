@@ -3,6 +3,7 @@ import { all, holders, jsonArray, one } from './sql';
 import { searchText } from './normalize';
 import { fromMinor } from './money';
 import { panoramasFrom, type Panorama } from './panoramas';
+import { anyErased, editsFrom } from './photo-edits';
 
 /**
  * Публичный каталог — витрина.
@@ -36,6 +37,9 @@ const COLUMNS = [
   // Панорамы тура публичны по той же причине, что и снимки: их для того
   // и снимали. Подпись комнаты — единственное, что в них написано.
   'panoramas',
+  // Пометка об обработке: покупатель должен знать, что с кадра стирали
+  // предметы. Это и есть причина, по которой колонка публична.
+  'photo_edits',
 ] as const;
 
 const SELECT = COLUMNS.map((c) => `o.${c}`).join(', ');
@@ -57,6 +61,7 @@ export type CatalogRow = {
   currency: string;
   photos: string;
   panoramas: string | null;
+  photo_edits: string | null;
   description: string | null;
   published_at: string | null;
   actual_at: string;
@@ -84,9 +89,11 @@ export type CatalogRow = {
  * показывают человеку, и переводить её в каждом месте значило бы
  * размножить одно и то же деление по всем страницам.
  */
-export type CatalogItem = Omit<CatalogRow, 'photos' | 'panoramas'> & {
+export type CatalogItem = Omit<CatalogRow, 'photos' | 'panoramas' | 'photo_edits'> & {
   photos: string[];
   panoramas: Panorama[];
+  /** Стирали ли с каких-то снимков предметы. Подпись в объявлении — за это. */
+  retouched: boolean;
   price: number;
 };
 
@@ -95,6 +102,7 @@ function view(row: CatalogRow): CatalogItem {
     ...row,
     photos: jsonArray<string>(row.photos),
     panoramas: panoramasFrom(row.panoramas),
+    retouched: anyErased(editsFrom(row.photo_edits)),
     price: fromMinor(row.price_minor) ?? 0,
   };
 }
