@@ -16,7 +16,6 @@ import { SESSION_COOKIE, currentAgent, endSession, sessionAgent } from '@/lib/db
 import { completeLogin, requestLogin, revokePendingLinks } from '@/lib/db/login';
 import { inviteAgent } from '@/lib/db/invites';
 import { approvedColleagues } from '@/lib/db/agents';
-import { duplicatesOf, myActivities } from '@/lib/db/cabinet';
 import { looksLikeSameName, nameKey } from '@/lib/contact-match';
 import { outbox, tokenFromLastLetter } from './stubs/email';
 import {
@@ -25,7 +24,7 @@ import {
 } from '@/lib/db/objects';
 import { createMandate, expireMandates, terminateMandate } from '@/lib/db/mandates';
 import { canSeeContact } from '@/lib/db/access';
-import { createRequirement } from '@/lib/db/requirements';
+import { createRequirement, updateRequirement } from '@/lib/db/requirements';
 import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import {
@@ -49,8 +48,8 @@ import {
 } from '@/lib/db/telegram';
 import { POST as telegramWebhook } from '@/app/api/telegram/webhook/route';
 import {
-  activeMandateOf, cabinetCounters, contactList, contactObjects, dealList,
-  objectCard, objectList, requirementList,
+  activeMandateOf, cabinetCounters, contactDuplicates, contactList, contactObjects,
+  dealList, duplicatesOf, myActivities, objectCard, objectList, requirementList,
 } from '@/lib/db/cabinet';
 import {
   approveAgent, blockAgent, clearMyOrganization, confirmAgentOrganization,
@@ -68,6 +67,7 @@ import {
 import {
   addPhone, contactPhones, createContact, findContactByPhone,
   mergeContacts, removeObjectOwnership, setObjectOwnership, transferContact,
+  updateContact,
 } from '@/lib/db/contacts';
 import { commissionShares, commissionTotal } from '@/lib/db/commission';
 import { normalizePhone } from '@/lib/db/normalize';
@@ -302,6 +302,33 @@ export default {
     check('чужой контакт с тем же именем в кандидаты не попадает',
       !(await duplicatesOf(ivan.id)).some((c) => c.other_id === hisIvan.id));
 
+    // Список пар — то же правило, что у подсказки на карточке. Разные
+    // правила означали бы, что в одном месте дубликат есть, в другом нет.
+    const pairs = await contactDuplicates();
+    check('список пар видит «Иван» и «ИВАН»',
+      pairs.some((pr) =>
+        (pr.a_id === ivan.id && pr.b_id === capsDupe.id)
+        || (pr.a_id === capsDupe.id && pr.b_id === ivan.id)));
+    check('и не выдумывает пару с «Пётр Петров»',
+      !pairs.some((pr) => pr.a_name === 'Пётр Петров' || pr.b_name === 'Пётр Петров'));
+
+    // Пара, которую видно ТОЛЬКО по правилу инициалов. Без неё проверка
+    // проходила бы и на простом сравнении строк в нижнем регистре —
+    // toLowerCase() в JS, в отличие от lower() в SQLite, кириллицу
+    // приводит, и капсом записанную пару поймало бы и оно. Проверено
+    // мутацией: подмени правило на такое сравнение — падает эта строка.
+    const full = await createContact({
+      name: 'Токтогулов Азамат', phone: '0555 10 20 36',
+    });
+    const short = await createContact({
+      name: 'Токтогулов А.', phone: '0555 10 20 37',
+    });
+    const withInitials = await contactDuplicates();
+    check('список пар видит «Токтогулов Азамат» и «Токтогулов А.»',
+      withInitials.some((pr) =>
+        (pr.a_id === full.id && pr.b_id === short.id)
+        || (pr.a_id === short.id && pr.b_id === full.id)));
+
     // -----------------------------------------------------------------
     // Объединение: порядок шагов и потеря данных
     // -----------------------------------------------------------------
@@ -337,6 +364,63 @@ export default {
     const his = await createContact({ name: 'Клиент Бориса', phone: '0777 22 22 22' });
     await throws('объединять чужую запись нельзя',
       () => mergeContacts(his.id, hers.id), Forbidden);
+
+    // -----------------------------------------------------------------
+    // Поиск по имени и по тексту: та же ловушка lower()
+    // -----------------------------------------------------------------
+    // Предыдущий блок закончился входом Бориса, а контакты здесь — Анны.
+    await loginAs(db, anna);
+
+    // Ищем строчными то, что записано с большой буквы. На lower() в
+    // запросе это не работало: кириллицу он не приводит.
+    const foundLower = await contactList('пётр');
+    check('поиск контакта строчными находит запись с заглавной',
+      foundLower.rows.some((c) => c.name === 'Пётр Петров'),
+      `нашлось ${foundLower.rows.length}`);
+
+    const foundCaps = await contactList('ПЁТР');
+    check('и заглавными тоже находит',
+      foundCaps.rows.some((c) => c.name === 'Пётр Петров'));
+
+    check('а чужого по имени поиск не выдаёт',
+      !(await contactList('иван')).rows.some((c) => c.id === hisIvan.id));
+
+    // Текст потребности: ищем «Тёплый», записано «ТЁПЛЫЙ балкон».
+    // На отдельном контакте, а не на ivan: его объединяют ниже, и лишняя
+    // потребность сбила бы проверку переноса.
+    const searchClient = await createContact({
+      name: 'Поисковый Клиент', phone: '0555 10 20 35',
+    });
+    const searchNeed = await createRequirement({
+      contact_id: searchClient.id, deal_type: 'sale',
+      requirements_text: 'ТЁПЛЫЙ балкон и Чүй рядом',
+    });
+    const needFound = await requirementList({ q: 'тёплый' });
+    check('поиск по тексту потребности не зависит от регистра',
+      needFound.rows.some((r) => r.id === searchNeed.id),
+      `нашлось ${needFound.rows.length}`);
+
+    // Кыргызская буква сводится к русской — как у адресов объектов.
+    check('и «чуй» находит «Чүй»',
+      (await requirementList({ q: 'чуй' })).rows.some((r) => r.id === searchNeed.id));
+
+    // Правка текста переносит и поисковую колонку: иначе потребность
+    // находилась бы по прежнему тексту и не находилась по новому.
+    await updateRequirement(searchNeed.id, { requirements_text: 'ХОЛОДНАЯ лоджия' });
+    check('после правки находится по новому тексту',
+      (await requirementList({ q: 'холодная' })).rows.some((r) => r.id === searchNeed.id));
+    check('и по прежнему уже не находится',
+      !(await requirementList({ q: 'тёплый' })).rows.some((r) => r.id === searchNeed.id));
+
+    // То же для имени контакта.
+    await updateContact(capsDupe.id, { name: 'СИДОРОВ Пётр' });
+    check('переименованный контакт находится по новому имени',
+      (await contactList('сидоров')).rows.some((c) => c.id === capsDupe.id));
+    check('и по прежнему имени больше нет',
+      !(await contactList('иван')).rows.some((c) => c.id === capsDupe.id));
+
+    // Следующий блок рассчитывает на вход Бориса — возвращаем как было.
+    await loginAs(db, boris);
 
     // -----------------------------------------------------------------
     // Передача записи вместе с доступом к телефону

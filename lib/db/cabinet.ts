@@ -6,7 +6,7 @@ import { commissionShares, commissionTotal, parseRule } from './commission';
 import { contactVisible, dealParty, objectEditable } from './visibility';
 import { searchText } from './normalize';
 import { PAGE_SIZE } from '../list-params';
-import { looksLikeSameName } from '../contact-match';
+import { looksLikeSameName, nameKey } from '../contact-match';
 
 /**
  * Запросы кабинета: списки и карточки.
@@ -118,10 +118,21 @@ export async function contactList(
   let filter = '';
 
   if (search?.trim()) {
-    filter = 'and (lower(c.name) like ?2 or exists (select 1 from contact_phones cp'
-           + ' where cp.contact_id = c.id and cp.phone_normalized like ?3))';
-    const text = search.trim().toLowerCase();
-    params.push(`%${text}%`, `%${text.replace(/\D/g, '')}%`);
+    // По нормализованной колонке, а не по lower(c.name): lower() в SQLite
+    // не приводит кириллицу, и поиск «орозов» не находил «Орозов».
+    const text = search.trim();
+    const digits = text.replace(/\D/g, '');
+
+    // Условие по телефону добавляется ТОЛЬКО когда в запросе есть цифры.
+    // Иначе `digits` пусто, шаблон превращается в `%%`, и он совпадает с
+    // любым номером — поиск по имени отдавал всех, у кого есть телефон.
+    filter = digits
+      ? 'and (c.search_text like ?2 or exists (select 1 from contact_phones cp'
+        + ' where cp.contact_id = c.id and cp.phone_normalized like ?3))'
+      : 'and c.search_text like ?2';
+
+    params.push(`%${searchText(text)}%`);
+    if (digits) params.push(`%${digits}%`);
   }
 
   // Роль — внутри JSON-массива ролей. Отбор здесь, а не на странице: иначе
@@ -201,14 +212,38 @@ export async function contactDuplicates(): Promise<Array<{
 }>> {
   const me = await asker();
 
-  return all(
-    `select a.id as a_id, a.name as a_name, b.id as b_id, b.name as b_name
-       from contacts a join contacts b
-         on lower(trim(a.name)) = lower(trim(b.name)) and a.id < b.id
-      where a.owner_agent_id = ?1 and b.owner_agent_id = ?1
-      order by a.name limit 50`,
+  // Сравнение общее с duplicatesOf — `looksLikeSameName`. Отдельное
+  // правило здесь означало бы, что список пар и подсказка на карточке
+  // расходятся: в одном месте дубликат есть, в другом нет.
+  const mine = await all<{ id: string; name: string }>(
+    `select id, name from contacts where owner_agent_id = ?1
+      order by name limit ${DUPLICATE_SCAN_LIMIT}`,
     me.id,
   );
+
+  // Перебор только внутри групп по фамилии: без этого на тысяче контактов
+  // вышло бы полмиллиона сравнений ради пятидесяти строк.
+  const bySurname = new Map<string, Array<{ id: string; name: string }>>();
+  for (const c of mine) {
+    const key = nameKey(c.name).split(' ')[0] ?? '';
+    if (!key) continue;
+    const group = bySurname.get(key);
+    if (group) group.push(c); else bySurname.set(key, [c]);
+  }
+
+  const pairs: Array<{ a_id: string; a_name: string; b_id: string; b_name: string }> = [];
+  for (const group of bySurname.values()) {
+    for (let i = 0; i < group.length && pairs.length < 50; i++) {
+      for (let j = i + 1; j < group.length && pairs.length < 50; j++) {
+        const a = group[i]!;
+        const b = group[j]!;
+        if (looksLikeSameName(a.name, b.name)) {
+          pairs.push({ a_id: a.id, a_name: a.name, b_id: b.id, b_name: b.name });
+        }
+      }
+    }
+  }
+  return pairs;
 }
 
 // ---------------------------------------------------------------------------
@@ -697,8 +732,9 @@ export async function requirementList(query: {
   if (query.zone)   { where.push(`r.zones like ?${++n}`); params.push(`%"${query.zone}"%`); }
 
   if (query.q?.trim()) {
-    where.push(`lower(coalesce(r.requirements_text, '')) like ?${++n}`);
-    params.push(`%${query.q.trim().toLowerCase()}%`);
+    // По нормализованной колонке — та же причина, что и у контактов.
+    where.push(`r.search_text like ?${++n}`);
+    params.push(`%${searchText(query.q)}%`);
   }
 
   if (query.mine) where.push('r.agent_id = ?1');

@@ -2,7 +2,7 @@ import 'server-only';
 import { batch, jsonArray, newId, now, one, stmt, toJson } from './sql';
 import { auditStmt, diffOf } from './audit';
 import { isAdmin, requireAgent } from './session';
-import { normalizePhone } from './normalize';
+import { normalizePhone, searchText } from './normalize';
 import { Forbidden, Invalid, NotFound } from './errors';
 
 /**
@@ -110,14 +110,17 @@ export async function createRequirement(
   writes.push(stmt(
     `insert into requirements (id, contact_id, deal_type, budget_min_minor,
                                budget_max_minor, zones, rooms, deadline,
-                               requirements_text, agent_id, status,
+                               requirements_text, agent_id, status, search_text,
                                created_at, updated_at)
-     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`,
+     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
     id, contactId, input.deal_type, min, max,
     toJson(input.zones ?? []), toJson(input.rooms ?? []),
     input.deadline ?? null,
     (input.requirements_text ?? '').trim() || null,
-    agent.id, at, at,
+    agent.id,
+    // Поиск идёт по этой колонке, а не по requirements_text: lower() в
+    // SQLite не приводит кириллицу, и поиск был регистрозависимым.
+    searchText(input.requirements_text), at, at,
   ));
   writes.push(auditStmt('requirements', id, 'insert', agent.id,
     { contact_id: contactId, deal_type: input.deal_type }));
@@ -170,6 +173,9 @@ export async function updateRequirement(
   if (patch.deadline !== undefined) next.deadline = patch.deadline;
   if (patch.requirements_text !== undefined) {
     next.requirements_text = (patch.requirements_text ?? '').trim() || null;
+    // В том же наборе колонок: иначе поиск нашёл бы потребность по
+    // прежнему тексту и не нашёл по новому.
+    next.search_text = searchText(patch.requirements_text);
   }
   if (patch.status !== undefined) next.status = patch.status;
   if (patch.closed_reason !== undefined) {
