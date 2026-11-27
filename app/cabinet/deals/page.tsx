@@ -1,12 +1,30 @@
 import Link from 'next/link';
-import { dealList, type DealListItem } from '@/lib/db/cabinet';
+import {
+  dealCounts, dealList, type DealListItem, type DealScope,
+} from '@/lib/db/cabinet';
 import { money, day, parseFilters, type Filters } from '@/lib/list-params';
 import { SortTh } from '../SortTh';
+import { Pager } from '../Pager';
 import { Board } from './Board';
 
 export const metadata = { title: 'Сделки' };
 
 const BASE = '/cabinet/deals';
+
+/**
+ * Разделы стали вкладками.
+ *
+ * Раньше обе группы показывались сразу из одной выборки в двести строк:
+ * на двести первой сделка просто перестала бы показываться. Теперь
+ * вкладка листается страницами, а числа в подписях считает база.
+ */
+const TABS: [DealScope, string][] = [
+  ['open', 'В работе'],
+  ['done', 'Завершённые'],
+];
+
+/** Доска показывает этапы целиком, поэтому берёт больше одной страницы. */
+const BOARD_SIZE = 200;
 
 export const DEAL_STATUS_RU: Record<string, string> = {
   deposit: 'аванс',
@@ -31,19 +49,28 @@ export default async function DealsList({
   // зафиксированные — записывать индикативные нельзя, записанные означали
   // бы, что деньги уже поделены.
   let rows: DealListItem[] = [];
+  let total = 0;
+  let counts = { open: 0, done: 0 };
   let error: string | null = null;
 
+  const board = view === 'board';
+  // Доска показывает этапы целиком: завершённых на ней нет, а идущие
+  // нужны все сразу — колонка с половиной сделок вводила бы в заблуждение.
+  const tab: DealScope = board
+    ? 'open'
+    : (TABS.find(([v]) => v === f.tab)?.[0] ?? 'open');
+
   try {
-    rows = await dealList(f.sort, f.dir);
+    const [listed, tallies] = await Promise.all([
+      dealList(f.sort, f.dir, tab, board ? 1 : f.page, board ? BOARD_SIZE : null),
+      dealCounts(),
+    ]);
+    rows = listed.rows;
+    total = listed.total;
+    counts = tallies;
   } catch (e) {
     error = e instanceof Error ? e.message : 'Не удалось загрузить сделки.';
   }
-  const open = rows.filter((r) => r.status !== 'closed' && r.status !== 'failed');
-  const done = rows.filter((r) => r.status === 'closed' || r.status === 'failed');
-
-  // Вид живёт в адресе, как фильтры и сортировка: доской можно поделиться,
-  // и перезагрузка не сбрасывает выбор.
-  const board = view === 'board';
 
   return (
     <>
@@ -54,33 +81,40 @@ export default async function DealsList({
       </p>
 
       <div className="tabs-row">
-        <Link href={BASE} className="chip" aria-current={!board ? 'true' : undefined}>
-          Таблицей
-        </Link>
+        {/* Вкладки списка и переключатель вида — один ряд: это один выбор
+            «что показать», и разводить его по двум местам незачем. */}
+        {TABS.map(([v, label]) => (
+          <Link
+            key={v}
+            href={v === 'open' ? BASE : `${BASE}?tab=${v}`}
+            className="chip"
+            aria-current={!board && tab === v ? 'true' : undefined}
+          >
+            {label} {counts[v]}
+          </Link>
+        ))}
         <Link href={`${BASE}?view=board`} className="chip"
               aria-current={board ? 'true' : undefined}>
           Доской
         </Link>
       </div>
 
-      <h2>В работе ({open.length})</h2>
-      {open.length === 0 ? (
+      {error ? <p className="error">{error}</p> : null}
+
+      {rows.length === 0 ? (
         <p className="empty">
-          Открытых сделок нет. Сделка начинается с подбора — на карточке объекта или
-          потребности.
+          {counts.open + counts.done === 0
+            ? 'Сделок пока нет. Сделка начинается с подбора — на карточке объекта или потребности.'
+            : 'В этой вкладке пусто.'}
         </p>
       ) : board ? (
-        <Board rows={open} />
+        <Board rows={rows} />
       ) : (
-        <DealTable rows={open} f={f} />
+        <DealTable rows={rows} f={f} />
       )}
 
-      {done.length > 0 ? (
-        <>
-          <h2>Завершённые ({done.length})</h2>
-          <DealTable rows={done} f={f} />
-        </>
-      ) : null}
+      {/* На доске страниц нет: она показывает этапы целиком. */}
+      {board ? null : <Pager base={BASE} filters={{ ...f, tab }} total={total} />}
     </>
   );
 }
