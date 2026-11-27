@@ -1537,6 +1537,10 @@ a.agent-row { text-decoration: none; color: inherit; border-radius: var(--r-md);
   transition: background .18s; }
 a.agent-row:hover { background: var(--sunk); }
 
+/* Подпись об обработке: спокойная строка, а не предупреждение. Это
+   честность, а не признание вины. */
+.retouch { margin: 10px 0 0; font-size: 0.875rem; color: var(--muted); }
+
 /* === Виртуальный тур ===================================================== */
 /* Бейдж тура на карточке каталога: тише метки сделки — он сообщает
    о дополнении, а не о главном. */

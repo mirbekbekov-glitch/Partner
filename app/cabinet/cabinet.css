@@ -581,3 +581,21 @@ a.tbl-sub:hover { color: var(--accent); }
   display: flex; flex-direction: column; gap: 2px;
   font-size: 0.875rem; color: var(--warn-fg); }
 .pano-item { flex-wrap: wrap; }
+
+/* --- Обработка снимков --------------------------------------------------- */
+.shots-list { list-style: none; margin: 0; padding: 0; display: flex;
+  flex-wrap: wrap; gap: 12px; }
+.shots-list li { display: flex; flex-direction: column; gap: 6px; width: 190px; }
+.shots-list img { width: 190px; height: 130px; object-fit: cover;
+  border-radius: var(--r-md); border: 1px solid var(--line); }
+.shots-act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.shots-act .btn { cursor: pointer; font-family: inherit; font-size: 0.875rem; }
+.shots-edit { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+/* Холст во всю ширину карточки: предмет надо обвести пальцем, и чем
+   крупнее снимок, тем меньше промахов. Курсор-крест говорит, что здесь
+   рисуют, а не листают. */
+.shots-canvas { max-width: 100%; height: auto; cursor: crosshair;
+  border-radius: var(--r-md); border: 1px solid var(--line);
+  touch-action: none; background: var(--sunk); }
+.shots-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.shots-buttons .btn { cursor: pointer; font-family: inherit; }

@@ -66,7 +66,7 @@ type Dict = {
   areaLabel: string; floorLabel: string; floorOf: string; zoneLabel: string; cityLabel: string;
   zoneSearch: string; zoneNone: string; regionLabel: string; otherPlaces: string;
   callAgent: string; writeWhatsapp: string; writeTelegram: string;
-  tourTitle: string; tourFlag: string;
+  tourTitle: string; tourFlag: string; retouched: string;
   confirmedPrice: string; notFound: string; notFoundLede: string; seeWhatIsThere: string;
   // Блок агента на странице объекта. Открыты ровно три поля: имя, стаж и
   // подтверждённый номер в реестре. Телефон агента здесь намеренно
@@ -182,6 +182,7 @@ const ru: Dict = {
   regionLabel: 'Регион', otherPlaces: 'Другие места',
   callAgent: 'Позвонить', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   tourTitle: 'Виртуальный тур', tourFlag: 'тур',
+  retouched: 'С части снимков убраны личные вещи жильцов. Сама квартира не изменена.',
   confirmedPrice: 'Агент подтвердил цену и доступность',
   agentLeads: 'Объект ведёт',
   // «год», «года», «лет»: иначе строка читается как машинный перевод.
@@ -352,6 +353,7 @@ const ky: Dict = {
   regionLabel: 'Аймак', otherPlaces: 'Башка жерлер',
   callAgent: 'Чалуу', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   tourTitle: 'Виртуалдык тур', tourFlag: 'тур',
+  retouched: 'Айрым сүрөттөрдөн жашоочулардын буюмдары алынып салынган. Батирдин өзү өзгөртүлгөн эмес.',
   confirmedPrice: 'Агент бааны жана жеткиликтүүлүктү ырастады',
   agentLeads: 'Объектти алып баруучу',
   agentYears: (n) => `кыймылсыз мүлктө ${n} жыл`,
@@ -511,6 +513,7 @@ const en: Dict = {
   regionLabel: 'Region', otherPlaces: 'Other places',
   callAgent: 'Call', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   tourTitle: 'Virtual tour', tourFlag: 'tour',
+  retouched: 'Personal belongings were removed from some photos. The flat itself is unchanged.',
   confirmedPrice: 'Agent confirmed the price and availability',
   agentLeads: 'Listing agent',
   agentYears: (n) => `${n} ${n === 1 ? 'year' : 'years'} in real estate`,
@@ -670,6 +673,7 @@ const zh: Dict = {
   regionLabel: '地区', otherPlaces: '其他地方',
   callAgent: '拨打电话', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   tourTitle: '全景看房', tourFlag: '全景',
+  retouched: '部分照片已移除住户私人物品，房屋本身未作改动。',
   confirmedPrice: '经纪人已确认价格与可售状态',
   agentLeads: '负责经纪人',
   agentYears: (n) => `从事房地产 ${n} 年`,
