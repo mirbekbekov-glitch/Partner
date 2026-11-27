@@ -43,8 +43,9 @@ import {
   photosMissingThumb, putAvatar, putPhoto, putThumb, readPhoto, sniff,
 } from '@/lib/db/photos';
 import {
-  deletePanorama, panoramasOf, putPanorama, renamePanorama,
+  deletePanorama, panoramasOf, putPanorama, renamePanorama, setLinks,
 } from '@/lib/db/panoramas';
+import { checkPanorama, meanLuma, sharpness } from '@/lib/photo-check';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
 import { mhouseOffers, mhouseXml, missingFields } from '@/lib/mhouse-feed';
@@ -3135,9 +3136,54 @@ export default {
     await throws('ключ панорамы от другого объекта не принимается',
       () => deletePanorama(withPhotos.id, `panoramas/${shown.id}/подделка.jpg`), Invalid);
 
+    // Переходы: дверь ведёт только в комнату ЭТОГО объекта, иначе она
+    // однажды открылась бы в чужую квартиру.
+    const bedroom = await putPanorama(withPhotos.id, jpeg, 'Спальня', { w: 4096, h: 1024 });
+    await setLinks(withPhotos.id, pano.key, [
+      { to: bedroom.key, yaw: 400, pitch: 120 },
+      { to: 'panoramas/чужой/х.jpg', yaw: 0, pitch: 0 },
+      { to: pano.key, yaw: 0, pitch: 0 },
+    ]);
+    const linked = (await panoramasOf(withPhotos.id)).find((p) => p.key === pano.key);
+    check('чужая и сама-на-себя ссылки отброшены', linked?.links?.length === 1);
+    check('поворот приведён к кругу, наклон ограничен',
+      linked?.links?.[0].yaw === 40 && linked?.links?.[0].pitch === 90,
+      JSON.stringify(linked?.links));
+
+    await deletePanorama(withPhotos.id, bedroom.key);
     await deletePanorama(withPhotos.id, pano.key);
     check('панорама убирается и из записи',
       (await panoramasOf(withPhotos.id)).length === 0);
+
+    // Проверка съёмки — чистые функции, и проверяются они как функции:
+    // ни холста, ни картинок в Worker'е нет, а арифметика та же самая.
+    const flat = (v: number, w: number, h: number) => {
+      const data = new Float32Array(w * h).fill(v);
+      return { data, w, h };
+    };
+    const noisy = (w: number, h: number) => {
+      const data = new Float32Array(w * h);
+      for (let i = 0; i < data.length; i++) data[i] = (i % 2) * 255;
+      return { data, w, h };
+    };
+
+    check('ровная серая картинка считается размытой',
+      sharpness(flat(128, 32, 32)) === 0);
+    check('чересполосица считается резкой',
+      sharpness(noisy(32, 32)) > 100, String(sharpness(noisy(32, 32))));
+    check('средняя яркость считается', meanLuma(flat(100, 8, 8)) === 100);
+
+    check('тёмная панорама получает замечание',
+      checkPanorama(flat(20, 32, 16), 4096, 2048).some((i) => i.kind === 'dark'));
+    check('смазанная панорама получает замечание',
+      checkPanorama(flat(128, 32, 16), 4096, 2048).some((i) => i.kind === 'blurry'));
+    check('обычный снимок опознаётся не как панорама',
+      checkPanorama(null, 1600, 1200).some((i) => i.kind === 'narrow'));
+    check('мелкая панорама получает замечание',
+      checkPanorama(null, 1200, 400).some((i) => i.kind === 'small'));
+    check('хорошая панорама замечаний не получает',
+      checkPanorama(noisy(64, 32), 4096, 2048).length === 0,
+      JSON.stringify(checkPanorama(noisy(64, 32), 4096, 2048)));
 
     // -----------------------------------------------------------------
     // Миниатюры

@@ -36,7 +36,21 @@ export type Panorama = {
   /** Размеры после сжатия в браузере. Ноль — размеры неизвестны. */
   w: number;
   h: number;
+  /** Переходы в другие комнаты: точка на панораме и куда она ведёт. */
+  links?: Link[];
 };
+
+/**
+ * Переход из комнаты в комнату.
+ *
+ * Хранится в градусах, а не в пикселях: панорама круглая, и точка на ней
+ * задаётся направлением взгляда — поворотом (yaw) и наклоном (pitch).
+ * Пиксели пришлось бы пересчитывать при каждой смене размера снимка.
+ *
+ * to — ключ другой панорамы ЭТОГО объекта. Проверяется при записи: иначе
+ * дверь вела бы в чужую квартиру.
+ */
+export type Link = { to: string; yaw: number; pitch: number };
 
 /** Панорама тяжелее снимка: это полный оборот, а не один кадр. */
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -66,12 +80,20 @@ function parse(text: string | null | undefined): Panorama[] {
     return list.flatMap((item) => {
       const p = item as Partial<Panorama>;
       if (typeof p.key !== 'string' || typeof p.url !== 'string') return [];
+      const links = Array.isArray(p.links) ? p.links.flatMap((l) => {
+        const link = l as Partial<Link>;
+        if (typeof link.to !== 'string') return [];
+        if (typeof link.yaw !== 'number' || typeof link.pitch !== 'number') return [];
+        return [{ to: link.to, yaw: link.yaw, pitch: link.pitch }];
+      }) : [];
+
       return [{
         key: p.key,
         url: p.url,
         room: typeof p.room === 'string' ? p.room : '',
         w: typeof p.w === 'number' ? p.w : 0,
         h: typeof p.h === 'number' ? p.h : 0,
+        links,
       }];
     });
   } catch {
@@ -196,6 +218,44 @@ export async function deletePanorama(objectId: string, key: string): Promise<voi
   const list = await panoramasOf(objectId);
   await save(objectId, list.filter((p) => p.key !== key), { panorama: 'removed' });
   await bucket().delete(key);
+}
+
+/**
+ * Переходы одной комнаты.
+ *
+ * Пишутся целиком, а не по одному: агент расставляет их в редакторе и
+ * сохраняет тем, что получилось. Дописывание по одному потребовало бы
+ * идентификатора у каждой точки, а точка — это пара чисел, и своего
+ * имени у неё нет.
+ *
+ * Куда ведёт переход — проверяется: только панорама ЭТОГО объекта.
+ * Иначе дверь однажды открылась бы в чужую квартиру.
+ */
+export async function setLinks(
+  objectId: string, key: string, links: Link[],
+): Promise<Panorama[]> {
+  if (!(await canEditObject(objectId))) {
+    throw new Forbidden('Править тур может тот, кто отвечает за объект');
+  }
+
+  const list = await panoramasOf(objectId);
+  if (!list.some((p) => p.key === key)) throw new NotFound('Такой панорамы у объекта нет');
+
+  const own = new Set(list.map((p) => p.key));
+  const clean = links
+    .filter((l) => own.has(l.to) && l.to !== key)
+    .slice(0, MAX_PANORAMAS)
+    .map((l) => ({
+      to: l.to,
+      // Поворот приводится к кругу, наклон ограничен зенитом и надиром:
+      // точка за этими пределами не существует.
+      yaw: ((Math.round(l.yaw * 10) / 10) % 360 + 540) % 360 - 180,
+      pitch: Math.max(-90, Math.min(90, Math.round(l.pitch * 10) / 10)),
+    }));
+
+  const next = list.map((p) => (p.key === key ? { ...p, links: clean } : p));
+  await save(objectId, next, { panorama: 'links', count: clean.length });
+  return next;
 }
 
 /** Сколько панорам у объекта — для карточки в кабинете. */

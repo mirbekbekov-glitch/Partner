@@ -21,6 +21,8 @@
  * обращается вовсе.
  */
 
+import { checkPanorama, toGray, type Issue } from './photo-check';
+
 /** Полный снимок: больше этого на экране не видно, а весит заметно. */
 const FULL_SIDE = 2000;
 const FULL_QUALITY = 0.82;
@@ -154,6 +156,8 @@ export type PreparedPano = {
   height: number;
   before: number;
   after: number;
+  /** Что не так со съёмкой. Пусто — всё в порядке. */
+  issues: Issue[];
 };
 
 export async function preparePanorama(file: File): Promise<PreparedPano> {
@@ -162,7 +166,8 @@ export async function preparePanorama(file: File): Promise<PreparedPano> {
   if (!canResize()) {
     // Старый браузер: отправляем как есть. Размеры неизвестны — пусть
     // просмотрщик считает панораму полной сферой, это частый случай.
-    return { full: file, width: 0, height: 0, before, after: before };
+    // Проверить съёмку тоже нечем, и молчание здесь честнее догадки.
+    return { full: file, width: 0, height: 0, before, after: before, issues: [] };
   }
 
   const bitmap = await createImageBitmap(file);
@@ -174,12 +179,28 @@ export async function preparePanorama(file: File): Promise<PreparedPano> {
   const context = canvas.getContext('2d');
   if (!context) {
     bitmap.close();
-    return { full: file, width: bitmap.width, height: bitmap.height, before, after: before };
+    return {
+      full: file, width: bitmap.width, height: bitmap.height,
+      before, after: before, issues: [],
+    };
   }
 
   context.drawImage(bitmap, 0, 0, width, height);
+
+  // Проверка съёмки — на мелкой копии: на 256 точках видно и темноту, и
+  // смазанность, а считается это миллисекунды даже на телефоне.
+  const small = new OffscreenCanvas(256, Math.max(1, Math.round((256 * height) / width)));
+  const smallCtx = small.getContext('2d');
+  let gray = null;
+  if (smallCtx) {
+    smallCtx.drawImage(bitmap, 0, 0, small.width, small.height);
+    const pixels = smallCtx.getImageData(0, 0, small.width, small.height);
+    gray = toGray(pixels.data, small.width, small.height);
+  }
+  const issues = checkPanorama(gray, width, height);
+
   bitmap.close();
 
   const full = await canvas.convertToBlob({ type: 'image/jpeg', quality: PANO_QUALITY });
-  return { full, width, height, before, after: full.size };
+  return { full, width, height, before, after: full.size, issues };
 }
