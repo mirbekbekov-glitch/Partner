@@ -1219,6 +1219,19 @@ export default {
       (await sortOf(freshAgent.id))?.name_sort === 'ядрин сорт',
       String((await sortOf(freshAgent.id))?.name_sort));
 
+    // Путь 1б: строка, заведённая ДО появления колонки. Такие в базе
+    // есть — колонка пришла с пустым значением по умолчанию, и пустое
+    // сортируется первым. Чинится при следующем входе, без переноса
+    // данных и без ручной правки боевой базы.
+    await db.prepare(`update agents set name_sort = '' where id = ?`)
+      .bind(freshAgent.id).run();
+    await ensureAgentByEmail('sortirovka@example.kg', 'ЯДРИН Сорт');
+    check('пустое сопоставимое имя починилось при входе',
+      (await sortOf(freshAgent.id))?.name_sort === 'ядрин сорт',
+      String((await sortOf(freshAgent.id))?.name_sort));
+    check('а само имя при этом не тронуто',
+      (await sortOf(freshAgent.id))?.full_name === 'ЯДРИН Сорт');
+
     // Путь 2: переименование при входе.
     await ensureAgentByEmail('sortirovka@example.kg', 'АБАЕВ Сорт');
     check('и после переименования при входе — тоже',
