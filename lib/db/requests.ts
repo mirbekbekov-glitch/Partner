@@ -24,6 +24,15 @@ import { fromMinor } from './money';
 export type RequestRow = {
   id: string;
   deal: 'buy' | 'rent' | null;
+  /**
+   * Что человек ПРЕДЛАГАЕТ. Пусто — обычная заявка на поиск.
+   *
+   * Сторона заявки выводится отсюда, а не из отдельного флага: два поля
+   * об одном пришлось бы держать в согласии руками.
+   */
+  offer_deal: 'sale' | 'rent' | null;
+  /** Адрес предлагаемого объекта. У заявки на поиск его не бывает. */
+  address: string | null;
   housing_type: string | null;
   rooms: number | null;
   district_id: string | null;
@@ -64,6 +73,9 @@ export type NewRequest = {
   budget_minor?: number | null;
   budget_currency?: string | null;
   wishes?: string | null;
+  /** Сторона: что человек предлагает. Пусто — он ищет. */
+  offer_deal?: string | null;
+  address?: string | null;
   consent?: boolean;
   source?: string | null;
   /** Поле-приманка. Заполнено — отвечаем как при успехе, но не пишем. */
@@ -86,7 +98,20 @@ export async function submitRequest(input: NewRequest): Promise<string> {
   // Направление и тип приводятся к известным значениям. Чужое значение НЕ
   // роняет заявку, а просто остаётся незаполненным: потерять заявку из-за
   // кривого параметра хуже, чем принять её без направления.
-  const deal = input.deal === 'buy' || input.deal === 'rent' ? input.deal : null;
+  // Сторона заявки. Как и направление, чужое значение не роняет заявку:
+  // она просто окажется заявкой на поиск, и агент разберётся по телефону.
+  const offer = input.offer_deal === 'sale' || input.offer_deal === 'rent'
+    ? input.offer_deal : null;
+
+  // У собственника направления поиска нет: «ищу» и «предлагаю» — это одна
+  // и та же строка ленты, и заявка, помеченная сразу обоими, читалась бы
+  // по-разному в разных местах кабинета.
+  const deal = offer ? null
+    : input.deal === 'buy' || input.deal === 'rent' ? input.deal : null;
+
+  // Адрес принимаем только у собственника: у ищущего адреса нет, и поле,
+  // пришедшее с чужой стороны, в заявку попасть не должно.
+  const address = offer ? ((input.address ?? '').trim().slice(0, 200) || null) : null;
   const kind = input.housing_type && KINDS.includes(input.housing_type)
     ? input.housing_type : null;
 
@@ -165,16 +190,18 @@ export async function submitRequest(input: NewRequest): Promise<string> {
 
   await batch([
     stmt(
-      `insert into requests (id, deal, housing_type, rooms, district_id,
-                             district_other, budget_minor, budget_currency, wishes,
+      `insert into requests (id, deal, offer_deal, address, housing_type, rooms,
+                             district_id, district_other, budget_minor,
+                             budget_currency, wishes,
                              name, phone, phone_normalized, public_consent,
                              status, source, created_at, updated_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
-      id, deal, kind, rooms, districtId, districtOther, budget,
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
+      id, deal, offer, address, kind, rooms, districtId, districtOther, budget,
       currency === 'KGS' ? 'KGS' : 'USD', wishes, name, phone, normalized,
       flag(input.consent ?? false), (input.source ?? '').trim() || null, at, at,
     ),
-    auditStmt('requests', id, 'insert', null, { deal, housing_type: kind }),
+    auditStmt('requests', id, 'insert', null,
+      { deal, offer_deal: offer, housing_type: kind }),
   ]);
 
   return id;
@@ -220,32 +247,41 @@ export type RequestFeedItem = Omit<RequestRow, 'phone'> & {
  * Считается в базе, а не по загруженной странице: страница показывает
  * двадцать строк, а норматив нарушают все, и число должно быть честным.
  */
-export async function requestCounts(): Promise<{ overdue: number; free: number }> {
+export async function requestCounts(): Promise<
+  { overdue: number; free: number; offers: number }
+> {
   await requireAgent();
   const deadline = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
-  const row = await one<{ overdue: number; free: number }>(
+  const row = await one<{ overdue: number; free: number; offers: number }>(
     `select
        sum(case when r.first_response_at is null and r.created_at < ?1
                 then 1 else 0 end) as overdue,
-       sum(case when r.agent_id is null then 1 else 0 end) as free
+       sum(case when r.agent_id is null then 1 else 0 end) as free,
+       sum(case when r.offer_deal is not null then 1 else 0 end) as offers
      from requests r
      where r.status in ('new', 'in_work')`,
     deadline,
   );
 
-  return { overdue: row?.overdue ?? 0, free: row?.free ?? 0 };
+  return { overdue: row?.overdue ?? 0, free: row?.free ?? 0, offers: row?.offers ?? 0 };
 }
 
+export type RequestTab = 'open' | 'offers' | 'mine' | 'all' | 'closed';
+
 export async function requestFeed(
-  tab: 'open' | 'mine' | 'all' | 'closed' = 'open',
+  tab: RequestTab = 'open',
   page?: number | null,
 ): Promise<{ rows: RequestFeedItem[]; total: number }> {
   const agent = await requireAgent();
   const admin = await isAdmin();
 
+  // Отбор стороны живёт в запросе, а не в странице: иначе вкладка
+  // фильтровала бы одну загруженную страницу, а число над ней считалось
+  // бы по всей базе — и они разошлись бы на первой же сотне заявок.
   const where =
     tab === 'open' ? `r.status = 'new'`
+    : tab === 'offers' ? `r.offer_deal is not null and r.status in ('new', 'in_work')`
     : tab === 'mine' ? 'r.agent_id = ?1'
     : tab === 'all' ? `r.status in ('new', 'in_work')`
     : `r.status in ('closed', 'expired')`;
@@ -267,7 +303,9 @@ export async function requestFeed(
        left join agents ag on ag.id = r.agent_id
       where ${where}
       order by r.created_at desc limit ${size} offset ${(p - 1) * size}`,
-    agent.id,
+    // Параметр уходит только там, где он есть в запросе: «мои» — это
+    // единственная вкладка с ?1, и лишняя привязка роняет запрос целиком.
+    ...(tab === 'mine' ? [agent.id] : []),
   );
 
   const items = rows.map((row) => ({

@@ -25,7 +25,7 @@ export type RequestResult = {
 };
 
 /**
- * Приём заявки «что я ищу» с публичной страницы.
+ * Приём заявки с публичной страницы — и «что я ищу», и «что я отдаю».
  *
  * Здесь ничего не решается: все проверки живут в слое доступа
  * (lib/db/requests.ts) — границы полей, нормализация телефона, склейка
@@ -55,6 +55,10 @@ export async function submitRequest(
       phone: String(formData.get('phone') ?? ''),
       name: str('name'),
       deal: str('deal'),
+      // Сторона заявки. Отдельного поля «сторона» в базе нет: заполненный
+      // offer_deal и означает, что заявку оставил собственник.
+      offer_deal: str('offer_deal'),
+      address: str('address'),
       housing_type: str('housing_type'),
       rooms: num('rooms'),
       district: str('district'),

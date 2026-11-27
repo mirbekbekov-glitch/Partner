@@ -555,14 +555,20 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* Отступ строки уменьшен с 13 до 9: кнопки в ней выросли с 34 до 40 px
    ради пальца, и без этого липкая шапка стала бы выше на семь пикселей
    на каждом экране. Так она осталась прежней высоты. */
-.nav-in { display: flex; align-items: center; gap: 20px; padding-block: 9px; }
-/* Обёртка разделов не участвует в раскладке, пока экран широкий: ссылки
-   остаются прямыми детьми шапки, и ничего не смещается. */
-.nav-sections { display: contents; }
-/* Отступ сверху и снизу — ради пальца: сам знак 20–25 px высотой, и без
-   него ссылка на главную была вдвое ниже соседних кнопок. */
-.brand { display: flex; align-items: center; margin-right: 4px; padding-block: 10px; }
-.brand img { height: 25px; width: auto; display: block; }
+.nav-in { display: flex; align-items: center; gap: 16px; padding-block: 9px; }
+/* Разделы стоят своей группой у знака, а кнопки — у правого края.
+   Распирает промежуток сама группа, а не отдельная пустая распорка:
+   распорка и авто-отступ, стоявшие рядом, делили свободное место пополам
+   и уводили ссылки к середине. */
+.nav-sections { display: flex; align-items: center; gap: 18px; margin-right: auto; }
+/* Отступ сверху и снизу — ради пальца: сам знак 26–34 px высотой, и без
+   него ссылка на главную была бы ниже соседних кнопок.
+
+   Высота поднята с 25 до 34. На 25 знак читался как сноска рядом с
+   кнопками в 40 px, хотя это имя агентства и единственная ссылка на
+   главную; лесенка в нём мелкая, и её ступени сливались. */
+.brand { display: flex; align-items: center; margin-right: 4px; padding-block: 8px; }
+.brand img { height: 34px; width: auto; display: block; }
 /* Знак для тёмного фона прячется в светлой теме и наоборот. Условия
    повторяют те, по которым переключаются сами цвета: системная тёмная,
    если человек не выбрал иного, и явный выбор в любую сторону. */
@@ -573,7 +579,6 @@ main:has(.auth) { max-width: none; padding: 0; }
 }
 :root[data-theme='dark'] .brand .on-light { display: none; }
 :root[data-theme='dark'] .brand .on-dark { display: block; }
-.nav .spacer { margin-left: auto; }
 /* Отступ сверху и снизу — ради пальца, а не ради вида: без него ссылка
    была 20 px высотой при соседях в 40. Ширину он не меняет. */
 .nav-link { color: var(--muted); text-decoration: none; font-size: 0.875rem; font-weight: 600;
@@ -591,6 +596,13 @@ main:has(.auth) { max-width: none; padding: 0; }
   white-space: nowrap; transition: border-color .18s, color .18s, background .18s; }
 .enter:hover { border-color: var(--accent); color: var(--accent); background: var(--sunk); }
 .enter .narrow { display: none; }
+/* Вход собственника: контур фирменным цветом. Громче серого контура
+   «входа для агентов» — к нему идёт клиент, а не сотрудник, — и тише
+   залитой кнопки, которая на сайте значит «главное действие страницы». */
+.nav-cta { color: var(--accent); border: 1px solid var(--accent); border-radius: var(--r-full);
+  padding: 10px 17px; font-weight: 700; font-size: 0.875rem; text-decoration: none;
+  white-space: nowrap; transition: background .18s, color .18s; }
+.nav-cta:hover { background: var(--accent); color: #fff; }
 
 /* --- Герой -------------------------------------------------------------- */
 .hero { position: relative; background: var(--sunk); color: var(--fg); overflow: hidden; }
@@ -666,6 +678,45 @@ main:has(.auth) { max-width: none; padding: 0; }
   background: linear-gradient(var(--accent) 0 0) 0 6px / 4px 4px no-repeat,
               linear-gradient(var(--accent) 0 0) 5px 3px / 4px 7px no-repeat,
               linear-gradient(var(--accent) 0 0) 10px 0 / 4px 10px no-repeat; }
+
+/* Действия первого экрана.
+
+   Залита одна — та, ради которой человек пришёл. Вторая контурная: она
+   для меньшинства (у кого объект на руках), и две залитых кнопки рядом
+   превращают первый экран в выбор между ними. Ряд переносится, а кнопки
+   не сжимаются: обрезанная подпись действия хуже переноса. */
+.hero-go { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.go-main, .go-side { display: inline-flex; align-items: center; justify-content: center;
+  gap: 9px; border-radius: var(--r-full); padding: 14px 24px; font-size: 1rem;
+  font-weight: 700; text-decoration: none; white-space: nowrap;
+  transition: background .18s, color .18s, border-color .18s, transform .18s; }
+.go-main { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+.go-main:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.go-side { background: var(--panel); color: var(--fg); border: 1px solid var(--line); }
+.go-side:hover { border-color: var(--accent); color: var(--accent); }
+/* Нажатие видно без скриптов: кнопка проседает на пиксель. Единственное
+   движение на первом экране — у того, что человек трогает пальцем. */
+.go-main:active, .go-side:active { transform: translateY(1px); }
+
+/* Числа под действиями: сколько объектов, сколько агентов, за сколько
+   отвечаем. Крупные цифры моноширинным — состояние дела, а не обещание;
+   их показывает страница только когда они не нули. */
+.facts { display: flex; flex-wrap: wrap; gap: 18px 0; margin: 22px 0 0; padding: 18px 0 0;
+  list-style: none; border-top: 1px solid var(--line); align-self: stretch;
+  max-width: min(800px, 46vw); }
+/* Число над подписью, а не перед ней: в строку «5 объектов в каталоге 2
+   агента в работе» читалось как одно предложение, и числа переставали
+   быть числами. Столбиком глаз берёт три величины, а не фразу. */
+.facts li { display: flex; flex-direction: column; gap: 3px; }
+.facts b { font-size: 1.75rem; font-weight: 800; letter-spacing: -.035em; line-height: 1;
+  color: var(--fg); }
+.facts span { font-size: 0.8125rem; font-weight: 600; color: var(--muted); max-width: 18ch; }
+/* Волосяная черта между величинами. Без неё подписи соседних чисел
+   смыкаются в одну фразу: расстояния в 44 px мало, когда сама подпись
+   втрое длиннее. */
+.facts li + li { padding-left: 34px; margin-left: 34px; position: relative; }
+.facts li + li::before { content: ""; position: absolute; left: -1px; top: 2px; bottom: 2px;
+  width: 1px; background: var(--line); }
 
 /* Герой страницы заявки ниже: там под ним форма, а не выдача, и высокий
    герой отодвинул бы первое поле за сгиб. */
@@ -803,7 +854,12 @@ main:has(.auth) { max-width: none; padding: 0; }
 .go:active { transform: translateY(0); }
 
 /* --- Форма заявки ------------------------------------------------------- */
-.reqconsole { padding: 22px; margin-bottom: 56px; }
+/* Карточка формы держится в колонке, а не разъезжается на всю полосу в
+   1680 px. Поле ввода во всю ширину экрана нечитаемо: глаз теряет начало
+   строки, а телефон и адрес короче его в десять раз. Ограничена сама
+   карточка, а не форма внутри: иначе справа оставалась бы пустая белая
+   половина, и это читалось бы как незагрузившийся блок. */
+.reqconsole { padding: 22px; margin-bottom: 56px; max-width: 940px; }
 .reqform { display: flex; flex-direction: column; gap: 18px; }
 .reqgrid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 .reqform textarea { border: 1px solid var(--line); background: var(--bg); color: var(--fg);
@@ -824,6 +880,12 @@ main:has(.auth) { max-width: none; padding: 0; }
 .seg label:has(input:checked) { border-color: var(--accent); background: var(--accent);
   color: var(--accent-fg); }
 .seg input { accent-color: var(--accent); }
+
+/* Сторона заявки — первая развилка формы: ищу жильё или отдаю своё. От
+   неё зависят подписи полей ниже, поэтому она отделена чертой: без неё
+   человек проскакивал развилку и заполнял форму не про себя. */
+.seg-side { padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.seg-side label { padding: 12px 20px; font-size: 1rem; }
 
 /* Согласие на показ телефона — крупной строкой с объяснением, а не мелким
    текстом под кнопкой: решение принимает человек, и он должен видеть,
@@ -1144,6 +1206,15 @@ main:has(.auth) { max-width: none; padding: 0; }
   .hero-art svg { display: none; }
   /* Чертежа нет — заголовок берёт всю ширину. */
   .hero h1, .hero-slim h1 { max-width: none; }
+  /* На телефоне величины переносятся, и черта оказалась бы в начале
+     строки — убираем её вместе с отступом. */
+  .facts { max-width: none; gap: 14px 28px; }
+  .facts li + li { padding-left: 0; margin-left: 0; }
+  .facts li + li::before { display: none; }
+  /* Кнопки во всю ширину: на телефоне ряд из двух всё равно переносится,
+     и кнопка в полстроки читалась бы как менее важная, чем она есть. */
+  .hero-go { width: 100%; }
+  .go-main, .go-side { flex: 1 1 100%; }
   .grid { grid-template-columns: 1fr; }
   .gal { grid-template-columns: 1fr; }
   .gal .side { grid-template-columns: 1fr 1fr; }
@@ -1158,17 +1229,17 @@ main:has(.auth) { max-width: none; padding: 0; }
      И это выдерживает третий раздел, когда он появится. */
   .nav-in { flex-wrap: wrap; row-gap: 10px; gap: 8px; }
   .nav-link { font-size: 0.8125rem; }
+  .nav-cta { padding: 9px 13px; font-size: 0.8125rem; }
   /* Разделы — отдельной строкой целиком. order сам по себе не помог:
      первая строка доедала один из разделов, и одинокой внизу оставалась
      вторая ссылка. flex-basis: 100% заставляет обёртку занять всю
      ширину, то есть начать новую строку. */
   .nav-sections { display: flex; gap: 14px; align-items: center;
     order: 5; flex-basis: 100%; }
-  .nav .spacer { display: none; }
   /* Язык растягивает первую строку вправо, «Вход» встаёт за ним, а
      ссылки с order: 5 уходят под них. */
   .lang { margin-left: auto; }
-  .brand img { height: 20px; }
+  .brand img { height: 26px; }
   .enter { padding: 11px 12px; font-size: 0.8125rem; }
   .enter .wide { display: none; }
   .enter .narrow { display: inline; }
@@ -1191,7 +1262,7 @@ main:has(.auth) { max-width: none; padding: 0; }
   .lang-btn { padding: 11px; }
   /* 20, а не 19: со своими отступами знак добирает ровно до 40 px по
      высоте — как соседние кнопки. */
-  .brand img { height: 20px; }
+  .brand img { height: 26px; }
   /* Прижимает «Вход» к правому краю — и в одну строку, и если она всё же
      перенесётся: тогда кнопка встанет справа второй строкой, как будто
      так и задумано, а не в левый угол. */

@@ -466,6 +466,19 @@ export async function catalogAgents(): Promise<CatalogAgentCard[]> {
   return rows.sort((a, b) => a.full_name.localeCompare(b.full_name, 'ru'));
 }
 
+/**
+ * Сколько агентов видно клиенту — число для первого экрана.
+ *
+ * Отдельным запросом, а не длиной списка карточек: на первом экране нужно
+ * одно число, а карточка тянет фотографию, стаж и организацию.
+ */
+export async function catalogAgentCount(): Promise<number> {
+  const row = await one<{ n: number }>(
+    `select count(*) as n from agents ag where ${AGENT_VISIBLE}`,
+  );
+  return row?.n ?? 0;
+}
+
 /** Один агент. Пусто означает «такого на сайте нет», и страница даёт 404. */
 export async function catalogAgentById(id: string): Promise<CatalogAgentCard | null> {
   return one<CatalogAgentCard>(
