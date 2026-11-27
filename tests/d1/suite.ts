@@ -1566,9 +1566,16 @@ export default {
 
     // Валюты каталога — для подписи поля «цена до». Поле без валюты
     // оставляет человека гадать, вводить 800 или 70 000.
+    // Черновику задаём ДРУГУЮ валюту: на одинаковой проверка проходила бы
+    // и без фильтра по публикации — что и показала мутация.
+    await db.prepare(`update objects set currency = 'KGS' where id = ?`)
+      .bind(hidden.id).run();
+
     const money = await catalogCurrencies();
     check('валюты каталога берутся из опубликованных объектов',
       money.includes('USD'), money.join(', '));
+    check('а валюта черновика в список не идёт',
+      !money.includes('KGS'), money.join(', '));
     check('и без повторов', money.length === new Set(money).size, money.join(', '));
 
     // Объекты на странице агента — те же, что в каталоге, и только его.
