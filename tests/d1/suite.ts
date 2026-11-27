@@ -84,6 +84,21 @@ import { normalizePhone } from '@/lib/db/normalize';
 import { draftsFromCatalog, parseCsv } from '@/lib/catalog-csv';
 import { importCatalog, IMPORT_SOURCE } from '@/lib/db/catalog-import';
 import { BudgetTooLow, Conflict, Forbidden, Invalid, NotFound } from '@/lib/db/errors';
+import houseKgPage from '../fixtures/house-kg-search.html?raw';
+import houseKgRent from '../fixtures/house-kg-rent.html?raw';
+import {
+  bumpedAt, parseListingPage, parsePrices, parseSearchPage, searchUrl, sellerOf,
+  specsOf,
+} from '@/lib/market/house-kg';
+import {
+  estimate, markGone, marketLookalikes, marketSize, observedRate, ownerLeads,
+  ownersWithoutDate, saveCards, setListingPage,
+} from '@/lib/db/market';
+import { addressOverlap, resemble, resembleAll } from '@/lib/market/duplicate';
+import { invitation, rank, type OwnerRow } from '@/lib/market/owners';
+import {
+  awayFromMarket, median, quantile, rateFromPairs, valuate, type Comparable,
+} from '@/lib/market/valuation';
 
 type Result = { name: string; ok: boolean; note?: string };
 const results: Result[] = [];
@@ -3148,6 +3163,607 @@ export default {
       check('неизвестная сторона не роняет заявку, а просто не пишется',
         odd?.offer_deal === null, JSON.stringify(odd));
     }
+    // Индекс рынка: разбор чужой страницы и запись наблюдений
+    // -----------------------------------------------------------------
+    //
+    // Разбор проверяется на СНИМКЕ НАСТОЯЩЕЙ СТРАНИЦЫ house.kg, а не на
+    // выдуманной разметке: парсер чужого сайта, проверенный на HTML,
+    // который мы сами сочинили, проверяет только нашу фантазию.
+
+    const housePage = parseSearchPage(houseKgPage, 'sale');
+
+    check('разбор снимка берёт все карточки и ничего не теряет',
+      housePage.cards.length === 3 && Object.keys(housePage.skipped).length === 0,
+      `карточек ${housePage.cards.length}, отброшено ${JSON.stringify(housePage.skipped)}`);
+
+    const houseFlat = housePage.cards[0];
+    check('цена берётся, а не платёж по ипотеке',
+      houseFlat.priceUsd === 270000 && houseFlat.priceKgs === 23652000,
+      `${houseFlat.priceUsd} $ / ${houseFlat.priceKgs} сом`);
+
+    check('заголовок разобран: комнаты, площадь, этаж из скольких',
+      houseFlat.rooms === 2 && houseFlat.area === 92 && houseFlat.floor === 5 && houseFlat.floorsTotal === 10,
+      JSON.stringify(houseFlat));
+
+    // Та самая карточка, на которой разбор падал молча: цифра из номера
+    // дома «Токомбаева 21/6» приклеивалась к цене.
+    const houseGlued = housePage.cards[2];
+    check('цифра из номера дома не приклеивается к цене',
+      houseGlued.priceKgs === 25935000 && houseGlued.priceUsd === 296062,
+      `${houseGlued.priceUsd} $ / ${houseGlued.priceKgs} сом`);
+
+    check('повторённый город из адреса убран',
+      houseGlued.address === 'Токомбаева 21/6', String(houseGlued.address));
+
+    // Главная проверка о продавце. У этой карточки есть И бейдж
+    // «Собственник», И подпись «От Avangard style». Поверить бейджу
+    // значит набить список для обзвона агентствами.
+    check('бейдж «Собственник» не перевешивает подпись агентства',
+      houseGlued.sellerKind === 'agency' && houseGlued.sellerName === 'Avangard style',
+      `${houseGlued.sellerKind} / ${houseGlued.sellerName}`);
+
+    check('собственник без подписи агентства остаётся собственником',
+      houseFlat.sellerKind === 'owner' && houseFlat.sellerName === null,
+      `${houseFlat.sellerKind} / ${houseFlat.sellerName}`);
+
+    check('сигналы актуальности сняты',
+      houseFlat.views === 196 && houseFlat.favorites === 13 && houseFlat.bumped === true
+      && houseFlat.marketNote === 'Выше рынка на 74.27%',
+      JSON.stringify({ v: houseFlat.views, f: houseFlat.favorites, b: houseFlat.bumped }));
+
+    // Возраст объявления словами. «Позавчера» содержит «вчера» внутри
+    // себя — на этом разбор уже ошибался на целые сутки.
+    const marketBase = Date.UTC(2026, 10, 27, 12, 0, 0);
+    const hoursBack = (label: string) => {
+      const at = bumpedAt(label, marketBase);
+      return at === null ? null : Math.round((marketBase - Date.parse(at)) / 3600_000);
+    };
+    check('«4 часа назад» это четыре часа', hoursBack('4 часа назад') === 4,
+      String(hoursBack('4 часа назад')));
+    check('«позавчера» это двое суток, а не одни',
+      hoursBack('позавчера') === 48, String(hoursBack('позавчера')));
+    check('единица без числа читается как одна: «месяц назад»',
+      hoursBack('месяц назад') === 720, String(hoursBack('месяц назад')));
+    check('непонятный возраст не выдаётся за свежесть',
+      bumpedAt('в прошлом веке', marketBase) === null);
+
+    check('первая страница раздела идёт без номера',
+      searchUrl('kupit-kvartiru', 2) === 'https://www.house.kg/kupit-kvartiru?town=2'
+      && searchUrl('kupit-kvartiru', 2, 3) === 'https://www.house.kg/kupit-kvartiru?town=2&page=3');
+
+    check('подпись агентства без бейджа — это агентство',
+      sellerOf('<div>От Этажи</div>').kind === 'agency');
+    check('ни бейджа, ни подписи — честное «неизвестно»',
+      sellerOf('<div>просто текст</div>').kind === 'unknown');
+
+
+    // --- аренда: одна валюта, обязательный срок, две вёрстки -----------
+    //
+    // Снимок аренды нужен отдельно от снимка продажи: там другая цена
+    // (одна валюта со сроком), там есть посуточные объявления, и там
+    // каждое объявление нарисовано ДВУМЯ карточками. На снимке продажи
+    // ничего этого не видно, и разбор аренды был сломан, пока его не
+    // прогнали по живой странице.
+
+    const rentPage = parseSearchPage(houseKgRent, 'rent');
+
+    check('две вёрстки одного объявления — это одно объявление',
+      rentPage.cards.length === 2 && Object.keys(rentPage.skipped).length === 0,
+      `объявлений ${rentPage.cards.length}, отброшено ${JSON.stringify(rentPage.skipped)}`);
+
+    const monthly = rentPage.cards.find((c) => c.period === 'month');
+    const daily = rentPage.cards.find((c) => c.period === 'day');
+
+    check('месячная аренда берётся в сомах и со сроком',
+      monthly?.priceKgs === 63000 && monthly?.priceUsd === null,
+      JSON.stringify({ kgs: monthly?.priceKgs, usd: monthly?.priceUsd }));
+
+    check('характеристики читаются и из сжатой карточки',
+      monthly?.rooms === 3 && monthly?.area === 60 && monthly?.floorsTotal === 4,
+      JSON.stringify(monthly));
+
+    // Посуточная аренда — другой рынок. 3 800 в сутки и 63 000 в месяц
+    // стоят в одной выдаче рядом; сложив их в одну медиану, получим
+    // число, которого на рынке нет.
+    check('посуточная аренда отличается от месячной',
+      daily?.period === 'day' && daily?.priceKgs === 3800,
+      JSON.stringify({ period: daily?.period, kgs: daily?.priceKgs }));
+
+    // Счётчик фотографий стоит в карточке прямо перед ценой. В сплошном
+    // тексте «30 306 250» выглядит правильно сгруппированным числом, и
+    // цена аренды дома однажды уехала в тридцать раз. Разбор идёт по
+    // узлам разметки: счётчик лежит в своём узле, цена в своём.
+    check('счётчик фотографий не приклеивается к цене',
+      JSON.stringify(parsePrices(
+        '<div><span>30</span><span>306 250 ⃀</span><span>3 496 $</span></div>', 'rent',
+      )) === JSON.stringify({ usd: 3496, kgs: 306250, period: 'month' }),
+      JSON.stringify(parsePrices(
+        '<div><span>30</span><span>306 250 ⃀</span><span>3 496 $</span></div>', 'rent')));
+
+    check('пара валют без срока считается месячной',
+      parsePrices('<div><span>306 250 ⃀</span><span>3 496 $</span></div>', 'rent')?.period
+        === 'month');
+
+    check('сказано про сутки, а срок не распознан — объявление не берётся',
+      parsePrices('<div><span>посуточно</span><span>306 250 ⃀</span><span>3 496 $</span></div>',
+        'rent') === null);
+
+    check('аренда без срока не берётся вовсе',
+      parsePrices('<div>63 000 ⃀</div>', 'rent') === null);
+
+    // Платёж по ипотеке в карточке продажи назван «в мес». У цены
+    // продажи срока не бывает, поэтому числа со сроком здесь не
+    // рассматриваются вовсе — это вторая преграда после проверки курса.
+    check('одинокое число со сроком не становится ценой продажи',
+      parsePrices('<div>167 514 сом в мес</div>', 'sale') === null);
+
+    check('участок: сотки переводятся в метры, а не идут как есть',
+      specsOf('<div>участок, 8 соток</div>').area === 800,
+      String(specsOf('<div>участок, 8 соток</div>').area));
+
+    // --- запись наблюдений -------------------------------------------
+
+    const marketSaved = await saveCards('sale', 'flat', 'Бишкек', housePage.cards, () => null);
+    check('наблюдения заводятся', marketSaved.added === 3 && marketSaved.updated === 0,
+      JSON.stringify(marketSaved));
+
+    const priceRows = async () => (await db.prepare(
+      'select count(*) as n from market_prices').first<{ n: number }>())?.n ?? -1;
+    check('у каждого наблюдения записана первая цена', await priceRows() === 3,
+      String(await priceRows()));
+
+    // Повторный прогон теми же данными не заводит второй копии и не
+    // пишет в историю ни строки: иначе за год на каждое объявление
+    // накопилось бы 365 одинаковых записей.
+    const marketSecond = await saveCards('sale', 'flat', 'Бишкек', housePage.cards, () => null);
+    check('повторный прогон не задваивает объявление',
+      marketSecond.added === 0 && marketSecond.updated === 3, JSON.stringify(marketSecond));
+    check('цена, которая не менялась, в историю не пишется',
+      marketSecond.priceChanged === 0 && await priceRows() === 3, String(await priceRows()));
+
+    const firstSeen = await db.prepare(
+      'select first_seen_at, last_seen_at from market_listings where source_id = ?',
+    ).bind(housePage.cards[0].sourceId).first<{ first_seen_at: string; last_seen_at: string }>();
+
+    // Подешевевшие объявления: ровно тот сигнал, ради которого история и
+    // заведена.
+    const cheaper = housePage.cards.map((c) => ({
+      ...c,
+      priceUsd: (c.priceUsd ?? 0) - 1000,
+      priceKgs: (c.priceKgs ?? 0) - 87000,
+    }));
+    const marketThird = await saveCards('sale', 'flat', 'Бишкек', cheaper, () => null);
+    check('снижение цены попадает в историю',
+      marketThird.priceChanged === 3 && await priceRows() === 6,
+      `${marketThird.priceChanged} изменений, строк ${await priceRows()}`);
+
+    const marketAfter = await db.prepare(
+      'select first_seen_at, price_usd_minor from market_listings where source_id = ?',
+    ).bind(housePage.cards[0].sourceId).first<{ first_seen_at: string; price_usd_minor: number }>();
+    check('дата первой встречи не переписывается',
+      marketAfter?.first_seen_at === firstSeen?.first_seen_at,
+      `${firstSeen?.first_seen_at} → ${marketAfter?.first_seen_at}`);
+    check('новая цена встала на место прежней',
+      marketAfter?.price_usd_minor === ((housePage.cards[0].priceUsd ?? 0) - 1000) * 100,
+      String(marketAfter?.price_usd_minor));
+
+    // Исчезнувшие. Помечаются, а не удаляются: проданное по известной
+    // цене говорит о рынке честнее, чем висящее.
+    const marketFuture = new Date(Date.now() + 60_000).toISOString();
+    const goneCount = await markGone('sale', 'flat', 'Бишкек', marketFuture);
+    check('пропавшие из выдачи помечаются', goneCount === 3, String(goneCount));
+
+    const sizeGone = await marketSize();
+    check('помеченные не считаются живыми',
+      sizeGone.live === 0 && sizeGone.gone === 3, JSON.stringify(sizeGone));
+
+    // Объявление вернулось в выдачу — пометка снимается сама.
+    await saveCards('sale', 'flat', 'Бишкек', housePage.cards, () => null);
+    const sizeBack = await marketSize();
+    check('вернувшееся объявление снова живое',
+      sizeBack.live === 3 && sizeBack.gone === 0, JSON.stringify(sizeBack));
+
+
+    // -----------------------------------------------------------------
+    // Оценка по сопоставимым
+    // -----------------------------------------------------------------
+
+    const comp = (priceMinor: number, area: number, rooms = 2): Comparable => ({
+      id: crypto.randomUUID(), url: 'https://www.house.kg/details/x',
+      priceMinor, area, rooms, address: null, sellerKind: 'unknown', bumpedAt: null,
+    });
+
+    check('медиана берёт середину, а не среднее',
+      median([1, 2, 3, 4, 100]) === 3, String(median([1, 2, 3, 4, 100])));
+    check('квантиль считается с интерполяцией',
+      quantile([10, 20, 30, 40], 0.5) === 25, String(quantile([10, 20, 30, 40], 0.5)));
+
+    // На четырёх объявлениях медиана — среднее двух средних, и одно
+    // кривое двигает её заметно. Поэтому ниже пяти — отказ.
+    check('на четырёх похожих оценки не бывает',
+      valuate([comp(100, 1), comp(110, 1), comp(120, 1), comp(130, 1)], 50, 'точно') === null);
+
+    const even = valuate(
+      [comp(1000_00, 50), comp(1100_00, 50), comp(1200_00, 50),
+       comp(1300_00, 50), comp(1400_00, 50)], 50, 'точно',
+    );
+    check('вилка это четверть и три четверти рынка, а не «плюс-минус»',
+      even?.lowMinor === 1100_00 && even?.midMinor === 1200_00 && even?.highMinor === 1300_00,
+      JSON.stringify({ l: even?.lowMinor, m: even?.midMinor, h: even?.highMinor }));
+
+    // Главное, ради чего медиана. В индексе лежит НАСТОЯЩЕЕ объявление
+    // «комната 20 м² за 2 002 810 $»: так написал продавец, курс там
+    // сходится, то есть разбор не ошибся. Среднее от такой строки уезжает
+    // в разы.
+    const withJunk = valuate(
+      [comp(1000_00, 50), comp(1100_00, 50), comp(1200_00, 50),
+       comp(1300_00, 50), comp(1400_00, 50), comp(2_002_810_00, 50)], 50, 'точно',
+    );
+    check('объявление с безумной ценой не двигает оценку',
+      withJunk !== null && withJunk.midMinor === 1250_00,
+      String(withJunk?.midMinor));
+
+    check('отклонение от рынка считается от середины выборки',
+      even !== null && awayFromMarket(1500_00, even) === 25,
+      String(even === null ? 'нет оценки' : awayFromMarket(1500_00, even)));
+
+    // Курс берётся из самих объявлений: ключей к курсовым службам нет, а
+    // вписанное в код число молча устаревает.
+    const ratePairs = (n: number, rate: number) =>
+      Array.from({ length: n }, () => ({ usdMinor: 100_00, kgsMinor: Math.round(100_00 * rate) }));
+    check('на девяти парах курс не считается — это случайность, а не курс',
+      rateFromPairs(ratePairs(9, 87)) === null);
+    check('на десяти считается', rateFromPairs(ratePairs(10, 87)) === 87,
+      String(rateFromPairs(ratePairs(10, 87))));
+    check('пары с невозможным курсом в расчёт не идут',
+      rateFromPairs([...ratePairs(10, 87), { usdMinor: 100_00, kgsMinor: 100 }]) === 87);
+
+    // --- оценка по настоящей базе ------------------------------------
+
+    const seedMarket = async (
+      n: number, deal: string, kind: string, city: string,
+      usd: number | null, kgs: number | null, area: number, rooms: number,
+      address: string, period: string | null, seenAt: string,
+    ) => {
+      for (let i = 0; i < n; i++) {
+        await db.prepare(
+          `insert into market_listings
+             (id, source, source_id, url, deal_type, kind, city, address, rooms, area,
+              price_usd_minor, price_kgs_minor, rent_period, search_text,
+              first_seen_at, last_seen_at)
+           values (?, 'house.kg', ?, 'https://www.house.kg/details/s', ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          crypto.randomUUID(), crypto.randomUUID(), deal, kind, city, address, rooms, area,
+          usd === null ? null : (usd + i * 100) * 100,
+          kgs === null ? null : (kgs + i * 8700) * 100,
+          period, address.toLowerCase(), seenAt, seenAt,
+        ).run();
+      }
+    };
+
+    // Шесть двушек в Асанбае и шесть в другом районе, дороже.
+    await seedMarket(6, 'sale', 'flat', 'Ош', 50000, 4350000, 60, 2, 'Асанбай 1', null, iso());
+    await seedMarket(6, 'sale', 'flat', 'Ош', 90000, 7830000, 60, 2, 'Джал 5', null, iso());
+
+    const inZone = await estimate({
+      deal: 'sale', kind: 'flat', city: 'Ош', zone: 'Асанбай',
+      rooms: 2, area: 60, currency: 'USD', period: null,
+    });
+    check('оценка по своему району берёт только свой район',
+      inZone.valuation?.basis.widening === 'точно' && inZone.valuation?.basis.count === 6,
+      JSON.stringify(inZone.valuation?.basis));
+    check('оценка по району не утягивается соседним, который дороже',
+      inZone.valuation !== null && inZone.valuation.midMinor < 60_000_00,
+      String(inZone.valuation?.midMinor));
+
+    // Район, которого в индексе нет: лестница обязана шагнуть шире и
+    // СКАЗАТЬ об этом, а не молча посчитать по всему городу.
+    const noZone = await estimate({
+      deal: 'sale', kind: 'flat', city: 'Ош', zone: 'Кызыл-Аскер',
+      rooms: 2, area: 60, currency: 'USD', period: null,
+    });
+    check('нет района — выборка расширяется и это названо',
+      noZone.valuation?.basis.widening === 'без района'
+      && noZone.valuation?.basis.count === 12,
+      JSON.stringify(noZone.valuation?.basis));
+
+    // Посуточная аренда не должна попадать в месячную оценку.
+    await seedMarket(6, 'rent', 'flat', 'Ош', null, 60000, 50, 2, 'Асанбай 1', 'month', iso());
+    await seedMarket(6, 'rent', 'flat', 'Ош', null, 3000, 50, 2, 'Асанбай 1', 'day', iso());
+
+    const rentMonthly = await estimate({
+      deal: 'rent', kind: 'flat', city: 'Ош', zone: null,
+      rooms: 2, area: 50, currency: 'KGS', period: 'month',
+    });
+    check('посуточная аренда в месячную оценку не попадает',
+      rentMonthly.valuation?.basis.count === 6
+      && rentMonthly.valuation !== null && rentMonthly.valuation.midMinor > 50_000_00,
+      JSON.stringify({ n: rentMonthly.valuation?.basis.count, mid: rentMonthly.valuation?.midMinor }));
+
+    // Аренда лежит только в сомах, а спросили в долларах: приведение
+    // идёт по курсу, посчитанному из объявлений продажи.
+    const rate = await observedRate();
+    check('курс посчитан по самим объявлениям', rate !== null && rate > 60 && rate < 130,
+      String(rate));
+
+    const estimateInUsd = await estimate({
+      deal: 'rent', kind: 'flat', city: 'Ош', zone: null,
+      rooms: 2, area: 50, currency: 'USD', period: 'month',
+    });
+    check('цену в сомах приводят к доллару по этому курсу',
+      estimateInUsd.valuation !== null && rate !== null
+      && Math.abs(estimateInUsd.valuation.midMinor - (rentMonthly.valuation?.midMinor ?? 0) / rate) < 100,
+      JSON.stringify({ usd: estimateInUsd.valuation?.midMinor, kgs: rentMonthly.valuation?.midMinor }));
+
+    // Протухшие объявления в оценку не идут.
+    const longAgo = new Date(Date.now() - 400 * 24 * 3600_000).toISOString();
+    await seedMarket(8, 'sale', 'house', 'Ош', 30000, 2610000, 100, 4, 'Старьё', null, longAgo);
+    const staleValue = await estimate({
+      deal: 'sale', kind: 'house', city: 'Ош', zone: null,
+      rooms: 4, area: 100, currency: 'USD', period: null,
+    });
+    check('позапрошлогодние объявления в оценку не идут',
+      staleValue.valuation === null && staleValue.reason === 'индекс пуст',
+      JSON.stringify({ r: staleValue.reason, pool: staleValue.pool }));
+
+    // Три участка в индексе есть, а оценки нет: три — это не выборка.
+    // Отказ при этом РАЗНЫЙ по причине, и это важно: «индекс пуст»
+    // чинится обходом, «мало похожих» не чинится ничем.
+    await seedMarket(3, 'sale', 'land', 'Ош', 20000, 1740000, 500, 0, 'Поле', null, iso());
+    const fewLand = await estimate({
+      deal: 'sale', kind: 'land', city: 'Ош', zone: null,
+      rooms: null, area: 500, currency: 'USD', period: null,
+    });
+    check('три объявления — это отказ, а не оценка',
+      fewLand.valuation === null && fewLand.reason === 'мало похожих' && fewLand.pool === 3,
+      JSON.stringify({ r: fewLand.reason, pool: fewLand.pool }));
+
+    // Город, которого в индексе нет вовсе. Типы здесь ограничены теми,
+    // которые обход умеет брать: оценивать гараж нечем, и это запрещено
+    // типом, а не проверкой во время работы.
+    const emptySegment = await estimate({
+      deal: 'sale', kind: 'flat', city: 'Нарын', zone: null,
+      rooms: 2, area: 60, currency: 'USD', period: null,
+    });
+    check('пустой сегмент отличается от «мало похожих»',
+      emptySegment.reason === 'индекс пуст', String(emptySegment.reason));
+
+
+    // -----------------------------------------------------------------
+    // Проверка своего объекта по площадке
+    // -----------------------------------------------------------------
+    //
+    // Ради этого и собирался индекс. «Проверен» — обещание, и проверяемо
+    // оно здесь: объект, который уже висит на площадке под другой ценой,
+    // виден агенту до того, как карточка уйдёт в работу.
+
+    check('«Чуй» не теряется из-за длины слова',
+      addressOverlap('Чуй 120', 'ул. Чүй 120/1').words.join() === 'чуй',
+      JSON.stringify(addressOverlap('Чуй 120', 'ул. Чүй 120/1')));
+
+    check('служебные слова совпадением не считаются',
+      addressOverlap('ул. Советская 5, дом', 'улица Ахунбаева 7, дом').words.length === 0,
+      JSON.stringify(addressOverlap('ул. Советская 5, дом', 'улица Ахунбаева 7, дом')));
+
+    // В Бишкеке половина адресов — микрорайоны, и они записаны числами.
+    // Без отдельного признака такой адрес распадался на цифры и не
+    // сличался никогда.
+    check('микрорайон — это признак места, а не номер дома',
+      addressOverlap('12 мкр 57/1', 'мкр 12, д. 57/1').words.join() === 'мкр-12',
+      JSON.stringify(addressOverlap('12 мкр 57/1', 'мкр 12, д. 57/1')));
+    check('разные микрорайоны не совпадают',
+      addressOverlap('12 мкр 57', '6 мкр 57').words.length === 0);
+
+    const ourFlat = {
+      address: 'Чуй 120', zone: 'Центр', rooms: 2, area: 60, floor: 5,
+      price: 80000, currency: 'USD',
+    };
+    const theirs = (over: Partial<Parameters<typeof resemble>[1]> = {}) => ({
+      id: 'x', url: 'https://www.house.kg/details/x', address: 'ул. Чүй 120/1',
+      rooms: 2, area: 60, floor: 5, priceUsd: 90000, priceKgs: null,
+      sellerKind: 'agency' as const, sellerName: 'Этажи', bumpedAt: null, ...over,
+    });
+
+    check('совпали улица и площадь — объявление показывается',
+      resemble(ourFlat, theirs(), null) !== null);
+
+    // Одной похожей площади мало: в доме таких квартир десяток.
+    check('одна лишь похожая площадь совпадением не считается',
+      resemble(ourFlat, theirs({ address: 'Ахунбаева 7' }), null) === null);
+
+    const found = resemble(ourFlat, theirs(), null);
+    check('расхождение в цене названо числом и процентом',
+      found?.differences.some((d) => d.what === 'цена' && d.theirs.includes('+13%')) === true,
+      JSON.stringify(found?.differences));
+
+    check('кто подаёт объявление — всегда в расхождениях',
+      found?.differences.some((d) => d.what === 'подаёт' && d.theirs.includes('Этажи')) === true);
+
+    const areaOff = resemble(ourFlat, theirs({ area: 72 }), null);
+    check('расхождение в площади названо',
+      areaOff?.differences.some((d) => d.what === 'площадь') === true,
+      JSON.stringify(areaOff?.differences));
+
+    // Сортировка: сперва то, где признаков больше. Агент смотрит первое.
+    const ranked = resembleAll(ourFlat, [
+      theirs({ id: 'слабое', address: 'Чуй 200', area: 60.5 }),
+      theirs({ id: 'сильное' }),
+    ], null);
+    check('первым показывается то, где признаков больше',
+      ranked[0]?.candidate.id === 'сильное',
+      ranked.map((r) => `${r.candidate.id}:${r.signals.length}`).join(' '));
+
+    // --- по настоящей базе -------------------------------------------
+
+    await db.prepare(
+      `insert into market_listings
+         (id, source, source_id, url, deal_type, kind, city, address, rooms, area, floor,
+          price_usd_minor, price_kgs_minor, seller_kind, seller_name, search_text,
+          first_seen_at, last_seen_at)
+       values (?, 'house.kg', ?, 'https://www.house.kg/details/dup', 'sale', 'flat',
+               'Бишкек', 'ул. Чүй 120/1', 2, 60, 5, ?, null, 'owner', null, 'чуй', ?, ?)`,
+    ).bind(crypto.randomUUID(), crypto.randomUUID(), 90000_00, iso(), iso()).run();
+
+    const lookalike = await marketLookalikes({
+      kind: 'flat', deal_type: 'sale', city: 'Бишкек', address: 'Чуй 120',
+      zone: null, rooms: 2, area: 60, floor: 5, price: 80000, currency: 'USD',
+    });
+    check('свой объект находится среди объявлений площадки',
+      lookalike.comparable && lookalike.found.length === 1,
+      JSON.stringify({ c: lookalike.comparable, n: lookalike.found.length }));
+
+    // Типы, которых обход не берёт, сравнивать не с чем — и об этом
+    // надо сказать, а не показывать «ничего не нашлось».
+    const noCompare = await marketLookalikes({
+      kind: 'garage', deal_type: 'sale', city: 'Бишкек', address: 'Чуй 120',
+      zone: null, rooms: null, area: 20, floor: null, price: 10000, currency: 'USD',
+    });
+    check('«сравнивать не с чем» отличается от «не нашлось»',
+      noCompare.comparable === false && noCompare.found.length === 0);
+
+
+    // -----------------------------------------------------------------
+    // Поиск собственников
+    // -----------------------------------------------------------------
+
+    // Дата публикации берётся со страницы объявления: в выдаче написано,
+    // когда объявление ПОДНЯЛИ, а не когда подали. Поднятое сегодня
+    // может висеть с весны — и именно такой продавец устал продавать сам.
+    const listingHtml = '<script type="application/ld+json">'
+      + '{"@context":"https://schema.org","@type":"RealEstateListing",'
+      + '"datePosted":"2026-11-11T11:36:17",'
+      + '"about":{"geo":{"latitude":42.8251,"longitude":74.5832}}}</script>';
+    const parsedPage = parseListingPage(listingHtml);
+    check('дата публикации читается со страницы объявления',
+      parsedPage.postedAt === '2026-11-11T05:36:17.000Z',
+      String(parsedPage.postedAt));
+    check('координаты оттуда же',
+      parsedPage.latitude === 42.8251 && parsedPage.longitude === 74.5832);
+    check('страница без разметки не выдумывает дату',
+      parseListingPage('<html>пусто</html>').postedAt === null);
+
+    const ownerRow = (over: Partial<OwnerRow> = {}): OwnerRow => ({
+      id: crypto.randomUUID(), url: 'https://www.house.kg/details/o',
+      address: 'Чуй 120', rooms: 2, area: 60, priceUsd: 80000, priceKgs: null,
+      postedAt: null, firstSeenAt: new Date().toISOString(), bumped: false,
+      drops: 0, dropPercent: 0, ...over,
+    });
+
+    const nowMs = Date.UTC(2026, 10, 27, 12, 0, 0);
+    const longAgoIso = new Date(nowMs - 200 * 24 * 3600_000).toISOString();
+
+    // Свежее объявление без снижения — обычный продавец, полный надежд.
+    // Звонить ему не за чем, и в списке его быть не должно.
+    check('свежее объявление без признаков в список не идёт',
+      rank([ownerRow({ firstSeenAt: new Date(nowMs).toISOString() })], nowMs).length === 0);
+
+    const ownerOld = rank([ownerRow({ postedAt: longAgoIso })], nowMs)[0];
+    check('давний срок — признак, и он назван словами',
+      ownerOld?.signals.some((x) => x.text.includes('полугода')) === true,
+      JSON.stringify(ownerOld?.signals));
+    check('срок считается от публикации, а не от нашего обхода',
+      ownerOld?.daysFrom === 'публикация' && ownerOld?.days === 200,
+      JSON.stringify({ from: ownerOld?.daysFrom, days: ownerOld?.days }));
+
+    // Своей даты нет — считаем от первой встречи, НО говорим об этом:
+    // настоящий срок может быть больше.
+    const seenOnly = rank([ownerRow({ firstSeenAt: longAgoIso })], nowMs)[0];
+    check('без своей даты срок считается от обхода и это названо',
+      seenOnly?.daysFrom === 'наш обход' && seenOnly?.days === 200,
+      JSON.stringify({ from: seenOnly?.daysFrom, days: seenOnly?.days }));
+
+    const ownerDropped = rank([ownerRow({ drops: 2, dropPercent: 12 })], nowMs)[0];
+    check('снижение цены названо числом и количеством раз',
+      ownerDropped?.signals[0]?.text.includes('снижалась 2 раза, всего на 12%') === true,
+      JSON.stringify(ownerDropped?.signals));
+
+    // Уступка в 40% чаще означает, что объявление начиналось с фантазии,
+    // а не что продавец сговорчив. Поэтому вес ограничен.
+    const ownerHuge = rank([ownerRow({ drops: 1, dropPercent: 60 })], nowMs)[0];
+    const ownerModest = rank([ownerRow({ drops: 1, dropPercent: 20 })], nowMs)[0];
+    check('огромная уступка не перевешивает всё остальное',
+      ownerHuge?.score === ownerModest?.score,
+      JSON.stringify({ ownerHuge: ownerHuge?.score, ownerModest: ownerModest?.score }));
+
+    const ownerOrder = rank([
+      ownerRow({ id: 'слабый', bumped: true }),
+      ownerRow({ id: 'сильный', postedAt: longAgoIso, drops: 1, dropPercent: 10, bumped: true }),
+    ], nowMs);
+    check('сверху тот, у кого признаков больше',
+      ownerOrder[0]?.row.id === 'сильный',
+      ownerOrder.map((l) => `${l.row.id}:${l.score}`).join(' '));
+
+    // Черновик письма собирается ИЗ ФАКТОВ. Выдуманная в нём деталь —
+    // «вижу, вы давно продаёте» про объявление недельной давности —
+    // стоит сделки и репутации.
+    const letterOld = invitation(ownerOld!, 'Liberterra', 'Анна');
+    check('в письме стоит настоящий срок',
+      letterOld.includes('200 дн. назад') && letterOld.includes('Анна'),
+      letterOld.slice(0, 120));
+
+    const ownerFresh = rank([ownerRow({ drops: 1, dropPercent: 5 })], nowMs)[0];
+    const letterFresh = invitation(ownerFresh!, 'Liberterra', 'Анна');
+
+    // Черновик не навязывает агенту род: половина агентов — женщины, и
+    // «увидел» в письме за подписью Анны читается как чужой текст.
+    check('в черновике нет глаголов, навязывающих род',
+      !letterOld.includes('Увидел') && !letterOld.includes('Вижу'),
+      letterOld.slice(0, 140));
+    check('свежему объявлению не приписывается долгий срок',
+      !letterFresh.includes('дн. назад') && letterFresh.includes('Цену вы уже снижали'),
+      letterFresh.slice(0, 160));
+
+    // --- по настоящей базе -------------------------------------------
+
+    const seedOwner = async (sourceId: string, seller: string, posted: string | null) => {
+      const oid = crypto.randomUUID();
+      await db.prepare(
+        `insert into market_listings
+           (id, source, source_id, url, deal_type, kind, city, address, rooms, area,
+            price_usd_minor, price_kgs_minor, seller_kind, search_text, posted_at,
+            first_seen_at, last_seen_at)
+         values (?, 'house.kg', ?, 'https://www.house.kg/details/' || ?, 'sale', 'flat',
+                 'Каракол', 'Гагарина 7', 2, 60, ?, null, ?, 'гагарина', ?, ?, ?)`,
+      ).bind(oid, sourceId, sourceId, 50000_00, seller, posted, longAgoIso, iso()).run();
+      return oid;
+    };
+
+    const ownerId = await seedOwner('own-1', 'owner', null);
+    await seedOwner('ag-1', 'agency', null);
+
+    const queue = await ownersWithoutDate(10);
+    check('в очередь за датой идут только собственники',
+      queue.some((q) => q.id === ownerId) && queue.length >= 1
+      && !queue.some((q) => q.url.includes('ag-1')),
+      JSON.stringify(queue.map((q) => q.url)));
+
+    // Объявление, у которого даты нет на странице, не должно попадать в
+    // очередь каждую ночь и съедать весь проход.
+    await setListingPage(ownerId, { postedAt: null, latitude: null, longitude: null });
+    const queueAgain = await ownersWithoutDate(10);
+    check('объявление без даты не встаёт в очередь навсегда',
+      !queueAgain.some((q) => q.id === ownerId),
+      JSON.stringify(queueAgain.map((q) => q.url)));
+
+    // Снижение цены считается по НАШЕЙ истории.
+    await db.prepare(
+      `insert into market_prices (id, listing_id, price_usd_minor, price_kgs_minor, seen_at)
+       values (?, ?, ?, null, ?)`,
+    ).bind(crypto.randomUUID(), ownerId, 60000_00, longAgoIso).run();
+    await db.prepare(
+      `insert into market_prices (id, listing_id, price_usd_minor, price_kgs_minor, seen_at)
+       values (?, ?, ?, null, ?)`,
+    ).bind(crypto.randomUUID(), ownerId, 50000_00, iso()).run();
+
+    const karakol = await ownerLeads({ deal: 'sale', kind: 'flat', city: 'Каракол', zone: null });
+    check('в списке только собственники, агентств там нет',
+      karakol.length === 1, String(karakol.length));
+    check('снижение цены посчитано по нашей истории',
+      karakol[0]?.row.drops === 1 && karakol[0]?.row.dropPercent === 17,
+      JSON.stringify({ d: karakol[0]?.row.drops, p: karakol[0]?.row.dropPercent }));
+    check('«—» в дате не выдаётся за дату публикации',
+      karakol[0]?.daysFrom === 'наш обход', String(karakol[0]?.daysFrom));
 
     } catch (e) {
       // Падение посреди набора — это тоже результат, и он должен быть виден
