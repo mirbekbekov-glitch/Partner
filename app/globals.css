@@ -672,19 +672,10 @@ main:has(.auth) { max-width: none; padding: 0; }
   to   { opacity: 1; transform: none; }
 }
 
-/* Фигура появляется, когда лестница построена: сперва место, потом тот,
-   кто по нему идёт. Поднимается на шаг снизу — то же движение, что она
-   и делает на рисунке. */
-.hero-art .climber { animation: climber-in .6s cubic-bezier(.2, .85, .25, 1) .42s both; }
-@keyframes climber-in {
-  from { opacity: 0; transform: translate(-14px, 16px); }
-  to   { opacity: 1; transform: none; }
-}
-
 /* «Меньше движения» — значит меньше движения: рисунок сразу в конечном
    виде. */
 @media (prefers-reduced-motion: reduce) {
-  .hero-art .slab, .hero-art .climber { animation: none; }
+  .hero-art .slab { animation: none; }
 }
 .hero-art svg { position: absolute; right: 0; top: 0; width: 48%; min-width: 320px;
   /* Не на всю высоту героя: нижние сто пикселей закрыты пультом поиска,
