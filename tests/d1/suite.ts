@@ -41,7 +41,7 @@ import {
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
-import { mhouseXml } from '@/lib/mhouse-feed';
+import { mhouseOffers, mhouseXml } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
 import { convert, parseNbkr } from '@/lib/fx';
 import { contactLinks, phoneDigits } from '@/lib/contact-links';
@@ -95,6 +95,7 @@ import {
   ownersWithoutDate, saveCards, setListingPage,
 } from '@/lib/db/market';
 import { addressOverlap, resemble, resembleAll } from '@/lib/market/duplicate';
+import { exportState, lastPull, markExported, recordPull } from '@/lib/db/feed-log';
 import { invitation, rank, type OwnerRow } from '@/lib/market/owners';
 import {
   awayFromMarket, median, quantile, rateFromPairs, valuate, type Comparable,
@@ -3764,6 +3765,91 @@ export default {
       JSON.stringify({ d: karakol[0]?.row.drops, p: karakol[0]?.row.dropPercent }));
     check('«—» в дате не выдаётся за дату публикации',
       karakol[0]?.daysFrom === 'наш обход', String(karakol[0]?.daysFrom));
+
+
+    // -----------------------------------------------------------------
+    // Журнал выгрузки: что ушло в фид и кто его забирал
+    // -----------------------------------------------------------------
+    //
+    // До этого кабинет не знал, опубликован ли объект на площадке:
+    // таблица publication_channels существовала, но писал в неё НИКТО —
+    // отметки только снимались. Ответить «наше объявление уже на
+    // house.kg?» можно было, лишь сходив туда руками.
+
+    check('первый заход площадки записывается',
+      await recordPull('house_kg', 'MHouseBot/1.0') === true);
+
+    // Фид открыт всем: его дёргают поисковые роботы и проверялки ссылок.
+    // Писать на каждый запрос значило бы отдать публичному адресу право
+    // нагружать базу.
+    check('частый опрос второй записи не делает',
+      await recordPull('house_kg', 'MHouseBot/1.0') === false);
+
+    const pull = await lastPull('house_kg');
+    check('заход записан с тем, кто приходил',
+      pull?.pulls === 1 && pull?.last_agent === 'MHouseBot/1.0',
+      JSON.stringify(pull));
+    check('чужой фид считается отдельно', await lastPull('yandex') === null);
+
+    // Отметка «ушёл в выгрузку» ставится на объекты из файла.
+    const feedIds = (await mhouseOffers('https://example.kg')).ids;
+    await markExported(feedIds);
+
+    if (feedIds.length > 0) {
+      const state = await exportState(feedIds[0]);
+      check('объект отмечен ушедшим в выгрузку',
+        state.exportedAt !== null && state.status === 'exported',
+        JSON.stringify(state));
+      check('рядом с отметкой видно, когда площадка забирала фид',
+        state.lastPullAt !== null, JSON.stringify(state));
+    } else {
+      check('в фиде нечего отмечать — проверка пропущена', true, 'фид пуст');
+    }
+
+    // Повторная отметка не плодит вторую связь: у пары «объект + канал»
+    // стоит ограничение уникальности, и вторая вставка упала бы.
+    await markExported(feedIds);
+    const links = await db.prepare(
+      `select count(*) as n from publication_channels where channel = 'house_kg'`,
+    ).first<{ n: number }>();
+    check('повторная выгрузка не плодит связей',
+      (links?.n ?? 0) === feedIds.length, JSON.stringify({ n: links?.n, ids: feedIds.length }));
+
+    // Объект, которого в фиде нет, отметки не получает.
+    const notInFeed = await exportState('нет-такого-объекта');
+    check('объект без выгрузки отметки не имеет',
+      notInFeed.exportedAt === null && notInFeed.status === null,
+      JSON.stringify(notInFeed));
+
+    // --- своё объявление на площадке ---------------------------------
+    //
+    // У агентства свой аккаунт на house.kg, и его объявления попадают в
+    // наш же индекс. Без распознавания проверка пугала бы агента его же
+    // работой: «похоже, объект уже висит на house.kg».
+
+    const ourAd = resemble(ourFlat, { ...theirs(), sellerName: 'Liberterra' }, null, 'Liberterra');
+    check('объявление с нашей подписью узнаётся как своё',
+      ourAd?.ours === true, JSON.stringify({ ours: ourAd?.ours }));
+
+    check('чужое агентство своим не считается',
+      resemble(ourFlat, theirs(), null, 'Liberterra')?.ours === false);
+
+    check('без названия агентства своим не считается никто',
+      resemble(ourFlat, { ...theirs(), sellerName: 'Liberterra' }, null, null)?.ours === false);
+
+    // Расхождения у своего объявления показываются ТОЖЕ, и они важнее
+    // чужих: в кабинете одна цена, в нашем же объявлении другая.
+    check('у своего объявления расхождения всё равно названы',
+      ourAd?.differences.some((d) => d.what === 'цена') === true,
+      JSON.stringify(ourAd?.differences));
+
+    const mixed = resembleAll(ourFlat, [
+      theirs({ id: 'чужое' }),
+      { ...theirs({ id: 'своё' }), sellerName: 'Liberterra' },
+    ], null, 'Liberterra');
+    check('своё объявление показывается первым',
+      mixed[0]?.candidate.id === 'своё',
+      mixed.map((r) => `${r.candidate.id}:${r.ours}`).join(' '));
 
     } catch (e) {
       // Падение посреди набора — это тоже результат, и он должен быть виден
