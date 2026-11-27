@@ -80,7 +80,6 @@ type Dict = {
   pitchStep1: string; pitchStep1Note: string;
   pitchStep2: string; pitchStep2Note: string;
   pitchStep3: string; pitchStep3Note: string;
-  mapTitle: string; mapHint: string; mapEmpty: string;
   // Заявка «что я ищу»
   reqNav: string; reqTitle: string; reqLede: string;
   reqDeal: string; reqBuy: string; reqRent: string;
@@ -190,8 +189,6 @@ const ru: Dict = {
   pitchStep1: 'Вы описываете, что нужно', pitchStep1Note: 'Две минуты, обязателен только телефон',
   pitchStep2: 'Заявку видят агенты', pitchStep2Note: 'Отвечаем в течение часа — это норматив, а не обещание',
   pitchStep3: 'Вам приносят варианты', pitchStep3Note: 'Появится позже — позвоним, заявка остаётся в работе',
-  mapTitle: 'Районы города', mapHint: 'Нажмите район — покажем, что в нём есть',
-  mapEmpty: 'пока пусто',
   themeSwitch: 'Светлая или тёмная тема',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
            land: 'участок', commercial: 'коммерческая', garage: 'гараж' },
@@ -279,8 +276,6 @@ const ky: Dict = {
   pitchStep1: 'Эмне керектигин жазасыз', pitchStep1Note: 'Эки мүнөт, телефон гана милдеттүү',
   pitchStep2: 'Арызды агенттер көрөт', pitchStep2Note: 'Бир сааттын ичинде жооп беребиз — бул норматив',
   pitchStep3: 'Сизге варианттар келет', pitchStep3Note: 'Кийин пайда болсо — чалабыз, арыз иште калат',
-  mapTitle: 'Шаардын райондору', mapHint: 'Районду басыңыз — андагысын көрсөтөбүз',
-  mapEmpty: 'азырынча жок',
   themeSwitch: 'Жарык же караңгы тема',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
            land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж' },
@@ -368,8 +363,6 @@ const en: Dict = {
   pitchStep1: 'You describe what you need', pitchStep1Note: 'Two minutes; only the phone number is required',
   pitchStep2: 'Agents see the request', pitchStep2Note: 'We answer within the hour — a standard, not a promise',
   pitchStep3: 'They bring you options', pitchStep3Note: 'If it appears later, we call: the request stays open',
-  mapTitle: 'Districts of the city', mapHint: 'Tap a district to see what it holds',
-  mapEmpty: 'empty for now',
   themeSwitch: 'Light or dark theme',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
            land: 'land', commercial: 'commercial', garage: 'garage' },
@@ -457,8 +450,6 @@ const zh: Dict = {
   pitchStep1: '您写下需求', pitchStep1Note: '两分钟，仅电话为必填',
   pitchStep2: '经纪人看到需求', pitchStep2Note: '一小时内回复 — 这是标准，不是口号',
   pitchStep3: '他们为您带来房源', pitchStep3Note: '日后出现也会致电：需求一直有效',
-  mapTitle: '城市区域', mapHint: '点击区域，查看其中房源',
-  mapEmpty: '暂无',
   themeSwitch: '浅色或深色主题',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
            land: '地块', commercial: '商业用房', garage: '车库' },
