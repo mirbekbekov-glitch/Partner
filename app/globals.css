@@ -42,8 +42,9 @@
   /* Свет за курсором: на светлом фоне он осветляет заметно, на тёмном
      почти неразличим — там яркое пятно читается как клякса. */
   --glow: rgba(255,255,255,.85);
-  /* Красный ярче фирменного — для текста на тёмных полосах (заголовок
-     героя, надзаголовок призыва, ссылки в подвале). */
+  /* Красный ярче фирменного — для текста на ТЁМНЫХ полосах: надзаголовок
+     призыва, ссылки в подвале. Заголовку героя он больше не достаётся:
+     герой светлый, и там этот красный спорил с фирменным. */
   --accent-2: #E0453F;
   /* Наведение на кнопке с фирменной заливкой. ТЕМНЕЕ фирменного, а не
      светлее: кнопка подписана белым, и на прежнем светлом #E0453F он давал
@@ -720,7 +721,13 @@ main:has(.auth) { max-width: none; padding: 0; }
      которого глаз теряет начало следующей строки. Доля 46vw держит
      заголовок левее чертежа лестницы, который занимает правую половину. */
   max-width: min(800px, 46vw); }
-.hero h1 em { font-style: normal; color: var(--accent-2); }
+/* Фирменный красный, а не яркий. --accent-2 заведён «для текста на
+   тёмных полосах» и достался заголовку с тех времён, когда герой был
+   тёмным. Герой давно светлый, и на нём рядом оказались два разных
+   красных: заголовок ярче, кнопка «Оставить заявку» — фирменный. В
+   тёмной теме --accent сам становится светлым (#E8716C), поэтому
+   заголовок там остаётся читаемым. */
+.hero h1 em { font-style: normal; color: var(--accent); }
 .hero .lede { color: var(--muted); font-size: 1.0625rem; line-height: 1.5; max-width: 56ch; margin: 0; }
 .props { display: flex; flex-wrap: wrap; gap: 10px 26px; margin: 6px 0 0; padding: 0; list-style: none; }
 .prop { display: flex; align-items: center; gap: 9px; font-size: 0.875rem; font-weight: 600;
@@ -744,7 +751,10 @@ main:has(.auth) { max-width: none; padding: 0; }
   font-weight: 700; text-decoration: none; white-space: nowrap;
   transition: background .18s, color .18s, border-color .18s, transform .18s; }
 .go-main { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
-.go-main:hover { background: var(--accent-2); border-color: var(--accent-2); }
+/* Темнее, а не светлее: кнопка подписана белым, и на светлом #E0453F
+   он давал 4.12 : 1 — ниже порога для обычного текста. Тот же приём, что
+   у остальных залитых кнопок сайта. */
+.go-main:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .go-side { background: var(--panel); color: var(--fg); border: 1px solid var(--line); }
 .go-side:hover { border-color: var(--accent); color: var(--accent); }
 /* Нажатие видно без скриптов: кнопка проседает на пиксель. Единственное
