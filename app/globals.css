@@ -601,7 +601,11 @@ main:has(.auth) { max-width: none; padding: 0; }
 .eyebrow { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 700;
   letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
 .eyebrow::after { content: ""; height: 1px; width: 64px; background: var(--line); }
-.hero h1 { font-size: clamp(34px, 5.2vw, 58px); line-height: 1.04; font-weight: 800;
+/* Потолок кегля 56, а не 58. Два пикселя — цена вежливого обращения:
+   «Найдите своё пространство» на 58 не умещалось в строку, и заголовок
+   на широком экране разъезжался с трёх строк на четыре, теряя ритм.
+   На 56 первая строка сходится, и composition остаётся прежней. */
+.hero h1 { font-size: clamp(34px, 5.2vw, 56px); line-height: 1.04; font-weight: 800;
   letter-spacing: -.035em; margin: 0; text-wrap: balance; }
 .hero h1 em { font-style: normal; color: var(--accent-2); }
 .hero .lede { color: var(--muted); font-size: 17px; line-height: 1.5; max-width: 56ch; margin: 0; }
