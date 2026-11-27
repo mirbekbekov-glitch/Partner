@@ -5,6 +5,7 @@ import {
 } from '@/lib/db/cabinet';
 import { approvedColleagues } from '@/lib/db/agents';
 import { canEditObject } from '@/lib/db/access';
+import { missingFields } from '@/lib/mhouse-feed';
 import { Activities, type ActivityRow } from '../../Activities';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
@@ -62,6 +63,8 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
       }`,
     }));
 
+  const feedGaps = missingFields(object);
+
   return (
     <>
       <h1>{object.address}</h1>
@@ -80,6 +83,17 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
           <span>{when(object.published_at)}</span>
           <span className="key">Актуально на</span>
           <span>{when(object.actual_at)}</span>
+        </div>
+        {/* Чего не хватает для выгрузки на площадки. Показывается здесь,
+            а не выясняется из отчёта площадки через сутки: пробел видно
+            тому, кто может его закрыть, и тогда, когда он открыл карточку. */}
+        <div className="row" style={{ marginTop: 8 }}>
+          <span className="key">Выгрузка</span>
+          {feedGaps.length === 0 ? (
+            <span className="ok">объявление уйдёт на площадки</span>
+          ) : (
+            <span className="warn">не хватает: {feedGaps.join(', ')}</span>
+          )}
         </div>
         <div className="row" style={{ marginTop: 8 }}>
           <span className="key">Мандат</span>

@@ -25,6 +25,13 @@ const COLUMNS = [
   'rooms', 'area', 'floor', 'floors_total',
   'price_minor', 'currency', 'photos', 'description',
   'published_at', 'actual_at',
+  // Поля для выгрузки на площадки. Они публичны по смыслу: координаты,
+  // серия дома и срок аренды — это то, что площадка показывает в самом
+  // объявлении. Ничего о собственнике, агенте и комиссии здесь нет и быть
+  // не может: такие колонки в этот список не попадают.
+  'latitude', 'longitude', 'region', 'district', 'micro_district',
+  'house_number', 'building_type', 'serie', 'land_area', 'rental_term',
+  'commercial_type', 'room_location', 'parking_type', 'build_year',
 ] as const;
 
 const SELECT = COLUMNS.map((c) => `o.${c}`).join(', ');
@@ -46,6 +53,20 @@ export type CatalogRow = {
   description: string | null;
   published_at: string | null;
   actual_at: string;
+  latitude: number | null;
+  longitude: number | null;
+  region: string | null;
+  district: string | null;
+  micro_district: string | null;
+  house_number: string | null;
+  building_type: string | null;
+  serie: string | null;
+  land_area: number | null;
+  rental_term: string | null;
+  commercial_type: string | null;
+  room_location: string | null;
+  parking_type: string | null;
+  build_year: number | null;
 };
 
 /**
