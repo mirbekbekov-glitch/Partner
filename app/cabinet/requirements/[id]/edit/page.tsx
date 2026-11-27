@@ -3,7 +3,7 @@ import { requirementCard } from '@/lib/db/cabinet';
 import { RequirementForm } from '../../RequirementForm';
 import { updateRequirement } from '../../form-actions';
 
-export const metadata = { title: 'Правка потребности' };
+export const metadata = { title: 'Редактирование потребности' };
 
 export default async function EditRequirementPage({
   params,
@@ -17,7 +17,7 @@ export default async function EditRequirementPage({
 
   return (
     <>
-      <h1>Правка потребности</h1>
+      <h1>Редактирование потребности</h1>
       <div className="card">
         <RequirementForm
           action={updateRequirement}

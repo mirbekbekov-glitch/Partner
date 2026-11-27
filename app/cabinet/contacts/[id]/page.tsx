@@ -120,7 +120,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
 
       {canEdit ? (
         <>
-          <h2>Правка</h2>
+          <h2>Редактирование</h2>
           <div className="card">
             <ContactForm action={updateContact} draft={c as ContactDraft} mode="edit" />
           </div>
@@ -144,7 +144,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
         </>
       ) : (
         <p className="key">
-          Правка и передача доступны тому, кто привёл контакт, и администратору.
+          Редактировать и передать может тот, кто привёл контакт, и администратор.
         </p>
       )}
     </>

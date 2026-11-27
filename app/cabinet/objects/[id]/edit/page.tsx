@@ -4,7 +4,7 @@ import { canEditObject } from '@/lib/db/access';
 import { ObjectForm } from '../../ObjectForm';
 import { updateObject } from '../../form-actions';
 
-export const metadata = { title: 'Правка объекта' };
+export const metadata = { title: 'Редактирование объекта' };
 
 export default async function EditObjectPage({
   params,
@@ -22,7 +22,7 @@ export default async function EditObjectPage({
 
   return (
     <>
-      <h1>Правка объекта</h1>
+      <h1>Редактирование объекта</h1>
       <p className="sub">{object.address}</p>
       <div className="card">
         {/* Без приведения типа. Раньше здесь стояло `as unknown as
