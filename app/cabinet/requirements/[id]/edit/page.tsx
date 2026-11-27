@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { requirementCard } from '@/lib/db/cabinet';
-import { RequirementForm, type RequirementDraft } from '../../RequirementForm';
+import { RequirementForm } from '../../RequirementForm';
 import { updateRequirement } from '../../form-actions';
 
 export const metadata = { title: 'Правка потребности' };
@@ -21,7 +21,7 @@ export default async function EditRequirementPage({
       <div className="card">
         <RequirementForm
           action={updateRequirement}
-          draft={requirement as unknown as RequirementDraft}
+          draft={requirement}
           mode="edit"
         />
       </div>

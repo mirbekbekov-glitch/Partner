@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requirementList, type RequirementListItem } from '@/lib/db/cabinet';
-import { PAGE_SIZE, parseFilters, money, day } from '@/lib/list-params';
+import { PAGE_SIZE, parseFilters, exportHref, money, day } from '@/lib/list-params';
 import { Pager } from '../Pager';
 import { SortTh } from '../SortTh';
 
@@ -46,7 +46,10 @@ export default async function RequirementsList({
     <>
       <div className="head">
         <h1>Потребности</h1>
-        <Link className="btn" href="/cabinet/requirements/new">Новая потребность</Link>
+        <span className="actions">
+          <a className="btn ghostlink" href={exportHref(BASE, f)}>CSV</a>
+          <Link className="btn" href="/cabinet/requirements/new">Новая потребность</Link>
+        </span>
       </div>
       <p className="sub">Всего {count ?? 0}. Клиент виден тем, кому он положен.</p>
 

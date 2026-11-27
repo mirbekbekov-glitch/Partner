@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { contactDuplicates, contactList, type ContactListItem } from '@/lib/db/cabinet';
 import { ROLE_RU } from './ContactForm';
-import { parseFilters } from '@/lib/list-params';
+import { exportHref, parseFilters } from '@/lib/list-params';
 import { Pager } from '../Pager';
 import { SortTh } from '../SortTh';
 
@@ -60,7 +60,10 @@ export default async function ContactsList({
     <>
       <div className="head">
         <h1>Контакты</h1>
-        <Link className="btn" href="/cabinet/contacts/new">Новый контакт</Link>
+        <span className="actions">
+          <a className="btn ghostlink" href={exportHref(BASE, { ...f, role })}>CSV</a>
+          <Link className="btn" href="/cabinet/contacts/new">Новый контакт</Link>
+        </span>
       </div>
       <p className="sub">
         Всего {count ?? 0}. Видны те, кого привели вы, и те, по объектам которых у вас

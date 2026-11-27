@@ -10,8 +10,8 @@ import { Activities, type ActivityRow } from '../../Activities';
 import { TransferForm, type Colleague } from '../../TransferForm';
 import { transferContact } from '../../transfer-actions';
 import { ContactForm, ROLE_RU, type ContactDraft } from '../ContactForm';
-import { Phones, type Phone } from '../Phones';
-import { MergeForm, type DuplicateCandidate } from '../MergeForm';
+import { Phones } from '../Phones';
+import { MergeForm } from '../MergeForm';
 import { Ownerships, type OwnershipRow, type LinkableObject } from '../Ownerships';
 import { updateContact } from '../actions';
 
@@ -47,11 +47,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
 
 
 
-  const c = contact as unknown as {
-    id: string; kind: string; name: string; telegram: string | null;
-    source: string | null; roles: string[] | null; note: string | null;
-    owner_name: string | null; mine: boolean;
-  };
+  const c = contact;
 
   // Править контакт может тот, кто его привёл, и админ. Признак mine сюда
   // приходит из представления; админ правит и чужие, поэтому форму
@@ -73,7 +69,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
 
       <Phones
         contactId={c.id}
-        phones={phones as unknown as Phone[]}
+        phones={phones}
         canEdit={canEdit}
       />
 
@@ -132,7 +128,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
           <MergeForm
             keepId={c.id}
             keepName={c.name}
-            candidates={duplicates as unknown as DuplicateCandidate[]}
+            candidates={duplicates}
           />
 
           <h2>Передача</h2>
