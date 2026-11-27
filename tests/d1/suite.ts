@@ -49,13 +49,14 @@ import { toCsv } from '@/lib/csv';
 import { convert, parseNbkr } from '@/lib/fx';
 import { contactLinks, phoneDigits } from '@/lib/contact-links';
 import { coarseOf, SPACE_TYPES } from '@/lib/space-types';
+import { COMMERCIAL_TYPE, commercialCode } from '@/lib/mhouse';
 import { refreshRates, usdRate } from '@/lib/db/fx';
 import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
   catalogHref, hasAnyFilter, parseCatalogFilters,
 } from '@/lib/catalog-params';
 import { listingSchema } from '@/lib/listing-schema';
-import { placeName, t } from '@/lib/i18n';
+import { LANGS, placeName, spaceName, t } from '@/lib/i18n';
 import { citiesOf, regionOf, regions, zoneMatch, zonesOf } from '@/lib/geo';
 import {
   completeTelegramLink, startTelegramLink, sweepTelegramLinks, unlinkTelegram,
@@ -2784,6 +2785,56 @@ export default {
       withCommercial.includes(forSale.id) === inFeed('flat'));
     check('а в витрине он при этом есть — значит дело в фиде, а не в публикации',
       (await catalogPage({})).items.some((i) => i.id === commercial.id));
+
+    // Склад на витрине подписан складом, а не «коммерческой».
+    //
+    // Точный вид берётся из commercial_type — того самого поля, которое
+    // агент заполняет обязательно ради фида. Второго словаря для этого
+    // нет нарочно: он разошёлся бы с первым.
+    await updateObject(commercial.id, { commercial_type: 'склады' });
+    const warehouse = (await catalogPage({})).items
+      .find((i) => i.id === commercial.id);
+    check('витрина отдаёт вид коммерции', warehouse?.commercial_type === 'склады');
+    check('и показывает его складом',
+      spaceName('ru', warehouse!) === 'склад', spaceName('ru', warehouse!));
+    // На другом языке — своим словом, а не русским: витрина четырёхъязычна,
+    // а значения площадки русские.
+    check('на другом языке — словом этого языка',
+      spaceName('en', warehouse!) === 'warehouse', spaceName('en', warehouse!));
+
+    // Жилья этот слой не касается: у квартиры вид точен сам. И остаётся
+    // точным, даже если вид коммерции в записи заполнен: агент мог
+    // перевести объект из коммерческой в жильё, а поле осталось. Квартира,
+    // подписанная складом, — худшее, что может сделать эта подпись.
+    await updateObject(forSale.id, { commercial_type: 'склады' });
+    const flatShown = (await catalogPage({})).items.find((i) => i.id === forSale.id);
+    check('вид коммерции у квартиры в записи остался',
+      flatShown?.commercial_type === 'склады');
+    check('но квартира остаётся квартирой',
+      spaceName('ru', flatShown!) === 'квартира', spaceName('ru', flatShown!));
+    await updateObject(forSale.id, { commercial_type: null });
+
+    // «Другая коммерческая недвижимость» точнее «коммерческой» не стала:
+    // подменять её выдуманной точностью нельзя.
+    check('неточный вид не подменяется точным',
+      commercialCode('другая коммерческая недвижимость') === null);
+    check('незаполненный — тоже', commercialCode(null) === null);
+    // Значения приходят не только из нашего select'а: разбор чужих
+    // объявлений даёт их как попало. Приведение в JS, а не в SQL: в SQLite
+    // lower() кириллицу не трогает.
+    check('лишние пробелы и регистр узнать вид не мешают',
+      commercialCode('  Склады ') === 'warehouse');
+    // Иначе новое значение в справочнике площадки молча показывалось бы
+    // «коммерческой», и никто бы не заметил.
+    check('весь справочник площадки разобран, кроме «другой»',
+      COMMERCIAL_TYPE.filter((v) => commercialCode(v) === null).length === 1,
+      COMMERCIAL_TYPE.filter((v) => commercialCode(v) === null).join('; '));
+    // Код без подписи вывел бы на карточку сам код: «warehouse» по-русски.
+    check('у каждого вида коммерции есть подпись на всех языках',
+      LANGS.every((l) => COMMERCIAL_TYPE.every((v) => {
+        const code = commercialCode(v);
+        return code === null || t(l).kinds[code] !== undefined;
+      })));
 
     await withdrawObject(commercial.id);
     await updateObject(shown.id, { description: null, photos: [] });

@@ -9,6 +9,8 @@
  * агент своими словами, и машинного перевода тут не будет: цена ошибки в
  * описании недвижимости выше, чем польза от приблизительного текста.
  */
+import { commercialCode } from './mhouse';
+
 export const LANGS = ['ky', 'ru', 'en', 'zh'] as const;
 export type Lang = (typeof LANGS)[number];
 export const DEFAULT_LANG: Lang = 'ru';
@@ -285,7 +287,11 @@ const ru: Dict = {
   pitchStep3: 'Вам приносят варианты', pitchStep3Note: 'Появится позже — позвоним, заявка остаётся в работе',
   themeSwitch: 'Светлая или тёмная тема',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
-           land: 'участок', commercial: 'коммерческая', garage: 'гараж' },
+           land: 'участок', commercial: 'коммерческая', garage: 'гараж',
+           office: 'офис', building: 'здание', retail: 'магазин',
+           warehouse: 'склад', production: 'цех', container: 'торговый контейнер',
+           agriculture: 'сельхозугодье', catering: 'общепит', hotel: 'отель',
+           auto: 'автосервис', beauty: 'салон красоты', medical: 'медцентр' },
 };
 
 const ky: Dict = {
@@ -427,7 +433,11 @@ const ky: Dict = {
   pitchStep3: 'Сизге варианттар келет', pitchStep3Note: 'Кийин пайда болсо — чалабыз, арыз иште калат',
   themeSwitch: 'Жарык же караңгы тема',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
-           land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж' },
+           land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж',
+           office: 'офис', building: 'имарат', retail: 'дүкөн',
+           warehouse: 'кампа', production: 'цех', container: 'соода контейнери',
+           agriculture: 'айыл чарба жери', catering: 'ашхана', hotel: 'мейманкана',
+           auto: 'автосервис', beauty: 'сулуулук салону', medical: 'медайкел' },
 };
 
 const en: Dict = {
@@ -569,7 +579,11 @@ const en: Dict = {
   pitchStep3: 'They bring you options', pitchStep3Note: 'If it appears later, we call: the request stays open',
   themeSwitch: 'Light or dark theme',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
-           land: 'land', commercial: 'commercial', garage: 'garage' },
+           land: 'land', commercial: 'commercial', garage: 'garage',
+           office: 'office', building: 'whole building', retail: 'shop',
+           warehouse: 'warehouse', production: 'workshop', container: 'retail container',
+           agriculture: 'farmland', catering: 'restaurant space', hotel: 'hotel',
+           auto: 'car service', beauty: 'beauty salon', medical: 'medical centre' },
 };
 
 const zh: Dict = {
@@ -710,7 +724,11 @@ const zh: Dict = {
   pitchStep3: '他们为您带来房源', pitchStep3Note: '日后出现也会致电：需求一直有效',
   themeSwitch: '浅色或深色主题',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
-           land: '地块', commercial: '商业用房', garage: '车库' },
+           land: '地块', commercial: '商业用房', garage: '车库',
+           office: '办公室', building: '整栋楼', retail: '商铺',
+           warehouse: '仓库', production: '厂房', container: '商业集装箱',
+           agriculture: '农用地', catering: '餐饮用房', hotel: '酒店',
+           auto: '汽车服务', beauty: '美容院', medical: '医疗中心' },
 };
 
 const DICTS: Record<Lang, Dict> = { ky, ru, en, zh };
@@ -719,6 +737,22 @@ export const t = (lang: Lang): Dict => DICTS[lang] ?? DICTS[DEFAULT_LANG];
 
 /** Тип недвижимости на выбранном языке. */
 export const kindName = (lang: Lang, kind: string) => t(lang).kinds[kind] ?? kind;
+
+/**
+ * Что это за объект словами: склад — складом, а не «коммерческой».
+ *
+ * kind огрублён — на нём держатся фильтр каталога, выгрузка в фид и
+ * порог рынка, и дробить его нельзя. Но «коммерческая» на карточке не
+ * отвечает на вопрос, что именно сдают. Точный вид берётся из
+ * commercial_type, который агент и так заполняет обязательно.
+ *
+ * Жильё этого не касается: там kind уже точен, и лишнего слоя нет.
+ */
+export const spaceName = (
+  lang: Lang,
+  o: { kind: string; commercial_type: string | null },
+) => kindName(lang, (o.kind === 'commercial' && commercialCode(o.commercial_type))
+  || o.kind);
 
 /** Срок последнего подтверждения словами. */
 export function freshWordIn(lang: Lang, days: number): string {

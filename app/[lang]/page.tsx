@@ -12,7 +12,7 @@ import {
 } from '@/lib/catalog-params';
 import { thumbOf } from '@/lib/photo-url';
 import type { Money } from '@/lib/fx';
-import { t, kindName, freshWordIn, LANGS, isLang, type Lang, placeName } from '@/lib/i18n';
+import { t, spaceName, freshWordIn, LANGS, isLang, type Lang, placeName } from '@/lib/i18n';
 import { CatalogHeader } from '../CatalogHeader';
 import { HeroArt } from '../HeroArt';
 import { FindButton } from '../FindButton';
@@ -44,6 +44,8 @@ export async function generateMetadata(
 type Row = {
   id: string;
   kind: string;
+  /** Нужен для подписи вида: склад вместо «коммерческой». */
+  commercial_type: string | null;
   deal_type: 'rent' | 'sale';
   address: string;
   city: string;
@@ -444,7 +446,7 @@ export default async function Catalog({
               const days = daysSince(o.actual_at);
               const fresh = freshWordIn(lang, days);
               const facade = <Facade o={o} alt={d.drawingAlt} />;
-              const kind = kindName(lang, o.kind);
+              const kind = spaceName(lang, o);
               return (
                 <Link className="item" key={o.id} href={`/${lang}/objects/${o.id}`}
                       style={{ '--i': i } as React.CSSProperties}>
