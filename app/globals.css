@@ -754,22 +754,21 @@ main:has(.auth) { max-width: none; padding: 0; }
    для меньшинства (у кого объект на руках), и две залитых кнопки рядом
    превращают первый экран в выбор между ними. Ряд переносится, а кнопки
    не сжимаются: обрезанная подпись действия хуже переноса. */
-/* Блок заявки отделён от страницы подложкой и красной чертой слева.
-   Без неё подпись, кнопки и строка под ними были тремя отдельными
-   вещами на общем фоне и не ловили взгляд как одно целое: человек,
-   пришедший искать, скользил по ним к фильтру. Подложка едва заметна —
-   6% фирменного цвета: отделить блок достаточно, спорить с заголовком
-   и с залитой кнопкой внутри неё нечем. */
-.hero-go { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 10px;
-  margin-top: 18px; padding: 18px 24px 20px; border-left: 3px solid var(--accent);
-  border-radius: 0 var(--r-lg) var(--r-lg) 0;
-  background: color-mix(in srgb, var(--accent) 6%, transparent); }
+/* Блок заявки отделён от страницы одной красной чертой слева. Без неё
+   подпись, кнопки и строка под ними были тремя отдельными вещами на
+   общем фоне и не ловили взгляд как целое: человек, пришедший искать,
+   скользил по ним к фильтру. Черта связывает их в один столбец и
+   ничего при этом не закрашивает — подложка добавляла на кремовую
+   страницу розовый прямоугольник, которому нечем себя оправдать. */
+.hero-go { display: inline-flex; flex-direction: column; align-items: stretch; gap: 10px;
+  margin-top: 18px; padding: 2px 0 18px 20px;
+  border-left: 3px solid var(--accent); border-bottom: 3px solid var(--accent); }
 /* Подпись над развилкой. Эти же слова стояли кнопкой в шапке, рядом с
    «Агентами»: они называли действие, но не показывали, куда нажать.
    Здесь они — заголовок двух кнопок, и связь видна без объяснений.
    Ступенька из знака работает указателем: взгляд идёт по ней вниз, к
    кнопкам. */
-.go-head { display: flex; align-items: center; gap: 11px; margin: 0;
+.go-head { display: flex; align-items: center; gap: 11px; margin: 0; align-self: flex-start;
   font-size: 1.25rem; font-weight: 800; letter-spacing: -.01em; color: var(--accent); }
 /* Ступенька крупнее, чем у списков: здесь она не маркер пункта, а
    указатель — взгляд входит в неё и идёт вниз, к двум кнопкам.
@@ -778,7 +777,7 @@ main:has(.auth) { max-width: none; padding: 0; }
   background: linear-gradient(var(--accent) 0 0) 0 9px / 6px 6px no-repeat,
               linear-gradient(var(--accent) 0 0) 7px 4px / 6px 11px no-repeat,
               linear-gradient(var(--accent) 0 0) 14px 0 / 6px 15px no-repeat; }
-.go-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.go-row { display: flex; flex-wrap: wrap; gap: 12px; align-self: flex-start; }
 /* Тише кнопок и тише строки над ними: это не призыв, а ответ на
    невысказанный вопрос «что со мной будет, если нажму». Такие вещи
    читают после того, как решение уже почти принято. */
