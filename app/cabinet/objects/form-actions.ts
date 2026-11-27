@@ -47,6 +47,34 @@ const photos = (v: FormDataEntryValue | null) =>
     .map((x) => x.trim())
     .filter(Boolean);
 
+
+/**
+ * Поля выгрузки из формы.
+ *
+ * Общие для создания и правки: иначе одно из двух мест однажды отстанет, и
+ * объект, заведённый с координатами, потеряет их при первой же правке.
+ *
+ * Значения списков не проверяются здесь намеренно: в форме это выпадающие
+ * списки, а окончательную проверку делает фид — он просто не возьмёт
+ * значение, которого нет в справочнике площадки.
+ */
+const platformFields = (formData: FormData) => ({
+  latitude: num(formData.get('latitude')),
+  longitude: num(formData.get('longitude')),
+  region: str(formData.get('region')),
+  district: str(formData.get('district')),
+  micro_district: str(formData.get('micro_district')),
+  house_number: str(formData.get('house_number')),
+  building_type: str(formData.get('building_type')),
+  serie: str(formData.get('serie')),
+  land_area: num(formData.get('land_area')),
+  rental_term: str(formData.get('rental_term')),
+  commercial_type: str(formData.get('commercial_type')),
+  room_location: str(formData.get('room_location')),
+  parking_type: str(formData.get('parking_type')),
+  build_year: num(formData.get('build_year')),
+});
+
 export async function createObject(formData: FormData): Promise<FormResult> {
   const price = money(formData.get('price'));
   if (price === null) return { error: 'Укажите цену.' };
@@ -68,6 +96,7 @@ export async function createObject(formData: FormData): Promise<FormResult> {
       floors_total: num(formData.get('floors_total')),
       currency: str(formData.get('currency')) ?? 'USD',
       description: str(formData.get('description')),
+      ...platformFields(formData),
       photos: photos(formData.get('photos')),
       owner_name: str(formData.get('owner_name')),
       owner_phone: str(formData.get('owner_phone')),
@@ -108,6 +137,7 @@ export async function updateObject(formData: FormData): Promise<FormResult> {
     currency: str(formData.get('currency')) ?? 'USD',
     description: str(formData.get('description')),
     photos: photos(formData.get('photos')),
+    ...platformFields(formData),
   }));
 
   if (error) return { error };

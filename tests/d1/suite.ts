@@ -37,6 +37,7 @@ import {
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
+import { mhouseXml } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
 import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
@@ -1627,6 +1628,81 @@ export default {
       FEED_PHONE: '0700 11 22 33', FEED_ORG: 'Liberterra' });
     check('телефон собственника в фид не просочился',
       !(await feedXml('https://liberterra.kg')).includes('555121314'));
+
+    // -----------------------------------------------------------------
+    // Фид MHouse
+    // -----------------------------------------------------------------
+    // У площадки свой формат и свои справочники: значение не из списка
+    // она не примет, а без обязательного поля не опубликует объявление.
+    // Поэтому здесь проверяется не разметка, а отбор: уходит ли наружу
+    // то, что площадка возьмёт, и остаётся ли дома то, что она отклонит.
+
+    setEnv({ ...(env as unknown as Record<string, unknown>),
+      FEED_PHONE: '0700 11 22 33', FEED_ORG: 'Liberterra' });
+
+    const incomplete = await mhouseXml('https://liberterra.kg');
+    check('без координат и серии квартира в фид MHouse не идёт',
+      !incomplete.includes(shown.id));
+
+    // Дозаполняем ровно то, чего требует площадка от квартиры.
+    await updateObject(shown.id, {
+      latitude: 42.819242, longitude: 74.619628,
+      building_type: 'монолитный', serie: 'элитка',
+      rooms: 3, area: 85.27, floor: 8, floors_total: 15,
+    });
+
+    const mhFull = await mhouseXml('https://liberterra.kg');
+    check('заполненная квартира в фид MHouse идёт', mhFull.includes(shown.id));
+    check('регион Бишкека подставлен по справочнику',
+      mhFull.includes('<region>Чуйская область / Бишкек</region>'));
+    check('координаты на месте',
+      mhFull.includes('<latitude>42.819242</latitude>')
+      && mhFull.includes('<longitude>74.619628</longitude>'));
+    check('серия и тип дома на языке площадки',
+      mhFull.includes('<serie>элитка</serie>')
+      && mhFull.includes('<building-type>монолитный</building-type>'));
+    check('контакт MHouse называет имя и роль подающего',
+      mhFull.includes('<owner-type>агент</owner-type>')
+      && mhFull.includes('<name>Liberterra</name>'));
+
+    // Главное правило витрины держится и здесь: фид уходит наружу
+    // навсегда, и собственник в нём невозможен.
+    check('в фиде MHouse нет ни агента, ни собственника, ни его телефона',
+      !mhFull.includes(anna) && !mhFull.includes('Собственник витрины')
+      && !mhFull.includes('555121314'));
+
+    // Значение не из справочника площадка не примет. Пропустить такое
+    // поле — потерять объявление целиком, поэтому оно и не выводится.
+    await updateObject(shown.id, { serie: 'какая-то своя серия' });
+    const bogus = await mhouseXml('https://liberterra.kg');
+    check('выдуманная серия не уходит в фид и уносит объявление с собой',
+      !bogus.includes('какая-то своя серия') && !bogus.includes(shown.id));
+    await updateObject(shown.id, { serie: 'элитка' });
+
+    // Аренда без срока — отказ площадки, и объявление остаётся дома.
+    const rentNoTerm = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Арендная 3',
+      price_minor: 3_500_000, rooms: 1, area: 40, floor: 2, floors_total: 9,
+      latitude: 42.8, longitude: 74.6,
+      building_type: 'панельный', serie: '105 серия',
+      description: 'Сдаётся', photos: ['/photos/a.jpg'],
+    });
+    await createMandate({ object_id: rentNoTerm.id, kind: 'non_exclusive' });
+    await publishObject(rentNoTerm.id);
+    check('аренда без срока в фид MHouse не идёт',
+      !(await mhouseXml('https://liberterra.kg')).includes(rentNoTerm.id));
+
+    await updateObject(rentNoTerm.id, { rental_term: 'на долгий срок' });
+    const withTerm = await mhouseXml('https://liberterra.kg');
+    check('со сроком аренда уходит в фид',
+      withTerm.includes(rentNoTerm.id)
+      && withTerm.includes('<rental-term>на долгий срок</rental-term>'));
+
+    // Без контакта площадка не примет ни одного объявления: фид пустой.
+    setEnv({ ...(env as unknown as Record<string, unknown>), FEED_PHONE: '' });
+    const noAgent = await mhouseXml('https://liberterra.kg');
+    check('без телефона агентства фид MHouse пуст',
+      !noAgent.includes('<offer ') && noAgent.includes('</realty-feed>'));
 
     setEnv(env as unknown as Record<string, unknown>);
 

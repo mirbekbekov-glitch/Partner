@@ -574,11 +574,22 @@ export async function objectCard(id: string) {
     currency: string; photos: string; description: string | null;
     publication_state: string; published_at: string | null; actual_at: string;
     created_by_agent_id: string;
+    // Поля выгрузки: карточка их показывает и форма правит.
+    latitude: number | null; longitude: number | null;
+    region: string | null; district: string | null; micro_district: string | null;
+    house_number: string | null; building_type: string | null; serie: string | null;
+    land_area: number | null; rental_term: string | null;
+    commercial_type: string | null; room_location: string | null;
+    parking_type: string | null; build_year: number | null;
   }>(
     `select o.id, o.kind, o.deal_type, o.address, o.city, o.zone, o.rooms, o.area,
             o.floor, o.floors_total, o.price_minor / 100.0 as price, o.currency,
             o.photos, o.description, o.publication_state, o.published_at,
-            o.actual_at, o.created_by_agent_id
+            o.actual_at, o.created_by_agent_id,
+            o.latitude, o.longitude, o.region, o.district, o.micro_district,
+            o.house_number, o.building_type, o.serie, o.land_area,
+            o.rental_term, o.commercial_type, o.room_location, o.parking_type,
+            o.build_year
        from objects o where o.id = ?`,
     id,
   );

@@ -7,6 +7,7 @@ import {
 import { approvedColleagues } from '@/lib/db/agents';
 import { canEditObject } from '@/lib/db/access';
 import { inFeed } from '@/lib/feed';
+import { missingFields } from '@/lib/mhouse-feed';
 import { Activities, type ActivityRow } from '../../Activities';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
@@ -64,6 +65,8 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
       }`,
     }));
 
+  const feedGaps = missingFields(object);
+
   return (
     <>
       <h1>{object.address}</h1>
@@ -83,15 +86,28 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
           <span className="key">Актуально на</span>
           <span>{when(object.actual_at)}</span>
         </div>
-        {/* Выгрузка на площадки берёт не все виды объектов. Без этой
-            строки агент считает коммерческое объявление размещённым, а
-            оно в файл не попадает вовсе. Условие спрашивается у самой
-            выгрузки, а не повторяет её список видов. */}
+        {/* Выгрузка на площадки. Две разные причины не доехать, и обе
+            должны быть видны тому, кто может их закрыть: вид объекта,
+            который яндексовский фид не берёт, и незаполненные поля, без
+            которых объявление не примет MHouse.
+
+            Вид спрашивается у самой выгрузки, а состав незаполненного — у
+            того же missingFields, которым пользуется фид MHouse.
+            Повторять их списки здесь значило бы однажды написать «не
+            попадает» о том, что уже попадает. */}
+        <div className="row" style={{ marginTop: 8 }}>
+          <span className="key">Выгрузка</span>
+          {feedGaps.length === 0 ? (
+            <span className="ok">объявление уйдёт на площадки</span>
+          ) : (
+            <span className="warn">не хватает: {feedGaps.join(', ')}</span>
+          )}
+        </div>
         {object.publication_state === 'published' && !inFeed(object.kind) ? (
           <p className="warn" style={{ marginTop: 8 }}>
-            В выгрузку на площадки этот объект не попадает: формат для
-            коммерческой недвижимости пока не определён. На сайте он
-            показывается как обычно.
+            В выгрузку на Яндекс этот объект не попадает: формат для
+            коммерческой недвижимости пока не определён. На MHouse и на
+            сайте он показывается как обычно.
           </p>
         ) : null}
         <div className="row" style={{ marginTop: 8 }}>

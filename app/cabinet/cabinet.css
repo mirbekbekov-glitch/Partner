@@ -465,3 +465,25 @@ form.stack.card { max-width: 760px; }
    остальными действиями. Форма своя, потому что действие своё. */
 .hand-over { display: inline-flex; align-items: center; gap: 6px; }
 .hand-over select { font-size: 0.9375rem; padding: 4px 6px; }
+
+/* Заголовок части формы. Поля площадок — отдельный разговор, и без
+   подзаголовка они читались бы как продолжение описания объекта. */
+.form-part {
+  margin: 8px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 0.9375rem;
+}
+.form-part + .key { margin-top: 0; }
+
+/* «Уйдёт на площадки» — такая же плашка, как предупреждение, но зелёная:
+   это ответ на тот же вопрос, и отвечать на него в двух разных формах
+   значит заставлять читать дважды. Кегль тот же, что у .warn и .tag:
+   рядом они стоят в одной строке. */
+.ok {
+  color: var(--ok-fg);
+  background: var(--ok-bg);
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-size: 0.8125rem;
+}
