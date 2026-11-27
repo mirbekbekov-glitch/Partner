@@ -196,6 +196,7 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
         entityType="object"
         entityId={object.id}
         rows={(activities ?? []) as ActivityRow[]}
+        colleagues={(colleagues ?? []) as Colleague[]}
       />
 
       <h2>Создать подбор</h2>

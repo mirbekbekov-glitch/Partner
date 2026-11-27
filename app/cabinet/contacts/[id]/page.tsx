@@ -118,6 +118,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
         entityType="contact"
         entityId={c.id}
         rows={(activities ?? []) as ActivityRow[]}
+        colleagues={(colleagues ?? []) as Colleague[]}
       />
 
       {canEdit ? (

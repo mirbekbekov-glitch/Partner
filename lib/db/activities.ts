@@ -52,6 +52,30 @@ async function checkTarget(type: ActivityRow['entity_type'], id: string): Promis
   if (!hit) throw new NotFound(`Запись, к которой привязана активность, не найдена`);
 }
 
+/**
+ * Агент, на которого можно поставить задачу.
+ *
+ * Только одобренный. Неодобренный в кабинет не войдёт, заблокированный
+ * потерял доступ — задача на любого из них это задача, которую никто не
+ * увидит, и искать потом будут не её, а причину. Отказать на постановке
+ * дешевле.
+ *
+ * Проверка живёт ЗДЕСЬ, а не в форме: agent_id приходит снаружи, и до сих
+ * пор его никто не проверял — параметр просто не был доступен из браузера.
+ * Как только он стал доступен, непроверенное значение означало бы задачу
+ * на кого угодно, включая того, кого выставили за дверь.
+ */
+async function assignable(agentId: string): Promise<{ id: string; full_name: string }> {
+  const hit = await one<{ id: string; full_name: string; status: string }>(
+    'select id, full_name, status from agents where id = ?', agentId,
+  );
+  if (!hit) throw new NotFound('Такого агента нет');
+  if (hit.status !== 'approved') {
+    throw new Invalid('Этот агент не одобрен — задачу он не увидит');
+  }
+  return { id: hit.id, full_name: hit.full_name };
+}
+
 export async function listActivities(
   type: ActivityRow['entity_type'],
   id: string,
@@ -95,6 +119,13 @@ export async function createActivity(input: NewActivity): Promise<ActivityRow> {
     throw new Invalid('У задачи и показа должен быть срок');
   }
 
+  // На коллегу поставить можно — агентство так и работает: «посмотри
+  // объект вместо меня». Но только на одобренного, и значение проверяется,
+  // а не берётся на слово.
+  const owner = input.agent_id && input.agent_id !== agent.id
+    ? (await assignable(input.agent_id)).id
+    : agent.id;
+
   const id = newId();
   const at = now();
 
@@ -103,13 +134,16 @@ export async function createActivity(input: NewActivity): Promise<ActivityRow> {
       `insert into activities (id, kind, entity_type, entity_id, agent_id, body,
                                due_at, done, is_shared, created_at, updated_at)
        values (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-      id, input.kind, input.entity_type, input.entity_id,
-      input.agent_id ?? agent.id,
+      id, input.kind, input.entity_type, input.entity_id, owner,
       (input.body ?? '').trim() || null, input.due_at ?? null,
       flag(input.is_shared ?? false), at, at,
     ),
-    auditStmt('activities', id, 'insert', agent.id,
-      { kind: input.kind, entity_type: input.entity_type }),
+    auditStmt('activities', id, 'insert', agent.id, {
+      kind: input.kind, entity_type: input.entity_type,
+      // Кому поставлена, если не себе: в журнале должно быть видно, что
+      // задачу выдал один, а делает другой.
+      ...(owner === agent.id ? {} : { agent_id: { from: null, to: owner } }),
+    }),
   ]);
 
   const row = await one<ActivityRow>('select * from activities where id = ?', id);
@@ -171,4 +205,55 @@ export async function deleteActivity(id: string): Promise<void> {
     stmt('delete from activities where id = ?', id),
     auditStmt('activities', id, 'delete', agent.id, { kind: before.kind }),
   ]);
+}
+
+/**
+ * Передать задачу коллеге.
+ *
+ * Передаёт тот, на ком она сейчас, или админ — то же правило, что у
+ * закрытия и удаления. Иначе задачу можно спихнуть любому: пришёл, нашёл
+ * чужую запись, переписал владельца.
+ *
+ * ГЛАВНОЕ здесь — напоминание. Оно хранит агента отдельной колонкой, и
+ * при смене владельца задачи оставшееся в очереди напоминание ушло бы
+ * ПРЕЖНЕМУ: он получает «позвоните клиенту» по задаче, которой у него
+ * больше нет, а новый владелец не получает ничего. Поэтому очередь
+ * переписывается тем же батчем, а не отдельным вызовом после.
+ */
+export async function reassignActivity(id: string, toAgentId: string): Promise<ActivityRow> {
+  const agent = await requireAgent();
+
+  const before = await one<ActivityRow>('select * from activities where id = ?', id);
+  if (!before) throw new NotFound('Активность не найдена');
+
+  if (before.agent_id !== agent.id && !(await isAdmin())) {
+    throw new Forbidden('Передать запись может тот, на ком она, или админ');
+  }
+
+  const to = await assignable(toAgentId);
+
+  // Передача себе же — не ошибка, но и не событие: записывать в журнал
+  // нечего, и напоминание трогать незачем.
+  if (to.id === before.agent_id) return before;
+
+  const at = now();
+
+  await batch([
+    stmt('update activities set agent_id = ?, updated_at = ? where id = ?',
+      to.id, at, id),
+    // Напоминание едет за задачей. Только ещё не отправленное: у
+    // отправленного агент — это факт о прошлом, и переписывать его значило
+    // бы подделывать историю.
+    stmt(
+      `update notifications set agent_id = ?
+        where activity_id = ? and status in ('pending', 'sending')`,
+      to.id, id,
+    ),
+    auditStmt('activities', id, 'update', agent.id,
+      { agent_id: { from: before.agent_id, to: to.id } }),
+  ]);
+
+  const row = await one<ActivityRow>('select * from activities where id = ?', id);
+  if (!row) throw new NotFound('Активность не найдена');
+  return row;
 }

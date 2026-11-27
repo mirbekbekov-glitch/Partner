@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { activityFeed, dealCard } from '@/lib/db/cabinet';
-import { Activities, type ActivityRow } from '../../Activities';
+import { approvedColleagues } from '@/lib/db/agents';
+import { Activities, type ActivityRow, type Colleague } from '../../Activities';
 import { money, day } from '@/lib/list-params';
 import { DealActions } from '../DealActions';
 import { DEAL_STATUS_RU } from '../page';
@@ -14,9 +15,10 @@ export default async function DealCard({ params }: { params: Promise<{ id: strin
   // Карточка отдаётся только стороне сделки: предикат стоит в самом
   // запросе, поэтому постороннему приходит «не найдено», а не отказ — так
   // по идентификатору не выясняется, что сделка существует.
-  const [deal, activities] = await Promise.all([
+  const [deal, activities, colleagues] = await Promise.all([
     dealCard(id),
     activityFeed('deal', id),
+    approvedColleagues(),
   ]);
 
   if (!deal) notFound();
@@ -114,7 +116,12 @@ export default async function DealCard({ params }: { params: Promise<{ id: strin
         </div>
       </div>
 
-      <Activities entityType="deal" entityId={d.id} rows={(activities ?? []) as ActivityRow[]} />
+      <Activities
+        entityType="deal"
+        entityId={d.id}
+        rows={(activities ?? []) as ActivityRow[]}
+        colleagues={(colleagues ?? []) as Colleague[]}
+      />
 
       {d.can_act ? (
         <DealActions
