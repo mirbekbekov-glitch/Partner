@@ -636,37 +636,28 @@ main:has(.auth) { max-width: none; padding: 0; }
    взгляд на себя всё время, пока человек читает заголовок и выбирает
    фильтр, — а сказать ей больше нечего, она уже сказала.
 
-   Длина ломаной приведена к единице атрибутом pathLength, поэтому
-   штрих задаётся точно и не зависит от размеров ступеней. Взятая «с
-   запасом» длина прочерчивала линию вчетверо быстрее: невидимый хвост
-   съедал большую часть времени. */
-.hero-art .flight-line { stroke-dasharray: 1; stroke-dashoffset: 1;
-  animation: flight-draw 1.05s cubic-bezier(.3, .7, .3, 1) both; }
-@keyframes flight-draw { to { stroke-dashoffset: 0; } }
+   Плиты встают снизу вверх, одна за другой. Направление движения и
+   есть сообщение: оно доходит раньше, чем человек разберёт рисунок.
+   Задержку каждой плите ставит сама разметка — порядок здесь физический,
+   а не оформительский.
 
-/* Объём проявляется, когда карандаш уже прошёл половину пути: сначала
-   построение, потом конструкция. Поднимается он от пола — на пару
-   пикселей, лишь бы не возникнуть из ниоткуда. */
-.hero-art .flight-fill { transform-box: fill-box; transform-origin: 0% 100%;
-  animation: flight-set .7s cubic-bezier(.2, .8, .2, 1) .5s both; }
-@keyframes flight-set {
-  from { opacity: 0; transform: translateY(10px) scaleY(.94); }
-  to   { opacity: 1; transform: none; }
-}
-/* Стрелка — последней: она говорит «и дальше вверх», а сказать это можно
-   только после того, как марш построен. */
-.hero-art .rise-arrow { animation: arrow-in .5s ease-out 1.15s both; }
-@keyframes arrow-in {
-  from { opacity: 0; transform: translate(-8px, 8px); }
+   Движение одноразовое. Повторяющаяся анимация на первом экране тянет
+   взгляд на себя всё время, пока человек читает заголовок и выбирает
+   фильтр, — а сказать ей больше нечего, она уже сказала.
+
+   Плита выходит из стены: сдвиг влево-вниз и обратно. Двигаются только
+   transform и opacity — кадры считает видеокарта, и на слабом телефоне
+   подъём не дёргается. */
+.hero-art .slab { animation: slab-out .62s cubic-bezier(.2, .85, .25, 1) both; }
+@keyframes slab-out {
+  from { opacity: 0; transform: translate(-26px, 18px); }
   to   { opacity: 1; transform: none; }
 }
 
 /* «Меньше движения» — значит меньше движения: рисунок сразу в конечном
-   виде, без прочерчивания и без проявления. */
+   виде. */
 @media (prefers-reduced-motion: reduce) {
-  .hero-art .flight-line { animation: none; stroke-dasharray: none;
-    stroke-dashoffset: 0; }
-  .hero-art .flight-fill, .hero-art .rise-arrow { animation: none; }
+  .hero-art .slab { animation: none; }
 }
 .hero-art svg { position: absolute; right: 0; top: 0; width: 48%; min-width: 320px;
   /* Не на всю высоту героя: нижние сто пикселей закрыты пультом поиска,
