@@ -78,6 +78,12 @@ import { normalizePhone } from '@/lib/db/normalize';
 import { draftsFromCatalog, parseCsv } from '@/lib/catalog-csv';
 import { importCatalog, IMPORT_SOURCE } from '@/lib/db/catalog-import';
 import { Conflict, Forbidden, Invalid, NotFound } from '@/lib/db/errors';
+import houseKgPage from '../fixtures/house-kg-search.html?raw';
+import houseKgRent from '../fixtures/house-kg-rent.html?raw';
+import {
+  bumpedAt, parsePrices, parseSearchPage, searchUrl, sellerOf, specsOf,
+} from '@/lib/market/house-kg';
+import { markGone, marketSize, saveCards } from '@/lib/db/market';
 
 type Result = { name: string; ok: boolean; note?: string };
 const results: Result[] = [];
@@ -2779,6 +2785,208 @@ export default {
     check('перенос не трогает то, что агент уже правил',
       afterEdit?.address === 'Чүй 120, кв. 5' && afterEdit?.publication_state === 'published',
       JSON.stringify(afterEdit));
+
+
+    // -----------------------------------------------------------------
+    // Индекс рынка: разбор чужой страницы и запись наблюдений
+    // -----------------------------------------------------------------
+    //
+    // Разбор проверяется на СНИМКЕ НАСТОЯЩЕЙ СТРАНИЦЫ house.kg, а не на
+    // выдуманной разметке: парсер чужого сайта, проверенный на HTML,
+    // который мы сами сочинили, проверяет только нашу фантазию.
+
+    const housePage = parseSearchPage(houseKgPage, 'sale');
+
+    check('разбор снимка берёт все карточки и ничего не теряет',
+      housePage.cards.length === 3 && Object.keys(housePage.skipped).length === 0,
+      `карточек ${housePage.cards.length}, отброшено ${JSON.stringify(housePage.skipped)}`);
+
+    const houseFlat = housePage.cards[0];
+    check('цена берётся, а не платёж по ипотеке',
+      houseFlat.priceUsd === 270000 && houseFlat.priceKgs === 23652000,
+      `${houseFlat.priceUsd} $ / ${houseFlat.priceKgs} сом`);
+
+    check('заголовок разобран: комнаты, площадь, этаж из скольких',
+      houseFlat.rooms === 2 && houseFlat.area === 92 && houseFlat.floor === 5 && houseFlat.floorsTotal === 10,
+      JSON.stringify(houseFlat));
+
+    // Та самая карточка, на которой разбор падал молча: цифра из номера
+    // дома «Токомбаева 21/6» приклеивалась к цене.
+    const houseGlued = housePage.cards[2];
+    check('цифра из номера дома не приклеивается к цене',
+      houseGlued.priceKgs === 25935000 && houseGlued.priceUsd === 296062,
+      `${houseGlued.priceUsd} $ / ${houseGlued.priceKgs} сом`);
+
+    check('повторённый город из адреса убран',
+      houseGlued.address === 'Токомбаева 21/6', String(houseGlued.address));
+
+    // Главная проверка о продавце. У этой карточки есть И бейдж
+    // «Собственник», И подпись «От Avangard style». Поверить бейджу
+    // значит набить список для обзвона агентствами.
+    check('бейдж «Собственник» не перевешивает подпись агентства',
+      houseGlued.sellerKind === 'agency' && houseGlued.sellerName === 'Avangard style',
+      `${houseGlued.sellerKind} / ${houseGlued.sellerName}`);
+
+    check('собственник без подписи агентства остаётся собственником',
+      houseFlat.sellerKind === 'owner' && houseFlat.sellerName === null,
+      `${houseFlat.sellerKind} / ${houseFlat.sellerName}`);
+
+    check('сигналы актуальности сняты',
+      houseFlat.views === 196 && houseFlat.favorites === 13 && houseFlat.bumped === true
+      && houseFlat.marketNote === 'Выше рынка на 74.27%',
+      JSON.stringify({ v: houseFlat.views, f: houseFlat.favorites, b: houseFlat.bumped }));
+
+    // Возраст объявления словами. «Позавчера» содержит «вчера» внутри
+    // себя — на этом разбор уже ошибался на целые сутки.
+    const marketBase = Date.UTC(2026, 10, 27, 12, 0, 0);
+    const hoursBack = (label: string) => {
+      const at = bumpedAt(label, marketBase);
+      return at === null ? null : Math.round((marketBase - Date.parse(at)) / 3600_000);
+    };
+    check('«4 часа назад» это четыре часа', hoursBack('4 часа назад') === 4,
+      String(hoursBack('4 часа назад')));
+    check('«позавчера» это двое суток, а не одни',
+      hoursBack('позавчера') === 48, String(hoursBack('позавчера')));
+    check('единица без числа читается как одна: «месяц назад»',
+      hoursBack('месяц назад') === 720, String(hoursBack('месяц назад')));
+    check('непонятный возраст не выдаётся за свежесть',
+      bumpedAt('в прошлом веке', marketBase) === null);
+
+    check('первая страница раздела идёт без номера',
+      searchUrl('kupit-kvartiru', 2) === 'https://www.house.kg/kupit-kvartiru?town=2'
+      && searchUrl('kupit-kvartiru', 2, 3) === 'https://www.house.kg/kupit-kvartiru?town=2&page=3');
+
+    check('подпись агентства без бейджа — это агентство',
+      sellerOf('<div>От Этажи</div>').kind === 'agency');
+    check('ни бейджа, ни подписи — честное «неизвестно»',
+      sellerOf('<div>просто текст</div>').kind === 'unknown');
+
+
+    // --- аренда: одна валюта, обязательный срок, две вёрстки -----------
+    //
+    // Снимок аренды нужен отдельно от снимка продажи: там другая цена
+    // (одна валюта со сроком), там есть посуточные объявления, и там
+    // каждое объявление нарисовано ДВУМЯ карточками. На снимке продажи
+    // ничего этого не видно, и разбор аренды был сломан, пока его не
+    // прогнали по живой странице.
+
+    const rentPage = parseSearchPage(houseKgRent, 'rent');
+
+    check('две вёрстки одного объявления — это одно объявление',
+      rentPage.cards.length === 2 && Object.keys(rentPage.skipped).length === 0,
+      `объявлений ${rentPage.cards.length}, отброшено ${JSON.stringify(rentPage.skipped)}`);
+
+    const monthly = rentPage.cards.find((c) => c.period === 'month');
+    const daily = rentPage.cards.find((c) => c.period === 'day');
+
+    check('месячная аренда берётся в сомах и со сроком',
+      monthly?.priceKgs === 63000 && monthly?.priceUsd === null,
+      JSON.stringify({ kgs: monthly?.priceKgs, usd: monthly?.priceUsd }));
+
+    check('характеристики читаются и из сжатой карточки',
+      monthly?.rooms === 3 && monthly?.area === 60 && monthly?.floorsTotal === 4,
+      JSON.stringify(monthly));
+
+    // Посуточная аренда — другой рынок. 3 800 в сутки и 63 000 в месяц
+    // стоят в одной выдаче рядом; сложив их в одну медиану, получим
+    // число, которого на рынке нет.
+    check('посуточная аренда отличается от месячной',
+      daily?.period === 'day' && daily?.priceKgs === 3800,
+      JSON.stringify({ period: daily?.period, kgs: daily?.priceKgs }));
+
+    // Счётчик фотографий стоит в карточке прямо перед ценой. В сплошном
+    // тексте «30 306 250» выглядит правильно сгруппированным числом, и
+    // цена аренды дома однажды уехала в тридцать раз. Разбор идёт по
+    // узлам разметки: счётчик лежит в своём узле, цена в своём.
+    check('счётчик фотографий не приклеивается к цене',
+      JSON.stringify(parsePrices(
+        '<div><span>30</span><span>306 250 ⃀</span><span>3 496 $</span></div>', 'rent',
+      )) === JSON.stringify({ usd: 3496, kgs: 306250, period: 'month' }),
+      JSON.stringify(parsePrices(
+        '<div><span>30</span><span>306 250 ⃀</span><span>3 496 $</span></div>', 'rent')));
+
+    check('пара валют без срока считается месячной',
+      parsePrices('<div><span>306 250 ⃀</span><span>3 496 $</span></div>', 'rent')?.period
+        === 'month');
+
+    check('сказано про сутки, а срок не распознан — объявление не берётся',
+      parsePrices('<div><span>посуточно</span><span>306 250 ⃀</span><span>3 496 $</span></div>',
+        'rent') === null);
+
+    check('аренда без срока не берётся вовсе',
+      parsePrices('<div>63 000 ⃀</div>', 'rent') === null);
+
+    // Платёж по ипотеке в карточке продажи назван «в мес». У цены
+    // продажи срока не бывает, поэтому числа со сроком здесь не
+    // рассматриваются вовсе — это вторая преграда после проверки курса.
+    check('одинокое число со сроком не становится ценой продажи',
+      parsePrices('<div>167 514 сом в мес</div>', 'sale') === null);
+
+    check('участок: сотки переводятся в метры, а не идут как есть',
+      specsOf('<div>участок, 8 соток</div>').area === 800,
+      String(specsOf('<div>участок, 8 соток</div>').area));
+
+    // --- запись наблюдений -------------------------------------------
+
+    const marketSaved = await saveCards('sale', 'flat', 'Бишкек', housePage.cards, () => null);
+    check('наблюдения заводятся', marketSaved.added === 3 && marketSaved.updated === 0,
+      JSON.stringify(marketSaved));
+
+    const priceRows = async () => (await db.prepare(
+      'select count(*) as n from market_prices').first<{ n: number }>())?.n ?? -1;
+    check('у каждого наблюдения записана первая цена', await priceRows() === 3,
+      String(await priceRows()));
+
+    // Повторный прогон теми же данными не заводит второй копии и не
+    // пишет в историю ни строки: иначе за год на каждое объявление
+    // накопилось бы 365 одинаковых записей.
+    const marketSecond = await saveCards('sale', 'flat', 'Бишкек', housePage.cards, () => null);
+    check('повторный прогон не задваивает объявление',
+      marketSecond.added === 0 && marketSecond.updated === 3, JSON.stringify(marketSecond));
+    check('цена, которая не менялась, в историю не пишется',
+      marketSecond.priceChanged === 0 && await priceRows() === 3, String(await priceRows()));
+
+    const firstSeen = await db.prepare(
+      'select first_seen_at, last_seen_at from market_listings where source_id = ?',
+    ).bind(housePage.cards[0].sourceId).first<{ first_seen_at: string; last_seen_at: string }>();
+
+    // Подешевевшие объявления: ровно тот сигнал, ради которого история и
+    // заведена.
+    const cheaper = housePage.cards.map((c) => ({
+      ...c,
+      priceUsd: (c.priceUsd ?? 0) - 1000,
+      priceKgs: (c.priceKgs ?? 0) - 87000,
+    }));
+    const marketThird = await saveCards('sale', 'flat', 'Бишкек', cheaper, () => null);
+    check('снижение цены попадает в историю',
+      marketThird.priceChanged === 3 && await priceRows() === 6,
+      `${marketThird.priceChanged} изменений, строк ${await priceRows()}`);
+
+    const marketAfter = await db.prepare(
+      'select first_seen_at, price_usd_minor from market_listings where source_id = ?',
+    ).bind(housePage.cards[0].sourceId).first<{ first_seen_at: string; price_usd_minor: number }>();
+    check('дата первой встречи не переписывается',
+      marketAfter?.first_seen_at === firstSeen?.first_seen_at,
+      `${firstSeen?.first_seen_at} → ${marketAfter?.first_seen_at}`);
+    check('новая цена встала на место прежней',
+      marketAfter?.price_usd_minor === ((housePage.cards[0].priceUsd ?? 0) - 1000) * 100,
+      String(marketAfter?.price_usd_minor));
+
+    // Исчезнувшие. Помечаются, а не удаляются: проданное по известной
+    // цене говорит о рынке честнее, чем висящее.
+    const marketFuture = new Date(Date.now() + 60_000).toISOString();
+    const goneCount = await markGone('sale', 'flat', 'Бишкек', marketFuture);
+    check('пропавшие из выдачи помечаются', goneCount === 3, String(goneCount));
+
+    const sizeGone = await marketSize();
+    check('помеченные не считаются живыми',
+      sizeGone.live === 0 && sizeGone.gone === 3, JSON.stringify(sizeGone));
+
+    // Объявление вернулось в выдачу — пометка снимается сама.
+    await saveCards('sale', 'flat', 'Бишкек', housePage.cards, () => null);
+    const sizeBack = await marketSize();
+    check('вернувшееся объявление снова живое',
+      sizeBack.live === 3 && sizeBack.gone === 0, JSON.stringify(sizeBack));
 
     } catch (e) {
       // Падение посреди набора — это тоже результат, и он должен быть виден
