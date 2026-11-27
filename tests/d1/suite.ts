@@ -40,6 +40,8 @@ import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
 import { mhouseXml } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
+import { convert, parseNbkr } from '@/lib/fx';
+import { usdRate } from '@/lib/db/fx';
 import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
   catalogHref, hasAnyFilter, parseCatalogFilters,
@@ -484,6 +486,56 @@ export default {
     check('а в обратном порядке — позже',
       desc.indexOf('Яковлев Клиент') < desc.indexOf('абрамов Клиент'),
       `порядок: ${desc.join(' | ')}`);
+
+    // -----------------------------------------------------------------
+    // Курс Нацбанка: разбор ответа
+    // -----------------------------------------------------------------
+    // Ответ взят с www.nbkr.kg/XML/daily.xml как есть, вместе с
+    // объявлением кодировки и запятой в числе.
+    const nbkr = `<?xml version="1.0" encoding="windows-1251" ?>
+<CurrencyRates Name="Daily Exchange Rates" Date="28.11.2026">
+<Currency ISOCode="USD">
+<Nominal>1</Nominal>
+<Value>87,4500</Value>
+</Currency>
+<Currency ISOCode="KZT">
+<Nominal>100</Nominal>
+<Value>19,0900</Value>
+</Currency>
+</CurrencyRates>`;
+
+    const snap = parseNbkr(nbkr);
+    check('курс разобран', Boolean(snap));
+    check('дата приведена к ISO', snap?.asOf === '2026-11-28', String(snap?.asOf));
+
+    // ГЛАВНОЕ. Разделитель у Нацбанка — ЗАПЯТАЯ, и parseFloat('87,4500')
+    // молча возвращает 87. Курс занизился бы в сто раз, цены в сомах
+    // вышли бы втрое меньше правды, и поймать это можно только глазами.
+    const usd = snap?.rates.find((r) => r.code === 'USD');
+    check('запятая прочитана как десятичный разделитель',
+      usd?.somPerUnit === 87.45, String(usd?.somPerUnit));
+
+    // Значение относится к Nominal единицам, а не к одной.
+    const kzt = snap?.rates.find((r) => r.code === 'KZT');
+    check('номинал учтён: 100 тенге по 19,09 — это 0,1909 за тенге',
+      Math.abs((kzt?.somPerUnit ?? 0) - 0.1909) < 1e-9, String(kzt?.somPerUnit));
+
+    check('мусор вместо ответа — пусто, а не ноль', parseNbkr('не xml') === null);
+    check('ответ без даты не принимается',
+      parseNbkr('<CurrencyRates><Currency ISOCode="USD"><Nominal>1</Nominal>'
+        + '<Value>87,45</Value></Currency></CurrencyRates>') === null);
+
+    // Пересчёт.
+    check('доллары в сомы', convert(100, 'USD', 'KGS', 87.45) === 8745);
+    check('сомы в доллары',
+      Math.abs((convert(8745, 'KGS', 'USD', 87.45) ?? 0) - 100) < 1e-9);
+    check('своя валюта возвращается как есть', convert(100, 'USD', 'USD', 87.45) === 100);
+    // Без курса пересчёта нет. Это не «примерно столько» — это неправда.
+    check('без курса пересчёта нет', convert(100, 'USD', 'KGS', null) === null);
+    check('нулевой курс не принимается', convert(100, 'USD', 'KGS', 0) === null);
+    check('третья валюта без курса — пусто', convert(100, 'EUR', 'KGS', 87.45) === null);
+
+    check('курса в пустой базе нет', (await usdRate()) === null);
 
     // -----------------------------------------------------------------
     // Выгрузка в CSV: файл не должен исполняться в Excel

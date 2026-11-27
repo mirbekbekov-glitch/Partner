@@ -39,6 +39,7 @@ export default {
     // должно говорить, что он делает.
     await run('/api/cron/reminders', 'напоминания', secret, env, ctx);
     await run('/api/cron/catalog-import', 'перенос каталога', secret, env, ctx);
+    await run('/api/cron/fx', 'курс Нацбанка', secret, env, ctx);
   },
 };
 
