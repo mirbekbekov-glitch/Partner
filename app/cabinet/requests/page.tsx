@@ -79,7 +79,7 @@ export default async function Requests({
       requestFeed(tab as 'open', f.page),
       requestCounts(),
     ]);
-    rows = listed.rows as unknown as Row[];
+    rows = listed.rows;
     total = listed.total;
     overdue = counts.overdue;
     free = counts.free;

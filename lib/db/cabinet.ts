@@ -35,12 +35,14 @@ type Params = (string | number)[];
  * запросах считаются вручную, и ещё два сдвинули бы всю нумерацию. Оба
  * значения целые и обрезаны по границам, подставить через них нечего.
  *
- * Верхняя граница размера страницы — 200: столько же, сколько брал прежний
- * жёсткий предел. Она защищает не от злого умысла, а от случайного
- * ?page_size=100000 в адресе.
+ * Верхняя граница размера страницы — 5000. Столько берёт выгрузка в CSV:
+ * файл должен содержать весь список, а не его первую страницу. Страницы
+ * кабинета просят двадцать, и граница защищает не от злого умысла, а от
+ * случайного большого числа в адресе: размер приходит из кода, а не из
+ * строки запроса.
  */
 function limitOffset(page?: number | null, perPage?: number | null) {
-  const size = Math.min(Math.max(Math.trunc(perPage ?? PAGE_SIZE) || PAGE_SIZE, 1), 200);
+  const size = Math.min(Math.max(Math.trunc(perPage ?? PAGE_SIZE) || PAGE_SIZE, 1), 5000);
   const p = Math.min(Math.max(Math.trunc(page ?? 1) || 1, 1), 100_000);
   return `limit ${size} offset ${(p - 1) * size}`;
 }
@@ -106,6 +108,7 @@ export async function contactList(
   dir?: 'asc' | 'desc',
   page?: number | null,
   role?: string | null,
+  perPage?: number | null,
 ): Promise<Page<ContactListItem>> {
   const me = await asker();
   const visible = contactVisible('c', me.id, me.admin);
@@ -151,7 +154,7 @@ export async function contactList(
         objects: 'objects_count',
         requirements: 'requirements_count',
         source: 'c.source',
-      }, 'c.created_at desc', sort, dir)} ${limitOffset(page)}`,
+      }, 'c.created_at desc', sort, dir)} ${limitOffset(page, perPage)}`,
     ...params,
   );
 
@@ -411,13 +414,19 @@ export async function contactPhoneList(contactId: string) {
   const me = await asker();
   const visible = contactVisible('c', me.id, me.admin);
 
-  return all<{ id: string; phone: string; label: string | null; is_primary: number }>(
+  const rows = await all<{
+    id: string; phone: string; label: string | null; is_primary: number;
+  }>(
     `select cp.id, cp.phone, cp.label, cp.is_primary
        from contact_phones cp join contacts c on c.id = cp.contact_id
       where cp.contact_id = ?2 and ${visible.sql}
       order by cp.is_primary desc, cp.created_at`,
     me.id, contactId,
   );
+
+  // 0 и 1 превращаются в признак здесь, как и в остальных запросах: в
+  // браузер должно приходить то, что страница объявляет типом.
+  return rows.map((r) => ({ ...r, is_primary: r.is_primary === 1 }));
 }
 
 /** Пара дубликатов для конкретной записи. */

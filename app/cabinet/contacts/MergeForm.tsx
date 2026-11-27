@@ -6,7 +6,9 @@ import { mergeContacts, type MergeResult } from './actions';
 export type DuplicateCandidate = {
   other_id: string;
   other_name: string;
-  other_phones: number;
+  /** Сами номера через запятую, а не их число: выбирая, какую запись
+      оставить, смотрят на номера. */
+  other_phones: string | null;
   other_requirements: number;
 };
 
@@ -72,7 +74,8 @@ export function MergeForm({
           <span>
             <strong>{c.other_name}</strong>{' '}
             <span className="key">
-              телефонов {c.other_phones}, потребностей {c.other_requirements}
+              {c.other_phones ? `телефоны ${c.other_phones}` : 'телефонов нет'}
+              , потребностей {c.other_requirements}
             </span>
           </span>
           <button type="submit" disabled={pending} className="ghost">

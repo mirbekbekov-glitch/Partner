@@ -23,17 +23,7 @@ export default async function DealCard({ params }: { params: Promise<{ id: strin
 
   if (!deal) notFound();
 
-  const d = deal as unknown as {
-    id: string; status: string; created_at: string; closed_at: string | null;
-    final_price: number | null; failure_reason: string | null;
-    object_id: string; requirement_id: string; match_id: string; mandate_id: string;
-    address: string; deal_type: string; zone: string | null; rooms: number | null;
-    object_price: number; currency: string;
-    listing_agent_name: string | null; closing_agent_name: string | null;
-    commission_total: number | null; listing_share: number | null;
-    closing_share: number | null; is_indicative: boolean;
-    client_name: string | null; owners: string | null; can_act: boolean;
-  };
+  const d = deal;
 
   return (
     <>
