@@ -8,13 +8,8 @@ import {
   type ActivityResult,
 } from './activity-actions';
 
-export const KIND_RU: Record<string, string> = {
-  call: 'звонок',
-  showing: 'показ',
-  task: 'задача',
-  note: 'заметка',
-  message: 'сообщение',
-};
+export { KIND_RU } from '@/lib/activity-kinds';
+import { KIND_RU } from '@/lib/activity-kinds';
 
 export type ActivityRow = {
   id: string;

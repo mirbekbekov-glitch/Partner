@@ -303,6 +303,21 @@ form.stack.card { max-width: 760px; }
   .tbl td[data-l] .tbl-sub::before { content: " · "; }
 }
 
+/* ── Сводки на главной ───────────────────────────────────── */
+/* Три списка под плитками: задачи, новые заявки, последние действия.
+   Это выжимка, а не список: пять строк, дальше ссылка в раздел. */
+.cab-digest { margin-top: 4px; }
+.cab-digest .head { margin-bottom: 10px; }
+.cab-digest h2 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -.01em; }
+.digest { list-style: none; margin: 0; padding: 0; display: flex;
+  flex-direction: column; gap: 10px; }
+.digest > li { display: flex; flex-direction: column; gap: 3px; }
+.digest > li + li { border-top: 1px solid var(--line); padding-top: 10px; }
+.digest-main { font-size: 14px; line-height: 1.45; }
+/* Текст записи приписан к её предмету той же строкой, но тише: предмет —
+   то, по чему строку узнают, а текст уточняет. */
+.digest-main .key { font-size: 13px; }
+
 /* ── Полоса фильтров ─────────────────────────────────────── */
 /* Отдельная панель, а не линия под полями: над таблицей линия читается
    как её же граница. */

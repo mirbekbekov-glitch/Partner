@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { contactDuplicates, contactList, type ContactListItem } from '@/lib/db/cabinet';
-import { ROLE_RU } from './ContactForm';
+import { ROLE_RU } from '@/lib/contact-roles';
 import { parseFilters } from '@/lib/list-params';
 import { SortTh } from '../SortTh';
 

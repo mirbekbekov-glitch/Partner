@@ -1042,6 +1042,43 @@ export async function myActivities(): Promise<ActivityItem[]> {
   return rows.map(toActivity);
 }
 
+/**
+ * Последние записи агента — для главной кабинета.
+ *
+ * Это лента ТОГО, ЧТО УЖЕ СЛУЧИЛОСЬ: закрытые записи плюс заметки и
+ * сообщения, которые не закрывают вовсе. Незакрытые задачи и показы сюда
+ * не попадают намеренно — они стоят выше, в списке дел, и в ленте
+ * повторялись бы строка в строку.
+ *
+ * Порядок по тому, когда запись закрыли или завели, а не по сроку:
+ * «сегодня закрыл показ» важнее, чем «когда-то назначил звонок».
+ *
+ * Только свои: чужие активности видит карточка сущности, и мешать их в
+ * личную ленту значило бы показывать на главной чужую работу.
+ */
+export async function recentActivity(limit = 6): Promise<ActivityItem[]> {
+  const me = await asker();
+  const at = new Date().toISOString();
+
+  const rows = await all<Parameters<typeof toActivity>[0]>(
+    `select a.id, a.kind, a.entity_type, a.entity_id, a.body, a.due_at,
+            a.done, a.done_at, a.is_shared, a.created_at, a.agent_id,
+            ag.full_name as agent_name,
+            1 as mine,
+            (a.done = 0 and a.due_at is not null and a.due_at < ?2) as overdue,
+            ${ENTITY_TITLE} as entity_title
+       from activities a
+       left join agents ag on ag.id = a.agent_id
+      where a.agent_id = ?1
+        and (a.done = 1 or a.kind in ('note', 'message'))
+      order by coalesce(a.done_at, a.updated_at, a.created_at) desc
+      limit ?3`,
+    me.id, at, limit,
+  );
+
+  return rows.map(toActivity);
+}
+
 // ---------------------------------------------------------------------------
 // Счётчики для главной кабинета
 // ---------------------------------------------------------------------------

@@ -4,12 +4,8 @@ import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { lookupByPhone, type ContactResult, type LookupResult } from './actions';
 
-export const ROLE_RU: Record<string, string> = {
-  owner: 'собственник',
-  landlord: 'арендодатель',
-  buyer: 'покупатель',
-  tenant: 'арендатор',
-};
+export { ROLE_RU } from '@/lib/contact-roles';
+import { ROLE_RU } from '@/lib/contact-roles';
 
 export type ContactDraft = {
   id?: string;

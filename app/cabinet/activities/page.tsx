@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { myActivities, myReminders } from '@/lib/db/cabinet';
-import { ActivityRowView, KIND_RU, type ActivityRow } from '../Activities';
+import { ActivityRowView, type ActivityRow } from '../Activities';
+import { KIND_RU } from '@/lib/activity-kinds';
 
 export const metadata = { title: 'Задачи' };
 
