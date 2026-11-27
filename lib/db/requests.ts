@@ -3,7 +3,7 @@ import { all, batch, flag, newId, now, one, run, stmt } from './sql';
 import { auditStmt } from './audit';
 import { isAdmin, requireAgent } from './session';
 import { normalizeName, normalizePhone } from './normalize';
-import { coarseOf, isSpaceType } from '../space-types';
+import { coarseOf, isSpaceType, termRange } from '../space-types';
 import { BudgetTooLow, Conflict, Forbidden, Invalid, NotFound } from './errors';
 import { priceFloor } from './catalog';
 import { fromMinor } from './money';
@@ -136,14 +136,11 @@ export async function submitRequest(input: NewRequest): Promise<string> {
 
   // Срок аренды в днях. У покупки срока нет — и если он пришёл, это
   // мусор из формы, а не намерение человека.
-  const isRent = deal === 'rent';
-  const day = (v: number | null | undefined) =>
-    isRent && v && v > 0 && v <= 3650 ? Math.trunc(v) : null;
-  let termMin = day(input.term_days_min);
-  let termMax = day(input.term_days_max);
-  // Перепутанные местами границы — обычная опечатка, а не повод терять
-  // заявку: меняем местами молча.
-  if (termMin && termMax && termMin > termMax) [termMin, termMax] = [termMax, termMin];
+  // Приведение общее с объектами: правила срока должны быть одни, иначе
+  // заявка «от 180 до 30» починилась бы, а объект с теми же числами нет.
+  const [termMin, termMax] = termRange(
+    deal === 'rent', input.term_days_min, input.term_days_max,
+  );
 
   const currency = (input.budget_currency ?? 'USD').toUpperCase();
   const budget = input.budget_minor && input.budget_minor > 0 ? input.budget_minor : null;

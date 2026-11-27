@@ -49,7 +49,9 @@ import { toCsv } from '@/lib/csv';
 import { convert, parseNbkr } from '@/lib/fx';
 import { contactLinks, phoneDigits } from '@/lib/contact-links';
 import { coarseOf, isSpaceType, OBJECT_TYPES, SPACE_TYPES } from '@/lib/space-types';
-import { COMMERCIAL_TYPE, commercialCode, mhouseCommercial } from '@/lib/mhouse';
+import {
+  COMMERCIAL_TYPE, RENTAL_TERM, commercialCode, mhouseCommercial, mhouseTerm,
+} from '@/lib/mhouse';
 import { refreshRates, usdRate } from '@/lib/db/fx';
 import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
@@ -2925,6 +2927,147 @@ export default {
         .map((type) => `${l}:${type.code}`).join(',')).join(' '));
 
     await withdrawObject(legacy.id);
+
+    // -----------------------------------------------------------------
+    // Посуточно: отдельный раздел витрины, а не третий вид сделки
+    // -----------------------------------------------------------------
+    // Квартира сдаётся и на ночь, и на год — это ОДИН объект, и он
+    // обязан быть в обеих выдачах. Прятать его из одной ради красоты
+    // разделения значило бы врать о товаре.
+    const bothWays = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Суточная 1', zone: 'Суточный',
+      price_minor: 250_000, rooms: 1, term_days_min: 1, term_days_max: 365,
+    });
+    await createMandate({ object_id: bothWays.id, kind: 'non_exclusive' });
+    await publishObject(bothWays.id);
+
+    // Хостел и рабочее место в коворкинге — тот же раздел: так ими и
+    // пользуются.
+    const hostel = await createObject({
+      kind: 'commercial', subkind: 'hotel', deal_type: 'rent',
+      address: 'Хостельная 2', price_minor: 80_000, zone: 'Суточный',
+      term_days_min: 1, term_days_max: 30,
+    });
+    await createMandate({ object_id: hostel.id, kind: 'non_exclusive' });
+    await publishObject(hostel.id);
+
+    const longOnly = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Годовая 3', zone: 'Суточный',
+      price_minor: 400_000, rooms: 2, term_days_min: 365,
+    });
+    await createMandate({ object_id: longOnly.id, kind: 'non_exclusive' });
+    await publishObject(longOnly.id);
+
+    const dailyIds = (await catalogPage({ deal: 'daily', pageSize: 100 })).items
+      .map((i) => i.id);
+    const rentIds = (await catalogPage({ deal: 'rent', pageSize: 100 })).items
+      .map((i) => i.id);
+
+    check('посуточная выдача берёт объект с коротким сроком',
+      dailyIds.includes(bothWays.id));
+    check('и хостел', dailyIds.includes(hostel.id));
+    check('годовая аренда в посуточную не попадает', !dailyIds.includes(longOnly.id));
+    check('а в обычную попадает', rentIds.includes(longOnly.id));
+    // Тот же объект в обеих — не ошибка отбора, а правда о нём.
+    check('сдающийся и так и так — в обеих выдачах', rentIds.includes(bothWays.id));
+    // Хостел сдаётся только до месяца: в долгой аренде его быть не должно.
+    check('только суточное в обычную аренду не попадает', !rentIds.includes(hostel.id));
+    // Продажа не попадает никуда из аренды, иначе раздел терял бы смысл.
+    check('продажа в посуточную не попадает', !dailyIds.includes(forSale.id));
+
+    // Объекты, заведённые до появления срока, остаются в обычной аренде:
+    // срок у них неизвестен, и прятать их нельзя.
+    const noTerm = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Бессрочная 4',
+      price_minor: 300_000, rooms: 1,
+    });
+    await createMandate({ object_id: noTerm.id, kind: 'non_exclusive' });
+    await publishObject(noTerm.id);
+    const rent2 = (await catalogPage({ deal: 'rent', pageSize: 100 })).items
+      .map((i) => i.id);
+    check('объект без срока остаётся в обычной аренде', rent2.includes(noTerm.id));
+    check('и в посуточную не попадает',
+      !(await catalogPage({ deal: 'daily', pageSize: 100 })).items
+        .some((i) => i.id === noTerm.id));
+
+    // Галочка «и краткосрочную тоже» в складке «ещё»: человеку, который
+    // снимет что угодно, хостел показать надо, а по умолчанию — нет.
+    const anyTerm = (await catalogPage({ deal: 'rent', term: 'any', pageSize: 100 }))
+      .items.map((i) => i.id);
+    check('с галочкой хостел появляется в аренде', anyTerm.includes(hostel.id));
+    check('и годовая аренда никуда не делась', anyTerm.includes(longOnly.id));
+    check('а продажа не подмешивается', !anyTerm.includes(forSale.id));
+    // Галочка живёт только в «Снять»: в посуточной она означала бы то,
+    // что уже выбрано вкладкой, и молча расширяла бы выдачу.
+    check('в посуточной галочка ничего не меняет',
+      (await catalogPage({ deal: 'daily', term: 'any', pageSize: 100 }))
+        .items.length === dailyIds.length);
+    // Разбор ссылки: галочка переносится только во вкладке «Снять».
+    check('ссылка несёт галочку из «Снять»',
+      catalogHref('ru', { ...parseCatalogFilters({ deal: 'rent', term: 'any' }) }, 1)
+        .includes('term=any'));
+    check('а из посуточной не несёт',
+      !catalogHref('ru', { ...parseCatalogFilters({ deal: 'daily', term: 'any' }) }, 1)
+        .includes('term=any'));
+
+    // Счётчик у района считает ТЕМ ЖЕ условием, что и выдача: иначе он
+    // обещал бы объявления, которых в выдаче нет. В районе «Суточный»
+    // три объявления: одно и туда и туда, одно только суточное, одно
+    // только годовое, — и числа у вкладок обязаны разойтись.
+    const zoneOf = async (deal: 'daily' | 'rent', term?: 'any' | null) =>
+      (await catalogZoneCounts(deal, null, null, term ?? null))
+        .find((z) => z.zone === 'Суточный')?.n ?? 0;
+    check('счётчик района в посуточной считает только суточные',
+      (await zoneOf('daily')) === 2, String(await zoneOf('daily')));
+    check('а в обычной аренде — только долгие',
+      (await zoneOf('rent')) === 2, String(await zoneOf('rent')));
+    check('с галочкой — все три',
+      (await zoneOf('rent', 'any')) === 3, String(await zoneOf('rent', 'any')));
+
+    // Перепутанные границы — опечатка, а не повод терять объявление.
+    const swappedTerm = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Перепутанная 5',
+      price_minor: 200_000, term_days_min: 180, term_days_max: 3,
+    });
+    check('перепутанные границы срока меняются местами',
+      swappedTerm.term_days_min === 3 && swappedTerm.term_days_max === 180,
+      `${swappedTerm.term_days_min}–${swappedTerm.term_days_max}`);
+
+    // У продажи срока не бывает: пришёл — значит мусор из формы.
+    const soldWithTerm = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Продажная 6',
+      price_minor: 5_000_000, term_days_min: 30, term_days_max: 90,
+    });
+    check('у продажи срок не сохраняется',
+      soldWithTerm.term_days_min === null && soldWithTerm.term_days_max === null);
+
+    // Перевод в продажу снимает срок: «сдаётся от месяца» у продающегося
+    // объекта — мусор от прежнего намерения.
+    const turned = await updateObject(bothWays.id, { deal_type: 'sale' });
+    check('перевод в продажу снимает срок',
+      turned.term_days_min === null && turned.term_days_max === null);
+    await updateObject(bothWays.id, {
+      deal_type: 'rent', term_days_min: 1, term_days_max: 365,
+    });
+
+    // Слово для площадки выводится из дней — тем же приёмом, что вид
+    // коммерции. Отдельного поля для него нет.
+    check('короткий срок уезжает «посуточно»', mhouseTerm(1, 30) === 'посуточно');
+    check('средний — «помесячно»', mhouseTerm(30, 90) === 'помесячно');
+    check('годовой — «на долгий срок»', mhouseTerm(365, null) === 'на долгий срок');
+    check('без срока выводить нечего', mhouseTerm(null, null) === null);
+    check('каждое выведенное слово есть в справочнике площадки',
+      ([[1, 30], [30, 90], [90, 180], [365, null]] as [number, number | null][])
+        .every(([lo, hi]) => {
+          const word = mhouseTerm(lo, hi);
+          return word !== null
+            && RENTAL_TERM.includes(word as (typeof RENTAL_TERM)[number]);
+        }));
+
+    await withdrawObject(bothWays.id);
+    await withdrawObject(hostel.id);
+    await withdrawObject(longOnly.id);
+    await withdrawObject(noTerm.id);
     await withdrawObject(commercial.id);
     await updateObject(shown.id, { description: null, photos: [] });
 

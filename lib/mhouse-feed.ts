@@ -21,7 +21,8 @@ import { catalogPage, type CatalogItem } from './db/catalog';
 import { normalizePhone } from './db/normalize';
 import {
   BUILDING_TYPE, CATEGORY, COMMERCIAL_TYPE, DEAL, DISTRICT, PARKING_TYPE,
-  REGION, RENTAL_TERM, ROOM_LOCATION, SERIE, fromList, mhouseCommercial, regionOf,
+  REGION, RENTAL_TERM, ROOM_LOCATION, SERIE, fromList, mhouseCommercial,
+  mhouseTerm, regionOf,
 } from './mhouse';
 
 /** Больше этого за один запрос не собираем: Worker не резиновый. */
@@ -102,6 +103,9 @@ export type FeedCandidate = {
   kind: string;
   /** Наш точный вид. Значение для справочника площадки выводится из него. */
   subkind?: string | null;
+  /** Наш срок аренды в днях. Слово площадки выводится из него. */
+  term_days_min?: number | null;
+  term_days_max?: number | null;
   deal_type: 'rent' | 'sale';
   city: string;
   description: string | null;
@@ -144,6 +148,12 @@ function commercialFor(item: FeedCandidate): string | null {
   return mhouseCommercial(item.subkind) ?? item.commercial_type;
 }
 
+/** Срок для площадки: выведенный из наших дней или прежний. Та же логика. */
+function termFor(item: FeedCandidate): string | null {
+  return mhouseTerm(item.term_days_min ?? null, item.term_days_max ?? null)
+    ?? item.rental_term;
+}
+
 export function missingFields(item: FeedCandidate): string[] {
   const miss: string[] = [];
   const category = CATEGORY[item.kind];
@@ -153,7 +163,7 @@ export function missingFields(item: FeedCandidate): string[] {
   if (!regionOf(item.city, item.region)) miss.push('регион');
   if (!item.description) miss.push('описание');
   if (item.photos.length === 0) miss.push('фото');
-  if (item.deal_type === 'rent' && !fromList(RENTAL_TERM, item.rental_term)) {
+  if (item.deal_type === 'rent' && !fromList(RENTAL_TERM, termFor(item))) {
     miss.push('срок аренды');
   }
 
@@ -234,7 +244,7 @@ function offer(item: CatalogItem, agent: string, origin: string): string {
     + `      <value>${item.price}</value>\n`
     + `      <currency>${esc(item.currency)}</currency>\n`
     + '    </price>\n'
-    + tag('rental-term', fromList(RENTAL_TERM, item.rental_term))
+    + tag('rental-term', fromList(RENTAL_TERM, termFor(item)))
     + tag('rooms', roomsValue(item.rooms))
     + tag('square', item.area)
     + tag('land-square', item.land_area)

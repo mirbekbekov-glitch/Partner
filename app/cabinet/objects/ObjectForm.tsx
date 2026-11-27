@@ -9,8 +9,7 @@ import { MapPick } from './MapPick';
 import { Suggest } from '../../Suggest';
 import { citiesOf, zonesOf } from '@/lib/geo';
 import {
-  BUILDING_TYPE, PARKING_TYPE, REGION,
-  RENTAL_TERM, ROOM_LOCATION, SERIE,
+  BUILDING_TYPE, PARKING_TYPE, REGION, ROOM_LOCATION, SERIE,
 } from '@/lib/mhouse';
 import { OBJECT_TYPES } from '@/lib/space-types';
 
@@ -18,6 +17,8 @@ export type ObjectDraft = {
   id?: string;
   kind: string;
   subkind?: string | null;
+  term_days_min?: number | null;
+  term_days_max?: number | null;
   deal_type: string;
   address: string;
   city: string;
@@ -98,6 +99,25 @@ const SUBKINDS: [string, string][] = [
   ['agriculture', 'сельское хозяйство'],
 ];
 
+/**
+ * Срок аренды: вопрос к агенту и диапазон дней за ним.
+ *
+ * Раньше здесь спрашивался срок словами справочника площадки:
+ * «посуточно», «помесячно», «на долгий срок». Отбирать по ним нельзя —
+ * это чужой словарь, — а посуточная аренда стала отдельным разделом
+ * витрины: так сдают квартиры, хостелы и рабочие места в коворкинге.
+ *
+ * Поэтому спрашиваем своё, в днях, и из дней выводим слово для площадки.
+ * Диапазоном, а не одним числом: «от трёх дней до месяца» — настоящее
+ * условие хозяина, а «посуточно» — только его пересказ.
+ */
+const TERMS: [string, string, number, number | null][] = [
+  ['daily',   'посуточно (от 1 дня)',        1,   30],
+  ['short',   'на месяц-другой (1–3 мес.)',  30,  90],
+  ['months6', 'на полгода (3–6 мес.)',       90,  180],
+  ['year',    'на год и дольше',             365, null],
+];
+
 const KINDS: [string, string][] = [
   ['flat', 'квартира'],
   ['room', 'комната'],
@@ -107,6 +127,19 @@ const KINDS: [string, string][] = [
   ['commercial', 'коммерческая'],
   ['garage', 'гараж'],
 ];
+
+/**
+ * Какой пресет показать на правке.
+ *
+ * Дни главные, пресет — подпись к ним. Объект, у которого дни не совпали
+ * ни с одним пресетом (их могли проставить иначе), показывается как «не
+ * указан» — и это честнее, чем выбрать похожий и молча переписать срок
+ * при первом сохранении.
+ */
+function termCode(min: number | null, max: number | null): string {
+  const found = TERMS.find(([, , lo, hi]) => lo === min && hi === max);
+  return found ? found[0] : '';
+}
 
 export function ObjectForm({
   action,
@@ -362,8 +395,21 @@ export function ObjectForm({
         ) : null}
 
         {dealType === 'rent' ? (
-          <Pick name="rental_term" label="Срок аренды" values={RENTAL_TERM}
-                value={draft?.rental_term} hint="Без него аренду не опубликуют." />
+          <div className="field">
+            <label className="key" htmlFor="term">Срок аренды</label>
+            <select id="term" name="term"
+                    defaultValue={termCode(draft?.term_days_min ?? null,
+                                           draft?.term_days_max ?? null)}>
+              <option value="">не указан</option>
+              {TERMS.map(([code, title]) => (
+                <option key={code} value={code}>{title}</option>
+              ))}
+            </select>
+            <p className="key">
+              От срока зависит раздел витрины: короткий — «Посуточно».
+              Без него площадка аренду не опубликует.
+            </p>
+          </div>
         ) : null}
 
         <div className="field s1">

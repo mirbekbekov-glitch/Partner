@@ -22,7 +22,7 @@ import { t, type Lang } from '@/lib/i18n';
  * Без JavaScript на кнопке остаётся «Показать», и форма работает как
  * работала: это надстройка, а не условие.
  */
-export function FindButton({ lang, deal }: { lang: Lang; deal: 'sale' | 'rent' }) {
+export function FindButton({ lang, deal }: { lang: Lang; deal: 'sale' | 'rent' | 'daily' }) {
   const d = t(lang);
   const btn = useRef<HTMLButtonElement>(null);
   const [count, setCount] = useState<number | null>(null);

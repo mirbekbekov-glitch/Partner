@@ -1,5 +1,5 @@
 import 'server-only';
-import { coarseOf } from '../space-types';
+import { coarseOf, termRange } from '../space-types';
 import { all, batch, flag, jsonArray, newId, now, one, stmt, toJson } from './sql';
 import { auditStmt, diffOf } from './audit';
 import { requireAgent } from './session';
@@ -26,6 +26,9 @@ export type ObjectRow = {
   /** Точный вид внутри kind. Пусто — агент его не указал. */
   subkind: string | null;
   deal_type: 'rent' | 'sale';
+  /** Срок аренды в днях. У продажи его не бывает. */
+  term_days_min: number | null;
+  term_days_max: number | null;
   address: string;
   city: string;
   zone: string | null;
@@ -160,6 +163,14 @@ export type NewObject = {
    */
   subkind?: string | null;
   deal_type: 'rent' | 'sale';
+  /**
+   * Срок аренды в днях: от и до.
+   *
+   * В днях, как в заявках, — одна единица на обе стороны. Значение для
+   * справочника площадки выводится отсюда, отдельно его не спрашиваем.
+   */
+  term_days_min?: number | null;
+  term_days_max?: number | null;
   address: string;
   price_minor: number;
   /** Город. Пусто — Бишкек: подавляющее большинство объектов оттуда. */
@@ -229,7 +240,8 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
 
   writes.push(stmt(
     `insert into objects (
-       id, kind, subkind, deal_type, address, city, zone, rooms, area, floor, floors_total,
+       id, kind, subkind, deal_type, term_days_min, term_days_max,
+       address, city, zone, rooms, area, floor, floors_total,
        price_minor, currency, photos, description, source, search_text,
        latitude, longitude, region, district, micro_district, house_number,
        building_type, serie, land_area, rental_term, commercial_type,
@@ -237,10 +249,13 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
        publication_state, published_at, actual_at,
        created_by_agent_id, created_at, updated_at)
      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
              'draft', null, ?, ?, ?, ?)`,
     id, input.kind, agreeingSubkind(input.kind, input.subkind),
-    input.deal_type, address, city,
+    input.deal_type, ...termRange(
+      input.deal_type === 'rent', input.term_days_min, input.term_days_max,
+    ),
+    address, city,
     blank(input.zone), input.rooms ?? null, input.area ?? null,
     input.floor ?? null, input.floors_total ?? null,
     input.price_minor, (input.currency || 'USD').trim().toUpperCase(),
@@ -326,7 +341,8 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
 // ---------------------------------------------------------------------------
 
 export type ObjectPatch = Partial<Pick<NewObject,
-  'kind' | 'subkind' | 'deal_type' | 'address' | 'city' | 'price_minor' | 'zone' | 'rooms'
+  'kind' | 'subkind' | 'deal_type' | 'term_days_min' | 'term_days_max'
+  | 'address' | 'city' | 'price_minor' | 'zone' | 'rooms'
   | 'area' | 'floor' | 'floors_total' | 'currency' | 'description' | 'photos'
   | 'latitude' | 'longitude' | 'region' | 'district' | 'micro_district'
   | 'house_number' | 'building_type' | 'serie' | 'land_area' | 'rental_term'
@@ -334,7 +350,8 @@ export type ObjectPatch = Partial<Pick<NewObject,
 
 /** Поля, которые агент вправе править. Остальные — только через свои действия. */
 const EDITABLE = [
-  'kind', 'subkind', 'deal_type', 'address', 'city', 'price_minor', 'zone', 'rooms', 'area',
+  'kind', 'subkind', 'deal_type', 'term_days_min', 'term_days_max',
+  'address', 'city', 'price_minor', 'zone', 'rooms', 'area',
   'floor', 'floors_total', 'currency', 'description', 'photos',
   'latitude', 'longitude', 'region', 'district', 'micro_district',
   'house_number', 'building_type', 'serie', 'land_area', 'rental_term',
@@ -389,6 +406,25 @@ export async function updateObject(id: string, patch: ObjectPatch): Promise<Obje
     // тянула бы за собой subkind и попадала в журнал как его правка.
     if (agreed === before.subkind) delete next.subkind;
     else next.subkind = agreed;
+  }
+
+  // Срок правится теми же правилами, что при заведении, и исчезает при
+  // переводе объекта в продажу: «сдаётся от месяца» у продающегося
+  // объекта — мусор, оставшийся от прежнего намерения.
+  if (next.term_days_min !== undefined || next.term_days_max !== undefined
+      || next.deal_type !== undefined) {
+    const deal = (next.deal_type as string | null) ?? before.deal_type;
+    const [lo, hi] = termRange(
+      deal === 'rent',
+      next.term_days_min !== undefined
+        ? (next.term_days_min as number | null) : before.term_days_min,
+      next.term_days_max !== undefined
+        ? (next.term_days_max as number | null) : before.term_days_max,
+    );
+    if (lo === before.term_days_min) delete next.term_days_min;
+    else next.term_days_min = lo;
+    if (hi === before.term_days_max) delete next.term_days_max;
+    else next.term_days_max = hi;
   }
 
   if (Object.keys(next).length === 0) return view(before);

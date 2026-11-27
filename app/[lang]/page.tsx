@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import {
   catalogAgentCount, catalogCities, catalogCount, catalogCurrencies, catalogPage,
-  catalogRate, catalogZoneCounts,
+  catalogRate, catalogZoneCounts, type CatalogDeal,
 } from '@/lib/db/catalog';
 import { GEO, citiesOf, regionOf, zonesOf } from '@/lib/geo';
 import {
@@ -61,7 +61,7 @@ type Row = {
 };
 
 function Search({ lang, f, deal, geo, currencies, money }: {
-  lang: Lang; f: CatalogFilters; deal: 'sale' | 'rent'; geo: GeoData;
+  lang: Lang; f: CatalogFilters; deal: CatalogDeal; geo: GeoData;
   /** Валюты каталога: одна — подписываем ею поле цены, несколько — нечем. */
   currencies: string[];
   /** Выбранная валюта показа, если курс известен. */
@@ -69,13 +69,16 @@ function Search({ lang, f, deal, geo, currencies, money }: {
 }) {
   const d = t(lang);
   const up = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
-  // Две вкладки, а не три. Поиск жилья бинарен: человек либо покупает,
-  // либо снимает, и «всё сразу» было ответом на вопрос, которого никто
-  // не задаёт. Отсутствие параметра означает покупку — так же, как на
-  // любой площадке, куда человек приходит по привычке.
-  const active: 'sale' | 'rent' = f.deal ?? 'sale';
-  const tabs: [CatalogFilters['deal'], 'sale' | 'rent', string][] = [
+  // Три вкладки, а не две. Долго их было две — «человек либо покупает,
+  // либо снимает», — и это неверно: приехавший на неделю не снимает
+  // квартиру в том же смысле, он ищет ночлег, и рядом с квартирами ему
+  // нужны хостелы и рабочие места в коворкинге. Это третий поход, а не
+  // оттенок второго. «Всё сразу» четвёртой вкладкой по-прежнему нет:
+  // это ответ на вопрос, которого никто не задаёт.
+  const active: CatalogDeal = f.deal ?? 'sale';
+  const tabs: [CatalogFilters['deal'], CatalogDeal, string][] = [
     [null, 'sale', d.tabBuy], ['rent', 'rent', d.tabRent],
+    ['daily', 'daily', d.tabDaily],
   ];
   return (
     <div className="console">
@@ -160,6 +163,21 @@ function Search({ lang, f, deal, geo, currencies, money }: {
               <input id="from" name="from" type="number" min={0} step={1000}
                      inputMode="numeric" defaultValue={f.priceMin ?? ''} />
             </div>
+            {/* Только в «Снять». В покупке срока нет вовсе, а в
+                посуточной галочка «и краткосрочную тоже» означала бы
+                то, что уже выбрано вкладкой. */}
+            {active === 'rent' ? (
+              <div className="cell cell-wide">
+                <label className="consent" htmlFor="term">
+                  <input id="term" name="term" type="checkbox" value="any"
+                         defaultChecked={f.anyTerm} />
+                  <span>
+                    {d.alsoShort}
+                    <small>{d.alsoShortHint}</small>
+                  </span>
+                </label>
+              </div>
+            ) : null}
           </div>
         </details>
       </form>
@@ -192,8 +210,8 @@ export default async function Catalog({
   const { lang } = await params;
   const d = t(lang);
   const f = parseCatalogFilters(await searchParams);
-  // Нет параметра — значит покупка: вкладок две, третьей («всё сразу») нет.
-  const deal: 'sale' | 'rent' = f.deal ?? 'sale';
+  // Нет параметра — значит покупка: так человек приходит по привычке.
+  const deal: CatalogDeal = f.deal ?? 'sale';
   // Только витрина: в ней нет ни комиссии, ни агента, ни собственника.
   // Это свойство не страницы, а модуля — состав колонок задан там одним
   // списком, и дописать в него «ведёт» мимо рецензии нельзя.
@@ -216,6 +234,7 @@ export default async function Catalog({
   try {
     const page = await catalogPage({
       deal,
+      term: f.anyTerm && deal === 'rent' ? 'any' : null,
       kind: f.kind,
       city: f.city,
       cities: regionCities,
@@ -250,7 +269,11 @@ export default async function Catalog({
   // по ссылке, и подмена вкладки сделала бы ссылку неповторимой. Поэтому
   // не подмена, а строка «а в другой вкладке сейчас N» с переходом —
   // решает по-прежнему человек, но теперь зная.
-  const other: 'sale' | 'rent' = deal === 'sale' ? 'rent' : 'sale';
+  // Куда звать из пустой выдачи. Из покупки — в аренду, из аренды — в
+  // покупку, а из посуточной — в обычную аренду: это ближайшая соседняя
+  // полка, а не противоположная.
+  const other: CatalogDeal = deal === 'sale' ? 'rent'
+    : deal === 'daily' ? 'rent' : 'sale';
   const otherCount = failed || rows.length > 0 ? 0 : await catalogCount({
     deal: other, kind: f.kind, city: f.city, zone: f.zone, rooms: f.rooms,
     priceMin: f.priceMin, priceMax: f.priceMax, money, rate,
@@ -272,7 +295,9 @@ export default async function Catalog({
   const manyCities = cities.length > 1;
 
 
-  const zoneCounts = failed ? [] : await catalogZoneCounts(deal, f.city, regionCities);
+  const zoneCounts = failed ? []
+    : await catalogZoneCounts(deal, f.city, regionCities,
+        f.anyTerm && deal === 'rent' ? 'any' : null);
 
   // Словарь для пульта: регионы, города каждого региона, районы каждого
   // города. К словарным названиям подмешиваются те, что встретились в
@@ -394,7 +419,7 @@ export default async function Catalog({
 
         <div className="strip">
           <h2>
-            {deal === 'rent' ? d.forRent : d.forSale}
+            {deal === 'daily' ? d.forDaily : deal === 'rent' ? d.forRent : d.forSale}
           </h2>
           <span className="found">{failed ? d.catalogDown : d.objectsCount(total)}</span>
           <div className="sorts">
@@ -466,7 +491,15 @@ export default async function Catalog({
                     <span className="price-row">
                       <span className="price num">
                         {priceView(lang, o.price, o.currency, money, rate).main}
-                        {o.deal_type === 'rent' ? <small>{d.perMonth}</small> : null}
+                        {/* В посуточной выдаче цена за сутки, а не за
+                            месяц: «$450 в месяц» под объявлением на ночь
+                            обманывало бы на порядок. Подпись идёт от
+                            ВКЛАДКИ, а не от объекта: один и тот же объект
+                            сдают и так и так, и цена у него та, которую
+                            человек сейчас смотрит. */}
+                        {o.deal_type === 'rent' ? (
+                          <small>{deal === 'daily' ? d.perDay : d.perMonth}</small>
+                        ) : null}
                       </span>
                       {/* Цена из объявления — рядом, мелко, и только
                           когда крупное число получено пересчётом. */}

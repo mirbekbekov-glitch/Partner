@@ -2,6 +2,7 @@ import 'server-only';
 import { all, holders, jsonArray, one } from './sql';
 import { searchText } from './normalize';
 import { fromMinor } from './money';
+import { MONTH_DAYS } from '../space-types';
 
 /**
  * Публичный каталог — витрина.
@@ -21,7 +22,8 @@ import { fromMinor } from './money';
 
 /** Единственный разрешённый состав публичной выдачи. */
 const COLUMNS = [
-  'id', 'kind', 'subkind', 'deal_type', 'address', 'city', 'zone',
+  'id', 'kind', 'subkind', 'deal_type', 'term_days_min', 'term_days_max',
+  'address', 'city', 'zone',
   'rooms', 'area', 'floor', 'floors_total',
   'price_minor', 'currency', 'photos', 'description',
   'published_at', 'actual_at',
@@ -42,6 +44,9 @@ export type CatalogRow = {
   /** Точный вид внутри kind: кабинет, склад, рабочее место. */
   subkind: string | null;
   deal_type: 'rent' | 'sale';
+  /** Срок аренды в днях: по нему отличается посуточное от долгого. */
+  term_days_min: number | null;
+  term_days_max: number | null;
   address: string;
   city: string;
   zone: string | null;
@@ -92,8 +97,63 @@ function view(row: CatalogRow): CatalogItem {
   };
 }
 
+/**
+ * Что человек выбрал наверху: купить, снять, посуточно.
+ *
+ * «Посуточно» — не третий вид сделки, а срок: в базе это та же аренда.
+ * Заводить ради него третье значение deal_type значило бы перестраивать
+ * таблицу и делить надвое то, что в жизни одно: квартиру сдают и на
+ * ночь, и на год, и это один и тот же объект.
+ */
+export type CatalogDeal = 'rent' | 'sale' | 'daily';
+
+/**
+ * Снять, не отсекая короткое.
+ *
+ * Отдельным флагом, а не четвёртым режимом: наверху вкладок три, и
+ * четвёртая строка там появиться не должна. Это уточнение внутри
+ * «Снять», и живёт оно в складке «ещё».
+ */
+export type CatalogTerm = 'any' | null;
+
+/**
+ * Условие отбора по выбранному режиму. Одно на все запросы витрины.
+ *
+ * «Посуточно» и «снять» — одна и та же аренда, разный срок. Объект
+ * попадает в обе выдачи, если сдаётся и так и так: это правда о нём, а
+ * не недосмотр отбора — квартиру сдают и на ночь, и на год.
+ *
+ * Объект без указанного срока считается долгосрочным. Так было до
+ * появления срока, и прятать из основной выдачи объявления, заведённые
+ * раньше, нельзя.
+ *
+ * Значение в текст запроса подставляется ЧИСЛОМ из кода, а не строкой
+ * извне: MONTH_DAYS — наша константа, и внедрить через неё нечего.
+ * Режим приходит снаружи, поэтому сверяется со списком, а не попадает
+ * в запрос.
+ */
+function dealClause(
+  deal: CatalogDeal | null | undefined,
+  term?: CatalogTerm,
+): string | null {
+  // «Снять, срок неважен» — вся аренда целиком, вместе с хостелами.
+  if (deal === 'rent' && term === 'any') return `o.deal_type = 'rent'`;
+  if (deal === 'daily') {
+    return `o.deal_type = 'rent' and o.term_days_min is not null
+            and o.term_days_min < ${MONTH_DAYS}`;
+  }
+  if (deal === 'rent') {
+    return `o.deal_type = 'rent'
+            and (o.term_days_max is null or o.term_days_max > ${MONTH_DAYS})`;
+  }
+  if (deal === 'sale') return `o.deal_type = 'sale'`;
+  return null;
+}
+
 export type CatalogQuery = {
-  deal?: 'rent' | 'sale' | null;
+  deal?: CatalogDeal | null;
+  /** «any» во вкладке «Снять» — не отсекать короткий срок. */
+  term?: CatalogTerm;
   kind?: string | null;
   city?: string | null;
   /** Города региона: фильтр по региону — это фильтр по его городам. */
@@ -186,7 +246,8 @@ function conditions(query: CatalogQuery): { clause: string; params: (string | nu
   const where: string[] = [`o.publication_state = 'published'`];
   const params: (string | number)[] = [];
 
-  if (query.deal) { where.push('o.deal_type = ?'); params.push(query.deal); }
+  const deal = dealClause(query.deal, query.term);
+  if (deal) where.push(deal);
   if (query.kind) { where.push('o.kind = ?'); params.push(query.kind); }
   if (query.city) { where.push('o.city = ?'); params.push(query.city); }
   // Региона в базе нет и быть не должно: регион — это свойство города,
@@ -315,13 +376,17 @@ export async function districts(): Promise<Array<{ id: string; name: string }>> 
  * было; с появлением второго это стало прямой ложью в цифре.
  */
 export async function catalogZoneCounts(
-  deal?: 'rent' | 'sale' | null,
+  deal?: CatalogDeal | null,
   city?: string | null,
   cities?: string[] | null,
+  term?: CatalogTerm,
 ): Promise<Array<{ zone: string; n: number }>> {
   const params: (string | number)[] = [];
   const filters: string[] = [];
-  if (deal) { filters.push('and o.deal_type = ?'); params.push(deal); }
+  // То же условие, что и в выдаче: иначе счётчик у района обещал бы
+  // объявления, которых в выдаче нет.
+  const clause = dealClause(deal, term);
+  if (clause) filters.push(`and ${clause}`);
   if (city) { filters.push('and o.city = ?'); params.push(city); }
   else if (cities && cities.length > 0) {
     filters.push(`and o.city in (${cities.map(() => '?').join(', ')})`);

@@ -128,6 +128,9 @@ type Dict = {
   navSell: string;
   // Типы недвижимости
   kinds: Record<string, string>;
+  /** Третий режим наверху и его подписи. */
+  tabDaily: string; forDaily: string; perDay: string;
+  alsoShort: string; alsoShortHint: string;
 };
 
 const plural = (n: number, one: string, few: string, many: string) => {
@@ -286,6 +289,11 @@ const ru: Dict = {
   pitchStep2: 'Заявку видят агенты', pitchStep2Note: 'Отвечаем в течение часа — это норматив, а не обещание',
   pitchStep3: 'Вам приносят варианты', pitchStep3Note: 'Появится позже — позвоним, заявка остаётся в работе',
   themeSwitch: 'Светлая или тёмная тема',
+  tabDaily: 'Посуточно',
+  alsoShort: 'Показать и краткосрочную сдачу',
+  alsoShortHint: 'Квартиры, хостелы и рабочие места, которые сдают меньше чем на месяц.',
+  forDaily: 'Посуточно',
+  perDay: '/сутки',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
            land: 'участок', commercial: 'коммерческая', garage: 'гараж',
            office: 'офис', cabinet: 'кабинет', desk: 'рабочее место',
@@ -433,6 +441,11 @@ const ky: Dict = {
   pitchStep2: 'Арызды агенттер көрөт', pitchStep2Note: 'Бир сааттын ичинде жооп беребиз — бул норматив',
   pitchStep3: 'Сизге варианттар келет', pitchStep3Note: 'Кийин пайда болсо — чалабыз, арыз иште калат',
   themeSwitch: 'Жарык же караңгы тема',
+  tabDaily: 'Суткасына',
+  alsoShort: 'Кыска мөөнөттүү ижараны да көрсөтүү',
+  alsoShortHint: 'Бир айдан аз мөөнөткө берилген батирлер, хостелдер жана иш орундар.',
+  forDaily: 'Суткасына',
+  perDay: '/сутка',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
            land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж',
            office: 'офис', cabinet: 'кабинет', desk: 'иш орун',
@@ -580,6 +593,11 @@ const en: Dict = {
   pitchStep2: 'Agents see the request', pitchStep2Note: 'We answer within the hour — a standard, not a promise',
   pitchStep3: 'They bring you options', pitchStep3Note: 'If it appears later, we call: the request stays open',
   themeSwitch: 'Light or dark theme',
+  tabDaily: 'Daily',
+  alsoShort: 'Include short lets',
+  alsoShortHint: 'Flats, hostels and desks let for less than a month.',
+  forDaily: 'By the day',
+  perDay: '/day',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
            land: 'land', commercial: 'commercial', garage: 'garage',
            office: 'office', cabinet: 'private office', desk: 'coworking desk',
@@ -726,6 +744,11 @@ const zh: Dict = {
   pitchStep2: '经纪人看到需求', pitchStep2Note: '一小时内回复 — 这是标准，不是口号',
   pitchStep3: '他们为您带来房源', pitchStep3Note: '日后出现也会致电：需求一直有效',
   themeSwitch: '浅色或深色主题',
+  tabDaily: '日租',
+  alsoShort: '同时显示短租',
+  alsoShortHint: '按不足一个月出租的公寓、青旅和工位。',
+  forDaily: '日租',
+  perDay: '/天',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
            land: '地块', commercial: '商业用房', garage: '车库',
            office: '办公室', cabinet: '独立办公间', desk: '联合办公工位',

@@ -22,7 +22,16 @@ export const SORTS: { key: CatalogSort; column: string; asc: boolean }[] = [
 ];
 
 export type CatalogFilters = {
-  deal: 'rent' | 'sale' | null;
+  deal: 'rent' | 'sale' | 'daily' | null;
+  /**
+   * Во вкладке «Снять» показывать и краткосрочную сдачу.
+   *
+   * По умолчанию «Снять» — это аренда от месяца, а короткая живёт в
+   * своей вкладке: человек, который ищет жильё на год, не должен
+   * разбирать хостелы. Но обратное тоже бывает — «сниму что угодно,
+   * хоть на месяц, хоть на два», — и для него галочка в складке.
+   */
+  anyTerm: boolean;
   kind: string | null;
   region: string | null;
   city: string | null;
@@ -40,7 +49,10 @@ export type CatalogFilters = {
   money: Money | null;
 };
 
-const DEALS = ['rent', 'sale'];
+/* «Посуточно» — третий режим наверху, но не третий вид сделки: в базе
+   это аренда с коротким сроком. Разбор о разнице не знает, он только
+   сверяет со списком. */
+const DEALS = ['rent', 'sale', 'daily'];
 export const KINDS = ['flat', 'room', 'house', 'townhouse', 'land', 'commercial', 'garage'];
 
 const num = (v: string | undefined) => {
@@ -63,6 +75,7 @@ export function parseCatalogFilters(
   return {
     money: isMoney(one('cur')) ? one('cur') as Money : null,
     deal: pick(one('deal'), DEALS) as CatalogFilters['deal'],
+    anyTerm: one('term') === 'any',
     kind: pick(one('kind'), KINDS),
     region: one('region')?.trim() || null,
     city: one('city')?.trim() || null,
@@ -85,6 +98,9 @@ export function catalogHref(lang: string, f: CatalogFilters, page: number) {
   const p = new URLSearchParams();
   if (f.money) p.set('cur', f.money);
   if (f.deal) p.set('deal', f.deal);
+  // Только в «Снять»: в покупке и в посуточной срок ничего не значит, и
+  // параметр, который ни на что не влияет, в ссылке лишний.
+  if (f.anyTerm && f.deal === 'rent') p.set('term', 'any');
   if (f.kind) p.set('kind', f.kind);
   if (f.region) p.set('region', f.region);
   if (f.city) p.set('city', f.city);

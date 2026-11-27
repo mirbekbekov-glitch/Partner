@@ -119,3 +119,46 @@ export const TERM_PRESETS: Array<{ code: string; min: number; max: number | null
   { code: 'months6', min: 90,  max: 180 },
   { code: 'year',    min: 365, max: null },
 ];
+
+/**
+ * Граница между «посуточно» и «снять»: месяц.
+ *
+ * Одно число на всю систему, потому что иначе их стало бы три — своё в
+ * отборе, своё в подписи, своё в выгрузке, — и в первый же месяц они
+ * разошлись бы. Сдаётся посуточно тот объект, чей МИНИМАЛЬНЫЙ срок
+ * меньше месяца; сдаётся надолго тот, чей МАКСИМАЛЬНЫЙ месяц
+ * превышает. Один и тот же объект бывает и тем и другим — квартиру
+ * сдают и на ночь, и на год, — и прятать его из одной выдачи ради
+ * красоты разделения было бы враньём.
+ */
+export const MONTH_DAYS = 30;
+
+export function isDailyTerm(min: number | null): boolean {
+  return min !== null && min < MONTH_DAYS;
+}
+
+export function isLongTerm(max: number | null): boolean {
+  return max === null || max > MONTH_DAYS;
+}
+
+/**
+ * Срок в днях: приведение к допустимому виду.
+ *
+ * Один код на заявки и на объекты — иначе правила разошлись бы, и
+ * заявка «от 180 до 30» чинилась бы, а объект с теми же числами нет.
+ *
+ * Перепутанные местами границы меняются местами молча: это обычная
+ * опечатка, а не повод терять заявку или объявление. Десять лет —
+ * потолок: больше похоже на мусор из формы, чем на намерение.
+ */
+export function termRange(
+  applies: boolean,
+  min: number | null | undefined,
+  max: number | null | undefined,
+): [number | null, number | null] {
+  const day = (v: number | null | undefined) =>
+    applies && v && v > 0 && v <= 3650 ? Math.trunc(v) : null;
+  const lo = day(min);
+  const hi = day(max);
+  return lo && hi && lo > hi ? [hi, lo] : [lo, hi];
+}
