@@ -48,7 +48,7 @@ type Dict = {
   sortFresh: string; sortCheap: string; sortBig: string;
   nothingFound: string; nothingYet: string; catalogDown: string;
   // Пустая выдача: не тупик, а развилка.
-  emptyAsk: string; emptyAskGo: string;
+  emptyAsk: string; emptyAskGo: string; emptyTab: string;
   otherDeal: (n: number) => string; otherDealGo: string;
   pageOf: (cur: number, total: number) => string;
   back: string; forward: string;
@@ -125,6 +125,7 @@ const ru: Dict = {
   nothingYet: 'Пока нет опубликованных объектов.',
   emptyAsk: 'Подходящего в каталоге нет — но это не значит, что его нет вовсе. Агенты знают объекты, которые ещё не опубликованы: хозяин просил не выкладывать, объект готовится, цена обсуждается.',
   emptyAskGo: 'Описать, что ищете',
+  emptyTab: 'В этой вкладке пока ничего нет.',
   otherDeal: (n) => `А в другой вкладке сейчас ${n}`,
   otherDealGo: 'Посмотреть',
   catalogDown: 'каталог временно недоступен',
@@ -234,6 +235,7 @@ const ky: Dict = {
   nothingYet: 'Азырынча жарыяланган объекттер жок.',
   emptyAsk: 'Каталогдо ылайыктуусу жок — бирок таптакыр жок дегендик эмес. Агенттер жарыяланбаган объекттерди билишет.',
   emptyAskGo: 'Эмне издеп жатканыңызды жазыңыз',
+  emptyTab: 'Бул бетте азырынча эч нерсе жок.',
   otherDeal: (n) => `Башка баракта азыр ${n}`,
   otherDealGo: 'Көрүү',
   catalogDown: 'каталог убактылуу жеткиликсиз',
@@ -333,6 +335,7 @@ const en: Dict = {
   nothingYet: 'No published listings yet.',
   emptyAsk: 'Nothing in the catalogue matches — which does not mean nothing exists. Agents know listings that are not published yet.',
   emptyAskGo: 'Tell us what you need',
+  emptyTab: 'Nothing in this tab yet.',
   otherDeal: (n) => `The other tab has ${n} right now`,
   otherDealGo: 'Open it',
   catalogDown: 'the catalogue is temporarily unavailable',
@@ -432,6 +435,7 @@ const zh: Dict = {
   nothingYet: '暂无已发布的房源。',
   emptyAsk: '目录中暂无匹配的房源，但这不代表没有。经纪人掌握着尚未公开发布的房源。',
   emptyAskGo: '告诉我们您的需求',
+  emptyTab: '此标签页暂时没有房源。',
   otherDeal: (n) => `另一个标签页现有 ${n} 套`,
   otherDealGo: '查看',
   catalogDown: '目录暂时无法访问',

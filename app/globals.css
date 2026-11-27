@@ -1144,15 +1144,20 @@ main:has(.auth) { max-width: none; padding: 0; }
   .grid { grid-template-columns: 1fr; }
   .gal { grid-template-columns: 1fr; }
   .gal .side { grid-template-columns: 1fr 1fr; }
-  /* Шапка на телефоне должна остаться в ОДНУ строку. Перенос здесь уже
-     был: знак, «Заявки», тема и язык вставали первой строкой, а «Вход»
-     падал на вторую — и не под них, а в противоположный угол, потому что
-     растянутый .spacer оставался на первой. Выглядело ошибкой вёрстки.
-     flex-wrap оставлен: если на совсем узком экране строка всё же не
-     сойдётся, пусть переносится, а не вылезает за край. */
+  /* Шапка на телефоне держалась в ОДНУ строку, пока раздел был один.
+     С появлением «Агентов» элементов стало шесть, строка перестала
+     сходиться, и «Вход» падал на вторую строку ОДИН, прижатый влево —
+     это читалось как ошибка вёрстки, а не как замысел.
+     
+     Ответ не «ужать ещё», а признать две строки и сделать их осмысленными:
+     сверху знак и управление (тема, язык, вход), снизу разделы. Две
+     ссылки подряд читаются как строка навигации; одна кнопка в углу — нет.
+     И это выдерживает третий раздел, когда он появится. */
   .nav-in { flex-wrap: wrap; row-gap: 10px; gap: 8px; }
-  .nav-link { font-size: 0.8125rem; }
+  .nav-link { font-size: 0.8125rem; order: 5; }
   .nav .spacer { display: none; }
+  /* Язык растягивает первую строку вправо, «Вход» встаёт за ним, а
+     ссылки с order: 5 уходят под них. */
   .lang { margin-left: auto; }
   .brand img { height: 20px; }
   .enter { padding: 11px 12px; font-size: 0.8125rem; }
@@ -1372,7 +1377,11 @@ a.agent-row:hover { background: var(--sunk); }
 .none-card { grid-column: 1 / -1; background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--r-lg); padding: 32px 28px; text-align: center;
   display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.none-card .none { margin: 0; font-size: 1.05rem; font-weight: 600; }
+/* Внутри карточки .none теряет собственную рамку и отступы: рамка в
+   рамке читается как недоделанная вёрстка. Стиль .none остаётся для тех
+   мест, где он стоит сам по себе. */
+.none-card .none { margin: 0; font-size: 1.05rem; font-weight: 600; color: var(--fg);
+  border: 0; padding: 0; }
 .none-card .ask { margin: 0; max-width: 56ch; color: var(--muted); line-height: 1.6;
   font-size: 0.9375rem; }
 .none-card .pitch-go { margin-top: 4px; }

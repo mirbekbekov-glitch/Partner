@@ -343,7 +343,14 @@ export default async function Catalog({
                нет» читается как неработающий сервис; здесь же сказано,
                что делать дальше, и есть куда нажать. */
             <div className="none-card">
-              <p className="none">{hasAnyFilter(f) ? d.nothingFound : d.nothingYet}</p>
+              {/* «Пока нет опубликованных объектов» рядом со строкой «а в
+                  другой вкладке сейчас 1» — прямое противоречие: значит
+                  объекты есть. Когда дело во вкладке, так и говорим. */}
+              <p className="none">
+                {hasAnyFilter(f) ? d.nothingFound
+                  : otherCount > 0 ? d.emptyTab
+                    : d.nothingYet}
+              </p>
               {otherCount > 0 ? (
                 <p className="other-deal">
                   {d.otherDeal(otherCount)}{' '}
