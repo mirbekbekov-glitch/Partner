@@ -82,6 +82,8 @@ export type NewMandate = {
   contract_confirmed?: boolean;
   document_url?: string | null;
   commission_rule?: string | null;
+  /** Доля партнёра в процентах от комиссии. Пусто — половина. */
+  partner_share?: number | null;
 };
 
 /**
@@ -102,6 +104,22 @@ export type NewMandate = {
  * кто и когда завёл мандат, — и обратим: админ расторгает. Запрет же ломает
  * честный случай каждый раз.
  */
+/**
+ * Доля партнёра из формы: целый процент от 0 до 100 — или пусто.
+ *
+ * Ноль разрешён и означает именно ноль: «клиентов ищу сам, делиться не
+ * готов». Это честный ответ, и прятать его нельзя — иначе агент напишет
+ * «1» и партнёр потратит время на звонок впустую.
+ */
+function partnerShareValue(value: number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Math.trunc(value);
+  if (!Number.isFinite(n) || n < 0 || n > 100) {
+    throw new Invalid('Доля партнёра — целое число процентов от 0 до 100');
+  }
+  return n;
+}
+
 export async function createMandate(input: NewMandate): Promise<MandateRow> {
   const agent = await requireAgent();
 
@@ -127,15 +145,18 @@ export async function createMandate(input: NewMandate): Promise<MandateRow> {
   const startPrice = input.start_price_minor ?? object.price_minor;
   if (!(startPrice > 0)) throw new Invalid('Цена по договору должна быть больше нуля');
 
+  const share = partnerShareValue(input.partner_share);
+
   await batch([
     stmt(
       `insert into mandates (id, object_id, kind, valid_from, valid_to,
-                             start_price_minor, commission_rule, listing_agent_id,
+                             start_price_minor, commission_rule, partner_share,
+                             listing_agent_id,
                              contract_confirmed, document_url, status,
                              created_at, updated_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
       id, input.object_id, input.kind, today(), input.valid_to ?? null,
-      startPrice, input.commission_rule ?? null, agent.id,
+      startPrice, input.commission_rule ?? null, share, agent.id,
       flag(input.contract_confirmed ?? false),
       (input.document_url ?? '').trim() || null, at, at,
     ),
