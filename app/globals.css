@@ -729,6 +729,11 @@ main:has(.auth) { max-width: none; padding: 0; }
    заголовок там остаётся читаемым. */
 .hero h1 em { font-style: normal; color: var(--accent); }
 .hero .lede { color: var(--muted); font-size: 1.0625rem; line-height: 1.5; max-width: 56ch; margin: 0; }
+/* Строка над кнопками: что человек сейчас сделает. Темнее и плотнее
+   абзаца выше — иначе она сливалась бы с ним и снова оставалась
+   непрочитанной. Но не крупнее: криком эту мысль не доносят. */
+.hero-call { color: var(--fg); font-size: 1.0625rem; font-weight: 700; line-height: 1.45;
+  max-width: 48ch; margin: 2px 0 0; }
 .props { display: flex; flex-wrap: wrap; gap: 10px 26px; margin: 6px 0 0; padding: 0; list-style: none; }
 .prop { display: flex; align-items: center; gap: 9px; font-size: 0.875rem; font-weight: 600;
   color: var(--fg); }

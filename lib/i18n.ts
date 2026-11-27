@@ -113,7 +113,7 @@ type Dict = {
   reqOwnWhy1: string; reqOwnWhy2: string; reqOwnWhy3: string;
   reqOwnSentNote: string;
   // Первый экран: что человек может сделать и чем мы это подтверждаем
-  heroLede: string; heroAsk: string; heroOwn: string;
+  heroLede: string; heroCall: string; heroAsk: string; heroOwn: string;
   heroFactObjects: (n: number) => string;
   heroFactAgents: (n: number) => string;
   heroFactSlaValue: string; heroFactSla: string;
@@ -249,7 +249,8 @@ const ru: Dict = {
   reqOwnWhy2: 'Объявление и фотографии сделает агент',
   reqOwnWhy3: 'Телефон увидит один агент, а не весь рынок',
   reqOwnSentNote: 'Агент перезвонит в течение часа, уточнит детали и договорится о съёмке.',
-  heroLede: 'В каталоге только подтверждённые объекты. Не нашли нужное или сами хотите сдать — оставьте заявку, дальше работает агент.',
+  heroLede: 'В каталоге только подтверждённые объекты: агент их проверил и готов показать.',
+  heroCall: 'Не нашли нужное или сами хотите сдать? Оставьте заявку — дальше работает агент.',
   heroAsk: 'Снять или купить', heroOwn: 'Сдать или продать',
   heroFactObjects: (n) => `${plural(n, 'объект', 'объекта', 'объектов')} в каталоге`,
   heroFactAgents: (n) => `${plural(n, 'агент', 'агента', 'агентов')} в работе`,
@@ -376,7 +377,8 @@ const ky: Dict = {
   reqOwnWhy2: 'Жарнаманы жана сүрөттөрдү агент жасайт',
   reqOwnWhy3: 'Телефонуңузду бир агент гана көрөт',
   reqOwnSentNote: 'Агент бир сааттын ичинде чалып, деталдарды тактайт жана сүрөткө тартууга макулдашат.',
-  heroLede: 'Каталогдо ырасталган объекттер гана. Керектүүсүн таппасаңыз же өзүңүз ижарага бергиңиз келсе — арыз калтырыңыз, андан ары агент иштейт.',
+  heroLede: 'Каталогдо ырасталган объекттер гана: агент текшерип, көрсөтүүгө даяр.',
+  heroCall: 'Керектүүсүн таппадыңызбы же өзүңүз ижарага бергиңиз келеби? Арыз калтырыңыз — андан ары агент иштейт.',
   heroAsk: 'Ижарага алуу же сатып алуу', heroOwn: 'Ижарага берүү же сатуу',
   heroFactObjects: () => 'объект каталогдо',
   heroFactAgents: () => 'агент иштеп жатат',
@@ -503,7 +505,8 @@ const en: Dict = {
   reqOwnWhy2: 'The agent writes the listing and takes the photos',
   reqOwnWhy3: 'One agent sees your number, not the whole market',
   reqOwnSentNote: 'An agent will call within an hour to check the details and arrange the photos.',
-  heroLede: 'The catalogue holds confirmed listings only. Not finding it, or letting a place of your own — leave a request and an agent takes it from there.',
+  heroLede: 'The catalogue holds confirmed listings only: an agent has checked them and is ready to show.',
+  heroCall: 'Not finding it, or letting a place of your own? Leave a request — an agent takes it from there.',
   heroAsk: 'Rent or buy', heroOwn: 'Let or sell',
   heroFactObjects: (n) => (n === 1 ? 'listing in the catalogue' : 'listings in the catalogue'),
   heroFactAgents: (n) => (n === 1 ? 'agent working' : 'agents working'),
@@ -629,7 +632,8 @@ const zh: Dict = {
   reqOwnWhy2: '房源信息和照片由经纪人完成',
   reqOwnWhy3: '只有一位经纪人能看到您的号码',
   reqOwnSentNote: '经纪人将在一小时内回电，核实细节并约定拍照时间。',
-  heroLede: '目录中只有已核实的房源。没找到合适的，或者您想出租出售——留下需求，后续由经纪人来办。',
+  heroLede: '目录中只有已核实的房源：经纪人已核实并可带看。',
+  heroCall: '没找到合适的，或者您想出租出售？提交需求——后续由经纪人来办。',
   heroAsk: '租房或买房', heroOwn: '出租或出售',
   heroFactObjects: () => '套房源在目录中',
   heroFactAgents: () => '位经纪人在岗',
