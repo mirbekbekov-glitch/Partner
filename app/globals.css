@@ -465,7 +465,9 @@ div.tile { background: var(--sunk); }
 textarea {
   font: inherit;
   padding: 7px 10px;
-  border-radius: 8px;
+  /* Токен, а не 8px числом: скругления полей и кнопок задаются в одном
+     месте, и вручную вписанное значение однажды разойдётся с ним. */
+  border-radius: var(--r-md);
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--fg);
@@ -574,10 +576,17 @@ main:has(.auth) { max-width: none; padding: 0; }
 .nav-link { color: var(--muted); text-decoration: none; font-size: 0.875rem; font-weight: 600;
   white-space: nowrap; padding-block: 10px; transition: color .18s; }
 .nav-link:hover { color: var(--accent); }
-.enter { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: var(--r-full);
-  padding: 11px 18px; font-weight: 700; font-size: 0.875rem; text-decoration: none; white-space: nowrap;
-  transition: background .18s, transform .18s; }
-.enter:hover { background: var(--accent-hover); transform: translateY(-1px); }
+/* Вход для агентов — КОНТУРНАЯ кнопка, не залитая.
+   Залитый красный на сайте означает одно: действие, ради которого сюда
+   пришёл клиент («Найти», «Оставить заявку»). Вход для агентов нужен
+   пяти процентам посетителей, а тянул на себя взгляд сильнее всего
+   остального на первом экране — проверено снимком на 1366. Цвет остаётся
+   фирменным, но заливка уходит конверсии клиента. */
+.enter { background: transparent; color: var(--fg); border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  padding: 10px 17px; font-weight: 600; font-size: 0.875rem; text-decoration: none;
+  white-space: nowrap; transition: border-color .18s, color .18s, background .18s; }
+.enter:hover { border-color: var(--accent); color: var(--accent); background: var(--sunk); }
 .enter .narrow { display: none; }
 
 /* --- Герой -------------------------------------------------------------- */
@@ -718,6 +727,19 @@ main:has(.auth) { max-width: none; padding: 0; }
   border-radius: var(--r-md); padding: 11px 12px; font-size: 0.9375rem; font-weight: 500;
   width: 100%; min-width: 0; font-family: inherit;
   transition: border-color .18s, box-shadow .18s; }
+/* Своя стрелка вместо системной. В одном ряду стоят обычные select'ы и
+   кнопка выбора района, которая лишь притворяется полем: системная
+   стрелка у одних и нарисованная у другой выдавали, что это разные
+   вещи. Стрелка — фон, а не псевдоэлемент: у select'а псевдоэлементов
+   нет. currentColor подставляется через mask, иначе картинку пришлось бы
+   держать в двух цветах под две темы. */
+.cell select { appearance: none; -webkit-appearance: none;
+  padding-right: 32px; cursor: pointer;
+  background-image: none; }
+.cell { position: relative; }
+.cell:has(select)::after { content: ''; position: absolute; right: 12px; bottom: 17px;
+  width: 10px; height: 6px; background: var(--muted); pointer-events: none;
+  clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .cell input:focus, .cell select:focus { border-color: var(--accent); }
 /* --- Выбор района ------------------------------------------------------- */
 /* Кнопка притворяется полем ввода: в ряду пульта она стоит рядом с
@@ -1317,3 +1339,15 @@ main:has(.auth) { max-width: none; padding: 0; }
 a.agent-row { text-decoration: none; color: inherit; border-radius: var(--r-md);
   transition: background .18s; }
 a.agent-row:hover { background: var(--sunk); }
+
+/* Пустая выдача: карточка с выходом, а не строка в пустоте. */
+.none-card { grid-column: 1 / -1; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 32px 28px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.none-card .none { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.none-card .ask { margin: 0; max-width: 56ch; color: var(--muted); line-height: 1.6;
+  font-size: 0.9375rem; }
+.none-card .pitch-go { margin-top: 4px; }
+.other-deal { margin: 0; font-size: 0.9375rem; }
+.other-deal a { color: var(--accent); font-weight: 700; text-decoration: none; }
+.other-deal a:hover { text-decoration: underline; }

@@ -47,6 +47,9 @@ type Dict = {
   forSale: string; forRent: string;
   sortFresh: string; sortCheap: string; sortBig: string;
   nothingFound: string; nothingYet: string; catalogDown: string;
+  // Пустая выдача: не тупик, а развилка.
+  emptyAsk: string; emptyAskGo: string;
+  otherDeal: (n: number) => string; otherDealGo: string;
   pageOf: (cur: number, total: number) => string;
   back: string; forward: string;
   // Карточка
@@ -120,6 +123,10 @@ const ru: Dict = {
   sortFresh: 'Сначала свежие', sortCheap: 'Дешевле', sortBig: 'Больше площади',
   nothingFound: 'Под эти условия ничего не подошло. Попробуйте расширить поиск — например, убрать ограничение по цене.',
   nothingYet: 'Пока нет опубликованных объектов.',
+  emptyAsk: 'Подходящего в каталоге нет — но это не значит, что его нет вовсе. Агенты знают объекты, которые ещё не опубликованы: хозяин просил не выкладывать, объект готовится, цена обсуждается.',
+  emptyAskGo: 'Описать, что ищете',
+  otherDeal: (n) => `А в другой вкладке сейчас ${n}`,
+  otherDealGo: 'Посмотреть',
   catalogDown: 'каталог временно недоступен',
   pageOf: (c, n) => `страница ${c} из ${n}`, back: '← назад', forward: 'вперёд →',
   perMonth: ' / мес.', confirmedBy: 'Агент подтвердил',
@@ -224,6 +231,10 @@ const ky: Dict = {
   sortFresh: 'Жаңылары биринчи', sortCheap: 'Арзаныраак', sortBig: 'Аянты чоңураак',
   nothingFound: 'Бул шарттарга эч нерсе туура келген жок. Издөөнү кеңейтип көрүңүз — мисалы, баа чегин алып салыңыз.',
   nothingYet: 'Азырынча жарыяланган объекттер жок.',
+  emptyAsk: 'Каталогдо ылайыктуусу жок — бирок таптакыр жок дегендик эмес. Агенттер жарыяланбаган объекттерди билишет.',
+  emptyAskGo: 'Эмне издеп жатканыңызды жазыңыз',
+  otherDeal: (n) => `Башка баракта азыр ${n}`,
+  otherDealGo: 'Көрүү',
   catalogDown: 'каталог убактылуу жеткиликсиз',
   pageOf: (c, n) => `${n} барактын ${c}-си`, back: '← артка', forward: 'алга →',
   perMonth: ' / айына', confirmedBy: 'Агент ырастады',
@@ -318,6 +329,10 @@ const en: Dict = {
   sortFresh: 'Recently confirmed', sortCheap: 'Lowest price', sortBig: 'Largest area',
   nothingFound: 'Nothing matched these filters. Try widening the search — for example, remove the price limit.',
   nothingYet: 'No published listings yet.',
+  emptyAsk: 'Nothing in the catalogue matches — which does not mean nothing exists. Agents know listings that are not published yet.',
+  emptyAskGo: 'Tell us what you need',
+  otherDeal: (n) => `The other tab has ${n} right now`,
+  otherDealGo: 'Open it',
   catalogDown: 'the catalogue is temporarily unavailable',
   pageOf: (c, n) => `page ${c} of ${n}`, back: '← back', forward: 'next →',
   perMonth: ' / month', confirmedBy: 'Agent confirmed',
@@ -412,6 +427,10 @@ const zh: Dict = {
   sortFresh: '最近确认优先', sortCheap: '价格从低到高', sortBig: '面积从大到小',
   nothingFound: '没有符合条件的房源。可以放宽筛选，例如取消价格上限。',
   nothingYet: '暂无已发布的房源。',
+  emptyAsk: '目录中暂无匹配的房源，但这不代表没有。经纪人掌握着尚未公开发布的房源。',
+  emptyAskGo: '告诉我们您的需求',
+  otherDeal: (n) => `另一个标签页现有 ${n} 套`,
+  otherDealGo: '查看',
   catalogDown: '目录暂时无法访问',
   pageOf: (c, n) => `第 ${c} 页 / 共 ${n} 页`, back: '← 上一页', forward: '下一页 →',
   perMonth: ' / 月', confirmedBy: '经纪人确认于',

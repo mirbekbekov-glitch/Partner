@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { catalogCities, catalogPage, catalogZoneCounts } from '@/lib/db/catalog';
+import {
+  catalogCities, catalogCount, catalogCurrencies, catalogPage, catalogZoneCounts,
+} from '@/lib/db/catalog';
 import { zonesOf } from '@/lib/city-zones';
 import {
   CATALOG_PAGE_SIZE, parseCatalogFilters, catalogHref, sortHref, hasAnyFilter,
-  firstPhoto, daysSince,
+  firstPhoto, daysSince, moneySign,
   SORTS, publicMoney, type CatalogFilters,
 } from '@/lib/catalog-params';
 import { thumbOf } from '@/lib/photo-url';
@@ -54,9 +56,11 @@ type Row = {
   actual_at: string;
 };
 
-function Search({ lang, f, deal, cities, zones }: {
+function Search({ lang, f, deal, cities, zones, currencies }: {
   lang: Lang; f: CatalogFilters; deal: 'sale' | 'rent'; cities: string[];
   zones: Array<{ zone: string; n: number }>;
+  /** Валюты каталога: одна — подписываем ею поле цены, несколько — нечем. */
+  currencies: string[];
 }) {
   const d = t(lang);
   const up = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
@@ -139,7 +143,12 @@ function Search({ lang, f, deal, cities, zones }: {
             </select>
           </div>
           <div className="cell">
-            <label htmlFor="to">{d.priceTo}</label>
+            {/* Валюта в подписи, а не в подсказке: подсказка исчезает,
+                как только человек начинает набирать, и ровно тогда
+                вопрос «это доллары или сомы» и возникает. */}
+            <label htmlFor="to">
+              {d.priceTo}{currencies.length === 1 ? `, ${moneySign(lang, currencies[0]!)}` : ''}
+            </label>
             <input id="to" name="to" type="number" min={0} step={1000} placeholder={d.priceHint}
                    inputMode="numeric" defaultValue={f.priceMax ?? ''} />
           </div>
@@ -225,6 +234,23 @@ export default async function Catalog({
   // пустой район — обманывать нажатие. Те же числа идут на карту города.
   // Города нужны даже когда выдача не открылась: пульт должен выглядеть
   // одинаково, иначе при сбое каталога у человека молча пропадёт фильтр.
+  // Сколько объектов в ДРУГОЙ вкладке — с теми же фильтрами.
+  //
+  // Зачем. Человек приходит на «Купить», видит ноль и уходит, хотя в
+  // аренде объект есть. Переключать вкладку за него нельзя: он мог прийти
+  // по ссылке, и подмена вкладки сделала бы ссылку неповторимой. Поэтому
+  // не подмена, а строка «а в другой вкладке сейчас N» с переходом —
+  // решает по-прежнему человек, но теперь зная.
+  const other: 'sale' | 'rent' = deal === 'sale' ? 'rent' : 'sale';
+  const otherCount = failed || rows.length > 0 ? 0 : await catalogCount({
+    deal: other, kind: f.kind, city: f.city, zone: f.zone, rooms: f.rooms,
+    priceMin: f.priceMin, priceMax: f.priceMax, q: f.q,
+  }).catch(() => 0);
+
+  // Валюта для подписи поля «цена до». Одна на весь каталог — подписываем
+  // ею; несколько — подписывать нечем, и выбирать за человека нельзя.
+  const currencies = failed ? [] : await catalogCurrencies();
+
   const cities = failed ? [] : await catalogCities();
   const manyCities = cities.length > 1;
 
@@ -272,7 +298,8 @@ export default async function Catalog({
       </section>
 
       <div className="wrap">
-        <Search lang={lang} f={f} deal={deal} cities={cities} zones={zoneList} />
+        <Search lang={lang} f={f} deal={deal} cities={cities} zones={zoneList}
+                currencies={currencies} />
 
         {/* Районы строкой: самый частый первый шаг — «покажите, что есть
             в Асанбае». Это ссылки, а не украшение. */}
@@ -312,7 +339,24 @@ export default async function Catalog({
           {failed ? (
             <p className="none error">{d.catalogDown}</p>
           ) : rows.length === 0 ? (
-            <p className="none">{hasAnyFilter(f) ? d.nothingFound : d.nothingYet}</p>
+            /* Пустая выдача — развилка, а не тупик. Голая строка «ничего
+               нет» читается как неработающий сервис; здесь же сказано,
+               что делать дальше, и есть куда нажать. */
+            <div className="none-card">
+              <p className="none">{hasAnyFilter(f) ? d.nothingFound : d.nothingYet}</p>
+              {otherCount > 0 ? (
+                <p className="other-deal">
+                  {d.otherDeal(otherCount)}{' '}
+                  <Link href={catalogHref(lang, { ...f, deal: other }, 1)}>
+                    {d.otherDealGo} →
+                  </Link>
+                </p>
+              ) : null}
+              <p className="ask">{d.emptyAsk}</p>
+              <Link href={`/${lang}/request`} className="pitch-go">
+                {d.emptyAskGo}
+              </Link>
+            </div>
           ) : (
             rows.map((o, i) => {
               // В списке — миниатюра. Карточка показывает снимок размером

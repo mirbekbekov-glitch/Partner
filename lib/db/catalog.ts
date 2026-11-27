@@ -404,6 +404,23 @@ export async function catalogAgentById(id: string): Promise<CatalogAgentCard | n
 }
 
 /**
+ * Валюты, в которых выставлены опубликованные объекты.
+ *
+ * Нужны полю «цена до»: число без валюты непонятно — вводить 800 или
+ * 70 000. Список, а не одно значение, потому что ответ бывает разный:
+ * одна валюта — её и подписываем; несколько — подписать нечем, и это
+ * честнее показать, чем выбрать за человека.
+ */
+export async function catalogCurrencies(): Promise<string[]> {
+  const rows = await all<{ currency: string }>(
+    `select distinct o.currency as currency from objects o
+      where o.publication_state = 'published'
+      order by o.currency`,
+  );
+  return rows.map((r) => r.currency);
+}
+
+/**
  * Города, которые реально встречаются в опубликованных объектах.
  *
  * Нужны фильтру, и по ним же он решает, показываться ли вовсе: пока

@@ -29,7 +29,7 @@ import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/acti
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import {
   catalogAgent, catalogAgentById, catalogAgents, catalogCities, catalogCount,
-  catalogObject, catalogPage,
+  catalogCurrencies, catalogObject, catalogPage,
   catalogZoneCounts, catalogZones,
 } from '@/lib/db/catalog';
 import {
@@ -1563,6 +1563,13 @@ export default {
     check('агента без опубликованных объектов в списке нет',
       !(await catalogAgents()).some((a) => a.id === noObjects.id));
     check('и его страницы тоже нет', (await catalogAgentById(noObjects.id)) === null);
+
+    // Валюты каталога — для подписи поля «цена до». Поле без валюты
+    // оставляет человека гадать, вводить 800 или 70 000.
+    const money = await catalogCurrencies();
+    check('валюты каталога берутся из опубликованных объектов',
+      money.includes('USD'), money.join(', '));
+    check('и без повторов', money.length === new Set(money).size, money.join(', '));
 
     // Объекты на странице агента — те же, что в каталоге, и только его.
     //

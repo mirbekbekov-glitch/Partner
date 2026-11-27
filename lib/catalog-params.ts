@@ -200,6 +200,19 @@ export function daysSince(iso: string): number {
  */
 const SOM: Record<string, string> = { ru: 'сом', ky: 'сом', en: 'som', zh: '索姆' };
 
+/**
+ * Знак валюты без числа — для подписи поля «цена до».
+ *
+ * Отдельно от publicMoney, потому что задача другая: там цена объекта, и
+ * сом пишется словом рядом с числом; здесь нужен один короткий знак в
+ * подписи, где числа нет вовсе.
+ */
+export function moneySign(lang: string, currency: string): string {
+  if (currency === 'USD') return '$';
+  if (currency === 'KGS') return SOM[lang] ?? 'KGS';
+  return currency;
+}
+
 export function publicMoney(lang: string, v: number, currency: string): string {
   const locale = lang === 'en' ? 'en-US' : lang === 'zh' ? 'zh-CN' : 'ru-RU';
   const n = new Intl.NumberFormat(locale).format(v).replace(/\u00A0|\s/g, '\u00A0');
