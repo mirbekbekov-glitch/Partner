@@ -339,15 +339,24 @@ export default async function Catalog({
               сайта, объект приносит меньшинство — а когда залиты обе,
               человек выбирает между кнопками вместо того, чтобы делать
               своё. */}
+          {/* «Оставить заявку» стоит прямо над развилкой, а не кнопкой в
+              шапке рядом с «Агентами». В шапке эти слова называли
+              действие, но не показывали, куда нажать: человек читал их у
+              логотипа, а выбор стороны был экраном ниже и никак с ними
+              не связан. Здесь подпись и две кнопки — один блок: что
+              сделать и чем именно это делается. */}
           <div className="hero-go">
-            <Link href={`/${lang}/request`} className="go-main">
-              {d.heroAsk}
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                <path d="M3 9h12M10 4l5 5-5 5" stroke="currentColor" strokeWidth="2"
-                      strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </Link>
-            <Link href={`/${lang}/request?side=own`} className="go-side">{d.heroOwn}</Link>
+            <p className="go-head"><span className="mk" aria-hidden="true" />{d.reqNav}</p>
+            <div className="go-row">
+              <Link href={`/${lang}/request`} className="go-main">
+                {d.heroAsk}
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <path d="M3 9h12M10 4l5 5-5 5" stroke="currentColor" strokeWidth="2"
+                        strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </Link>
+              <Link href={`/${lang}/request?side=own`} className="go-side">{d.heroOwn}</Link>
+            </div>
           </div>
         </div>
       </section>

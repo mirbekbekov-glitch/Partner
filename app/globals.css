@@ -615,13 +615,6 @@ main:has(.auth) { max-width: none; padding: 0; }
   white-space: nowrap; transition: border-color .18s, color .18s, background .18s; }
 .enter:hover { border-color: var(--accent); color: var(--accent); background: var(--sunk); }
 .enter .narrow { display: none; }
-/* Вход собственника: контур фирменным цветом. Громче серого контура
-   «входа для агентов» — к нему идёт клиент, а не сотрудник, — и тише
-   залитой кнопки, которая на сайте значит «главное действие страницы». */
-.nav-cta { color: var(--accent); border: 1px solid var(--accent); border-radius: var(--r-full);
-  padding: 10px 17px; font-weight: 700; font-size: 0.875rem; text-decoration: none;
-  white-space: nowrap; transition: background .18s, color .18s; }
-.nav-cta:hover { background: var(--accent); color: #fff; }
 
 /* --- Герой -------------------------------------------------------------- */
 .hero { position: relative; background: var(--sunk); color: var(--fg); overflow: hidden; }
@@ -642,7 +635,12 @@ main:has(.auth) { max-width: none; padding: 0; }
                     linear-gradient(90deg, rgba(18,22,28,.05) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: linear-gradient(to bottom, rgba(0,0,0,.9), transparent 78%); }
-.hero-art { position: absolute; inset: 0; pointer-events: none; }
+/* Рисунок держится той же полосы, что и текст, а не края экрана. На
+   широком мониторе текст уходил к левому краю, рисунок — к правому, и
+   между ними оставалась пустая середина в треть экрана. Теперь оба в
+   одной колонке, и она уже самой полосы: нечему разъезжаться. */
+.hero-art { position: absolute; inset: 0; pointer-events: none;
+  max-width: 1320px; margin-inline: auto; }
 /* Линии построения: тонкие, серые и заметно тише объёма. На чертеже
    конструкция читается, но не спорит с деталью. */
 .hero-art .frame { stroke: var(--steel); opacity: .62; fill: none; }
@@ -750,7 +748,16 @@ main:has(.auth) { max-width: none; padding: 0; }
    для меньшинства (у кого объект на руках), и две залитых кнопки рядом
    превращают первый экран в выбор между ними. Ряд переносится, а кнопки
    не сжимаются: обрезанная подпись действия хуже переноса. */
-.hero-go { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.hero-go { display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  margin-top: 14px; }
+/* Подпись над развилкой. Эти же слова стояли кнопкой в шапке, рядом с
+   «Агентами»: они называли действие, но не показывали, куда нажать.
+   Здесь они — заголовок двух кнопок, и связь видна без объяснений.
+   Ступенька из знака работает указателем: взгляд идёт по ней вниз, к
+   кнопкам. */
+.go-head { display: flex; align-items: center; gap: 9px; margin: 0;
+  font-size: 0.9375rem; font-weight: 800; letter-spacing: .01em; color: var(--fg); }
+.go-row { display: flex; flex-wrap: wrap; gap: 12px; }
 .go-main, .go-side { display: inline-flex; align-items: center; justify-content: center;
   gap: 9px; border-radius: var(--r-full); padding: 14px 24px; font-size: 1rem;
   font-weight: 700; text-decoration: none; white-space: nowrap;
@@ -1258,7 +1265,7 @@ main:has(.auth) { max-width: none; padding: 0; }
      строки — убираем её вместе с отступом. */
   /* Кнопки во всю ширину: на телефоне ряд из двух всё равно переносится,
      и кнопка в полстроки читалась бы как менее важная, чем она есть. */
-  .hero-go { width: 100%; }
+  .hero-go, .go-row { width: 100%; }
   .go-main, .go-side { flex: 1 1 100%; }
   .grid { grid-template-columns: 1fr; }
   .gal { grid-template-columns: 1fr; }
@@ -1274,7 +1281,6 @@ main:has(.auth) { max-width: none; padding: 0; }
      И это выдерживает третий раздел, когда он появится. */
   .nav-in { flex-wrap: wrap; row-gap: 10px; gap: 8px; }
   .nav-link { font-size: 0.8125rem; }
-  .nav-cta { padding: 9px 13px; font-size: 0.8125rem; }
   /* Разделы — отдельной строкой целиком. order сам по себе не помог:
      первая строка доедала один из разделов, и одинокой внизу оставалась
      вторая ссылка. flex-basis: 100% заставляет обёртку занять всю
