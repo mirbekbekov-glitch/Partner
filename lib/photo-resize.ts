@@ -21,6 +21,8 @@
  * обращается вовсе.
  */
 
+import { checkPanorama, toGray, type Issue } from './photo-check';
+
 /** Полный снимок: больше этого на экране не видно, а весит заметно. */
 const FULL_SIDE = 2000;
 const FULL_QUALITY = 0.82;
@@ -130,4 +132,75 @@ export async function thumbnailFrom(blob: Blob): Promise<Blob | null> {
   } catch {
     return null;
   }
+}
+
+/* --- Панорамы ------------------------------------------------------------
+ *
+ * У панорамы другие правила, чем у снимка. Её не рассматривают целиком:
+ * просмотрщик показывает кусок в градусов шестьдесят, растягивая его на
+ * весь экран. Сожми панораму до двух тысяч точек по длинной стороне, как
+ * обычный снимок, — и в окне останется каша.
+ *
+ * 5120 — предел, после которого выигрыш в чёткости перестаёт
+ * чувствоваться, а памяти в браузере телефона на пересборку уже не
+ * хватает: площадь такой картинки около шести мегапикселей, и это
+ * укладывается в ограничение холста на iOS.
+ */
+const PANO_SIDE = 5120;
+const PANO_QUALITY = 0.8;
+
+export type PreparedPano = {
+  full: Blob;
+  /** Размеры ПОСЛЕ сжатия: по ним просмотрщик считает углы обзора. */
+  width: number;
+  height: number;
+  before: number;
+  after: number;
+  /** Что не так со съёмкой. Пусто — всё в порядке. */
+  issues: Issue[];
+};
+
+export async function preparePanorama(file: File): Promise<PreparedPano> {
+  const before = file.size;
+
+  if (!canResize()) {
+    // Старый браузер: отправляем как есть. Размеры неизвестны — пусть
+    // просмотрщик считает панораму полной сферой, это частый случай.
+    // Проверить съёмку тоже нечем, и молчание здесь честнее догадки.
+    return { full: file, width: 0, height: 0, before, after: before, issues: [] };
+  }
+
+  const bitmap = await createImageBitmap(file);
+  const scale = scaleFor(bitmap.width, bitmap.height, PANO_SIDE);
+  const width = Math.round(bitmap.width * scale);
+  const height = Math.round(bitmap.height * scale);
+
+  const canvas = new OffscreenCanvas(width, height);
+  const context = canvas.getContext('2d');
+  if (!context) {
+    bitmap.close();
+    return {
+      full: file, width: bitmap.width, height: bitmap.height,
+      before, after: before, issues: [],
+    };
+  }
+
+  context.drawImage(bitmap, 0, 0, width, height);
+
+  // Проверка съёмки — на мелкой копии: на 256 точках видно и темноту, и
+  // смазанность, а считается это миллисекунды даже на телефоне.
+  const small = new OffscreenCanvas(256, Math.max(1, Math.round((256 * height) / width)));
+  const smallCtx = small.getContext('2d');
+  let gray = null;
+  if (smallCtx) {
+    smallCtx.drawImage(bitmap, 0, 0, small.width, small.height);
+    const pixels = smallCtx.getImageData(0, 0, small.width, small.height);
+    gray = toGray(pixels.data, small.width, small.height);
+  }
+  const issues = checkPanorama(gray, width, height);
+
+  bitmap.close();
+
+  const full = await canvas.convertToBlob({ type: 'image/jpeg', quality: PANO_QUALITY });
+  return { full, width, height, before, after: full.size, issues };
 }

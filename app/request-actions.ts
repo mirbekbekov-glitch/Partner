@@ -59,7 +59,12 @@ export async function submitRequest(
       // offer_deal и означает, что заявку оставил собственник.
       offer_deal: str('offer_deal'),
       address: str('address'),
-      housing_type: str('housing_type'),
+      // Подробный тип. housing_type слой доступа выводит из него сам —
+      // два поля из формы разошлись бы, и заявка на кабинет приехала бы
+      // заявкой на квартиру.
+      space_type: str('space_type'),
+      term_days_min: num('term_days_min'),
+      term_days_max: num('term_days_max'),
       rooms: num('rooms'),
       district: str('district'),
       // Человек вводит бюджет в долларах или сомах, а в базе деньги целые

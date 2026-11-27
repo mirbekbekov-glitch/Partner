@@ -3,19 +3,24 @@
 import Link from 'next/link';
 import { useActionState, useRef, useState, useTransition } from 'react';
 import type { FormResult } from './form-actions';
+import type { Panorama } from '@/lib/db/panoramas';
 import { draftDescription } from './form-actions';
 import { PhotoUpload } from './PhotoUpload';
+import { PanoramaUpload } from './PanoramaUpload';
 import { MapPick } from './MapPick';
 import { Suggest } from '../../Suggest';
 import { citiesOf, zonesOf } from '@/lib/geo';
 import {
-  BUILDING_TYPE, COMMERCIAL_TYPE, PARKING_TYPE, REGION,
-  RENTAL_TERM, ROOM_LOCATION, SERIE,
+  BUILDING_TYPE, PARKING_TYPE, REGION, ROOM_LOCATION, SERIE,
 } from '@/lib/mhouse';
+import { OBJECT_TYPES } from '@/lib/space-types';
 
 export type ObjectDraft = {
   id?: string;
   kind: string;
+  subkind?: string | null;
+  term_days_min?: number | null;
+  term_days_max?: number | null;
   deal_type: string;
   address: string;
   city: string;
@@ -28,6 +33,8 @@ export type ObjectDraft = {
   currency: string;
   description: string | null;
   photos: (string | { url?: string })[] | null;
+  /** Панорамы для виртуального тура. */
+  panoramas?: Panorama[];
   /* Поля для выгрузки на площадки. Пусто — объект в фид не уйдёт. */
   latitude?: number | null;
   longitude?: number | null;
@@ -67,6 +74,54 @@ function Pick({
   );
 }
 
+/**
+ * Точный вид нежилого — наш словарь, а не справочник площадки.
+ *
+ * Раньше здесь спрашивался «вид коммерции» словами m-house: тринадцать
+ * строк вроде «цеха, заводы, фабрики, мастерские». Кабинета и рабочего
+ * места в коворкинге в том списке нет, а это настоящий товар — агент
+ * заводил их «офисами» и терял обоих клиентов: ищущий кабинет видел
+ * офис, ищущий коворкинг не видел ничего.
+ *
+ * Теперь спрашиваем своё, а значение для площадки выводим из ответа
+ * (mhouseCommercial). Один вопрос вместо двух, и словарь один.
+ */
+const SUBKINDS: [string, string][] = [
+  ['office', 'офис'],
+  ['cabinet', 'кабинет'],
+  ['desk', 'рабочее место в коворкинге'],
+  ['building', 'здание целиком'],
+  ['retail', 'магазин, бутик'],
+  ['container', 'торговый контейнер'],
+  ['warehouse', 'склад'],
+  ['production', 'цех, завод, мастерская'],
+  ['catering', 'ресторан, кафе, общепит'],
+  ['hotel', 'отель, хостел, зона отдыха'],
+  ['auto', 'автосервис, автомойка'],
+  ['beauty', 'салон красоты'],
+  ['medical', 'медцентр, аптека'],
+  ['agriculture', 'сельское хозяйство'],
+];
+
+/**
+ * Срок аренды: вопрос к агенту и диапазон дней за ним.
+ *
+ * Раньше здесь спрашивался срок словами справочника площадки:
+ * «посуточно», «помесячно», «на долгий срок». Отбирать по ним нельзя —
+ * это чужой словарь, — а посуточная аренда стала отдельным разделом
+ * витрины: так сдают квартиры, хостелы и рабочие места в коворкинге.
+ *
+ * Поэтому спрашиваем своё, в днях, и из дней выводим слово для площадки.
+ * Диапазоном, а не одним числом: «от трёх дней до месяца» — настоящее
+ * условие хозяина, а «посуточно» — только его пересказ.
+ */
+const TERMS: [string, string, number, number | null][] = [
+  ['daily',   'посуточно (от 1 дня)',        1,   30],
+  ['short',   'на месяц-другой (1–3 мес.)',  30,  90],
+  ['months6', 'на полгода (3–6 мес.)',       90,  180],
+  ['year',    'на год и дольше',             365, null],
+];
+
 const KINDS: [string, string][] = [
   ['flat', 'квартира'],
   ['room', 'комната'],
@@ -76,6 +131,19 @@ const KINDS: [string, string][] = [
   ['commercial', 'коммерческая'],
   ['garage', 'гараж'],
 ];
+
+/**
+ * Какой пресет показать на правке.
+ *
+ * Дни главные, пресет — подпись к ним. Объект, у которого дни не совпали
+ * ни с одним пресетом (их могли проставить иначе), показывается как «не
+ * указан» — и это честнее, чем выбрать похожий и молча переписать срок
+ * при первом сохранении.
+ */
+function termCode(min: number | null, max: number | null): string {
+  const found = TERMS.find(([, , lo, hi]) => lo === min && hi === max);
+  return found ? found[0] : '';
+}
 
 export function ObjectForm({
   action,
@@ -305,8 +373,19 @@ export function ObjectForm({
         ) : null}
 
         {kind === 'commercial' ? (
-          <Pick name="commercial_type" label="Вид коммерции" values={COMMERCIAL_TYPE}
-                value={draft?.commercial_type} hint="Без него объект не опубликуют." />
+          <div className="field">
+            <label className="key" htmlFor="subkind">Что именно</label>
+            <select id="subkind" name="subkind" defaultValue={draft?.subkind ?? ''}>
+              <option value="">не указано</option>
+              {SUBKINDS.map(([v, title]) => (
+                <option key={v} value={v}>{title}</option>
+              ))}
+            </select>
+            <p className="key">
+              Этим словом объект подписан в каталоге. Без него площадка
+              объявление не опубликует.
+            </p>
+          </div>
         ) : null}
 
         {kind === 'room' ? (
@@ -320,8 +399,21 @@ export function ObjectForm({
         ) : null}
 
         {dealType === 'rent' ? (
-          <Pick name="rental_term" label="Срок аренды" values={RENTAL_TERM}
-                value={draft?.rental_term} hint="Без него аренду не опубликуют." />
+          <div className="field">
+            <label className="key" htmlFor="term">Срок аренды</label>
+            <select id="term" name="term"
+                    defaultValue={termCode(draft?.term_days_min ?? null,
+                                           draft?.term_days_max ?? null)}>
+              <option value="">не указан</option>
+              {TERMS.map(([code, title]) => (
+                <option key={code} value={code}>{title}</option>
+              ))}
+            </select>
+            <p className="key">
+              От срока зависит раздел витрины: короткий — «Посуточно».
+              Без него площадка аренду не опубликует.
+            </p>
+          </div>
         ) : null}
 
         <div className="field s1">
@@ -349,6 +441,11 @@ export function ObjectForm({
       </div>
 
       <PhotoUpload objectId={draft?.id ?? null} initial={photoList} />
+
+      {/* Панорамы отдельным блоком от снимков: это разные вещи. Снимок
+          смотрят целиком, панораму крутят, и показывать её в ленте
+          обложкой нельзя — она выглядит растянутой полосой. */}
+      <PanoramaUpload objectId={draft?.id ?? null} initial={draft?.panoramas ?? []} />
 
       {mode === 'create' ? (
         <>

@@ -21,7 +21,8 @@ import { catalogPage, type CatalogItem } from './db/catalog';
 import { normalizePhone } from './db/normalize';
 import {
   BUILDING_TYPE, CATEGORY, COMMERCIAL_TYPE, DEAL, DISTRICT, PARKING_TYPE,
-  REGION, RENTAL_TERM, ROOM_LOCATION, SERIE, fromList, regionOf,
+  REGION, RENTAL_TERM, ROOM_LOCATION, SERIE, fromList, mhouseCommercial,
+  mhouseTerm, regionOf,
 } from './mhouse';
 
 /** Больше этого за один запрос не собираем: Worker не резиновый. */
@@ -100,6 +101,11 @@ function roomsValue(rooms: number | null): string | null {
  */
 export type FeedCandidate = {
   kind: string;
+  /** Наш точный вид. Значение для справочника площадки выводится из него. */
+  subkind?: string | null;
+  /** Наш срок аренды в днях. Слово площадки выводится из него. */
+  term_days_min?: number | null;
+  term_days_max?: number | null;
   deal_type: 'rent' | 'sale';
   city: string;
   description: string | null;
@@ -128,6 +134,26 @@ export type FeedCandidate = {
  * объекта: агент должен видеть пробел в кабинете, а не узнавать о нём из
  * отчёта площадки через сутки.
  */
+/**
+ * Вид коммерции для площадки: выведенный из нашего кода или прежний.
+ *
+ * Наш код — главный. Прежнее значение остаётся запасным путём для
+ * объектов, заведённых до subkind: их никто не переписывал, и терять
+ * их выгрузку из-за нашей перестройки словаря нельзя.
+ *
+ * fromList оставлен снаружи — он сверяет результат со справочником
+ * площадки, и выдуманное значение до файла не доходит.
+ */
+function commercialFor(item: FeedCandidate): string | null {
+  return mhouseCommercial(item.subkind) ?? item.commercial_type;
+}
+
+/** Срок для площадки: выведенный из наших дней или прежний. Та же логика. */
+function termFor(item: FeedCandidate): string | null {
+  return mhouseTerm(item.term_days_min ?? null, item.term_days_max ?? null)
+    ?? item.rental_term;
+}
+
 export function missingFields(item: FeedCandidate): string[] {
   const miss: string[] = [];
   const category = CATEGORY[item.kind];
@@ -137,7 +163,7 @@ export function missingFields(item: FeedCandidate): string[] {
   if (!regionOf(item.city, item.region)) miss.push('регион');
   if (!item.description) miss.push('описание');
   if (item.photos.length === 0) miss.push('фото');
-  if (item.deal_type === 'rent' && !fromList(RENTAL_TERM, item.rental_term)) {
+  if (item.deal_type === 'rent' && !fromList(RENTAL_TERM, termFor(item))) {
     miss.push('срок аренды');
   }
 
@@ -159,7 +185,7 @@ export function missingFields(item: FeedCandidate): string[] {
   if (category === 'участок' && !item.land_area) miss.push('площадь участка');
 
   if (category === 'коммерческая недвижимость') {
-    if (!fromList(COMMERCIAL_TYPE, item.commercial_type)) miss.push('вид коммерции');
+    if (!fromList(COMMERCIAL_TYPE, commercialFor(item))) miss.push('вид коммерции');
     if (!item.area) miss.push('площадь');
   }
 
@@ -218,7 +244,7 @@ function offer(item: CatalogItem, agent: string, origin: string): string {
     + `      <value>${item.price}</value>\n`
     + `      <currency>${esc(item.currency)}</currency>\n`
     + '    </price>\n'
-    + tag('rental-term', fromList(RENTAL_TERM, item.rental_term))
+    + tag('rental-term', fromList(RENTAL_TERM, termFor(item)))
     + tag('rooms', roomsValue(item.rooms))
     + tag('square', item.area)
     + tag('land-square', item.land_area)
@@ -227,7 +253,7 @@ function offer(item: CatalogItem, agent: string, origin: string): string {
     + tag('year', item.build_year)
     + tag('building-type', fromList(BUILDING_TYPE, item.building_type))
     + tag('serie', fromList(SERIE, item.serie))
-    + tag('commercial-type', fromList(COMMERCIAL_TYPE, item.commercial_type))
+    + tag('commercial-type', fromList(COMMERCIAL_TYPE, commercialFor(item)))
     + tag('room-location', fromList(ROOM_LOCATION, item.room_location))
     + tag('parking-type', fromList(PARKING_TYPE, item.parking_type))
     + tag('description', item.description)

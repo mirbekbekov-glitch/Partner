@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 import { catalogAgentById, catalogPage } from '@/lib/db/catalog';
 import { firstPhoto, publicMoney } from '@/lib/catalog-params';
 import { thumbOf } from '@/lib/photo-url';
-import { t, kindName, LANGS, isLang, type Lang } from '@/lib/i18n';
+import { t, spaceName, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { AGENCY_PHONES } from '@/lib/agency';
 import { CatalogHeader } from '../../../CatalogHeader';
 import { CatalogFooter } from '../../../CatalogFooter';
@@ -115,7 +115,7 @@ export default async function AgentPage({
                   <p className="price num">{publicMoney(lang, o.price, o.currency)}</p>
                   <p className="addr">{o.address}</p>
                   <p className="facts">
-                    <span className="fact">{kindName(lang, o.kind)}</span>
+                    <span className="fact">{spaceName(lang, o)}</span>
                     {o.zone ? <span className="fact">{o.zone}</span> : null}
                   </p>
                 </div>

@@ -9,6 +9,8 @@
  * агент своими словами, и машинного перевода тут не будет: цена ошибки в
  * описании недвижимости выше, чем польза от приблизительного текста.
  */
+import { commercialCode } from './mhouse';
+
 export const LANGS = ['ky', 'ru', 'en', 'zh'] as const;
 export type Lang = (typeof LANGS)[number];
 export const DEFAULT_LANG: Lang = 'ru';
@@ -64,6 +66,7 @@ type Dict = {
   areaLabel: string; floorLabel: string; floorOf: string; zoneLabel: string; cityLabel: string;
   zoneSearch: string; zoneNone: string; regionLabel: string; otherPlaces: string;
   callAgent: string; writeWhatsapp: string; writeTelegram: string;
+  tourTitle: string; tourFlag: string;
   confirmedPrice: string; notFound: string; notFoundLede: string; seeWhatIsThere: string;
   // Блок агента на странице объекта. Открыты ровно три поля: имя, стаж и
   // подтверждённый номер в реестре. Телефон агента здесь намеренно
@@ -103,6 +106,12 @@ type Dict = {
   /** Бюджет ниже рынка: порог и на скольки объявлениях он стоит. */
   reqLowBudget: (floor: string, basedOn: number) => string;
   reqUseFloor: string;
+  /** Группы и виды помещений в заявке. */
+  spaceGroups: Record<string, string>;
+  spaceTypes: Record<string, string>;
+  /** Срок аренды. */
+  reqTerm: string; reqTermHint: string; reqTermFrom: string; reqTermTo: string;
+  reqTermDays: string; termPresets: Record<string, string>;
   reqWhy1: string; reqWhy2: string; reqWhy3: string;
   // Заявка собственника: «сдам или продам». Та же форма, другая сторона.
   reqSideLegend: string; reqSideFind: string; reqSideOwn: string;
@@ -116,6 +125,15 @@ type Dict = {
   heroCall: string; heroAsk: string; heroOwn: string; heroNote: string;
   // Типы недвижимости
   kinds: Record<string, string>;
+  /** Третий режим наверху и его подписи. */
+  tabDaily: string; forDaily: string; perDay: string;
+  alsoShort: string; alsoShortHint: string;
+  /* Карта витрины. */
+  mapNav: string; mapTitle: string; mapLead: string; mapMove: string;
+  mapEmpty: string; mapLoading: string;
+  mapPartial: (shown: number, total: number) => string;
+  /* Сокращения чисел на булавке. */
+  mln: string; thd: string; somShort: string;
 };
 
 const plural = (n: number, one: string, few: string, many: string) => {
@@ -162,6 +180,7 @@ const ru: Dict = {
   zoneSearch: 'Поиск…', zoneNone: 'Такого района нет в списке',
   regionLabel: 'Регион', otherPlaces: 'Другие места',
   callAgent: 'Позвонить', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
+  tourTitle: 'Виртуальный тур', tourFlag: 'тур',
   confirmedPrice: 'Агент подтвердил цену и доступность',
   agentLeads: 'Объект ведёт',
   // «год», «года», «лет»: иначе строка читается как машинный перевод.
@@ -229,6 +248,20 @@ const ru: Dict = {
     + ` (по ${basedOn} объявлениям в каталоге). Укажите хотя бы эту сумму —`
     + ` так агент начнёт искать, а не объяснять, почему не находит.`,
   reqUseFloor: 'Подставить эту сумму',
+  spaceGroups: { housing: 'Жильё', commercial: 'Коммерция', workplace: 'Рабочее место' },
+  spaceTypes: {
+    flat: 'Квартира', room: 'Комната, подселение', house: 'Дом',
+    townhouse: 'Таунхаус', land: 'Участок', garage: 'Гараж, паркинг',
+    office: 'Офис', cabinet: 'Кабинет', building: 'Здание целиком',
+    retail: 'Торговое помещение', warehouse: 'Склад', production: 'Производство',
+    desk: 'Рабочее место в коворкинге',
+  },
+  reqTerm: 'Срок аренды', reqTermHint: 'Посуточно, на месяц или на год — это разные объекты и разные цены',
+  reqTermFrom: 'от', reqTermTo: 'до', reqTermDays: 'дней',
+  termPresets: {
+    daily: 'Посуточно', months3: 'До 3 месяцев',
+    months6: '3–6 месяцев', year: 'От года',
+  },
   reqErrMany: 'С этого номера сегодня уже несколько заявок. Позвоните нам напрямую.',
   reqErrGeneric: 'Не удалось отправить заявку. Попробуйте ещё раз.',
   reqWhy1: 'Отвечаем в течение часа',
@@ -257,8 +290,26 @@ const ru: Dict = {
   pitchStep2: 'Заявку видят агенты', pitchStep2Note: 'Отвечаем в течение часа — это норматив, а не обещание',
   pitchStep3: 'Вам приносят варианты', pitchStep3Note: 'Появится позже — позвоним, заявка остаётся в работе',
   themeSwitch: 'Светлая или тёмная тема',
+  tabDaily: 'Посуточно',
+  mapNav: 'Карта',
+  mapTitle: 'Каталог на карте',
+  mapLead: 'Объекты Liberterra на карте Бишкека: цена прямо на булавке.',
+  mapMove: 'Искать при перемещении карты',
+  mapEmpty: 'В этой части карты ничего нет. Отодвиньте или снимите фильтры.',
+  mapLoading: 'Ищем…',
+  mapPartial: (shown, total) => `Показаны ${shown} из ${total} — приблизьте карту или сузьте поиск.`,
+  mln: ' млн', thd: ' тыс.', somShort: ' с',
+  alsoShort: 'Показать и краткосрочную сдачу',
+  alsoShortHint: 'Квартиры, хостелы и рабочие места, которые сдают меньше чем на месяц.',
+  forDaily: 'Посуточно',
+  perDay: '/сутки',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
-           land: 'участок', commercial: 'коммерческая', garage: 'гараж' },
+           land: 'участок', commercial: 'коммерческая', garage: 'гараж',
+           office: 'офис', cabinet: 'кабинет', desk: 'рабочее место',
+           building: 'здание', retail: 'магазин',
+           warehouse: 'склад', production: 'цех', container: 'торговый контейнер',
+           agriculture: 'сельхозугодье', catering: 'общепит', hotel: 'отель',
+           auto: 'автосервис', beauty: 'салон красоты', medical: 'медцентр' },
 };
 
 const ky: Dict = {
@@ -298,6 +349,7 @@ const ky: Dict = {
   zoneSearch: 'Издөө…', zoneNone: 'Мындай район тизмеде жок',
   regionLabel: 'Аймак', otherPlaces: 'Башка жерлер',
   callAgent: 'Чалуу', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
+  tourTitle: 'Виртуалдык тур', tourFlag: 'тур',
   confirmedPrice: 'Агент бааны жана жеткиликтүүлүктү ырастады',
   agentLeads: 'Объектти алып баруучу',
   agentYears: (n) => `кыймылсыз мүлктө ${n} жыл`,
@@ -354,6 +406,20 @@ const ky: Dict = {
     `Мындай баада бул районда бир дагы вариант жок: эң арзаны — ${floor}`
     + ` (каталогдогу ${basedOn} жарнама боюнча).`,
   reqUseFloor: 'Ушул сумманы коюу',
+  spaceGroups: { housing: 'Турак жай', commercial: 'Коммерция', workplace: 'Жумуш орду' },
+  spaceTypes: {
+    flat: 'Батир', room: 'Бөлмө, подселение', house: 'Үй',
+    townhouse: 'Таунхаус', land: 'Участок', garage: 'Гараж, паркинг',
+    office: 'Офис', cabinet: 'Кабинет', building: 'Имарат толугу менен',
+    retail: 'Соода жайы', warehouse: 'Склад', production: 'Өндүрүш',
+    desk: 'Коворкингдеги жумуш орду',
+  },
+  reqTerm: 'Ижара мөөнөтү', reqTermHint: 'Күндөп, айга же жылга — бул ар башка объекттер',
+  reqTermFrom: 'баштап', reqTermTo: 'чейин', reqTermDays: 'күн',
+  termPresets: {
+    daily: 'Күндөп', months3: '3 айга чейин',
+    months6: '3–6 ай', year: 'Жылдан',
+  },
   reqErrMany: 'Бул номерден бүгүн бир нече арыз келди. Бизге түз чалыңыз.',
   reqErrGeneric: 'Арызды жөнөтүү мүмкүн болгон жок. Кайра аракет кылыңыз.',
   reqWhy1: 'Бир сааттын ичинде жооп беребиз',
@@ -382,8 +448,26 @@ const ky: Dict = {
   pitchStep2: 'Арызды агенттер көрөт', pitchStep2Note: 'Бир сааттын ичинде жооп беребиз — бул норматив',
   pitchStep3: 'Сизге варианттар келет', pitchStep3Note: 'Кийин пайда болсо — чалабыз, арыз иште калат',
   themeSwitch: 'Жарык же караңгы тема',
+  tabDaily: 'Суткасына',
+  mapNav: 'Карта',
+  mapTitle: 'Картадагы каталог',
+  mapLead: 'Liberterra объекттери Бишкектин картасында: баасы түздөн-түз белгиде.',
+  mapMove: 'Картаны жылдырганда издөө',
+  mapEmpty: 'Картанын бул бөлүгүндө эч нерсе жок. Жылдырыңыз же чыпкаларды алып салыңыз.',
+  mapLoading: 'Издеп жатабыз…',
+  mapPartial: (shown, total) => `${total} ичинен ${shown} көрсөтүлдү — картаны жакындатыңыз.`,
+  mln: ' млн', thd: ' миң', somShort: ' с',
+  alsoShort: 'Кыска мөөнөттүү ижараны да көрсөтүү',
+  alsoShortHint: 'Бир айдан аз мөөнөткө берилген батирлер, хостелдер жана иш орундар.',
+  forDaily: 'Суткасына',
+  perDay: '/сутка',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
-           land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж' },
+           land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж',
+           office: 'офис', cabinet: 'кабинет', desk: 'иш орун',
+           building: 'имарат', retail: 'дүкөн',
+           warehouse: 'кампа', production: 'цех', container: 'соода контейнери',
+           agriculture: 'айыл чарба жери', catering: 'ашхана', hotel: 'мейманкана',
+           auto: 'автосервис', beauty: 'сулуулук салону', medical: 'медайкел' },
 };
 
 const en: Dict = {
@@ -423,6 +507,7 @@ const en: Dict = {
   zoneSearch: 'Search…', zoneNone: 'No such district in the list',
   regionLabel: 'Region', otherPlaces: 'Other places',
   callAgent: 'Call', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
+  tourTitle: 'Virtual tour', tourFlag: 'tour',
   confirmedPrice: 'Agent confirmed the price and availability',
   agentLeads: 'Listing agent',
   agentYears: (n) => `${n} ${n === 1 ? 'year' : 'years'} in real estate`,
@@ -479,6 +564,20 @@ const en: Dict = {
     `There is nothing at that price in this district: the cheapest is ${floor}`
     + ` (based on ${basedOn} listings in the catalogue).`,
   reqUseFloor: 'Use this amount',
+  spaceGroups: { housing: 'Housing', commercial: 'Commercial', workplace: 'Workplace' },
+  spaceTypes: {
+    flat: 'Flat', room: 'Room, shared', house: 'House',
+    townhouse: 'Townhouse', land: 'Land', garage: 'Garage, parking',
+    office: 'Office', cabinet: 'Private room in an office', building: 'Whole building',
+    retail: 'Retail space', warehouse: 'Warehouse', production: 'Production',
+    desk: 'Desk in a coworking space',
+  },
+  reqTerm: 'Rental term', reqTermHint: 'Nightly, monthly or yearly — different listings, different prices',
+  reqTermFrom: 'from', reqTermTo: 'to', reqTermDays: 'days',
+  termPresets: {
+    daily: 'Nightly', months3: 'Up to 3 months',
+    months6: '3–6 months', year: 'A year or more',
+  },
   reqErrMany: 'Several requests from this number today already. Please call us directly.',
   reqErrGeneric: 'The request could not be sent. Please try again.',
   reqWhy1: 'We answer within the hour',
@@ -507,8 +606,26 @@ const en: Dict = {
   pitchStep2: 'Agents see the request', pitchStep2Note: 'We answer within the hour — a standard, not a promise',
   pitchStep3: 'They bring you options', pitchStep3Note: 'If it appears later, we call: the request stays open',
   themeSwitch: 'Light or dark theme',
+  tabDaily: 'Daily',
+  mapNav: 'Map',
+  mapTitle: 'Catalogue on the map',
+  mapLead: 'Liberterra listings on the map of Bishkek, price right on the pin.',
+  mapMove: 'Search as I move the map',
+  mapEmpty: 'Nothing in this part of the map. Pan out or clear the filters.',
+  mapLoading: 'Searching…',
+  mapPartial: (shown, total) => `Showing ${shown} of ${total} — zoom in or narrow the search.`,
+  mln: 'M', thd: 'K', somShort: ' som',
+  alsoShort: 'Include short lets',
+  alsoShortHint: 'Flats, hostels and desks let for less than a month.',
+  forDaily: 'By the day',
+  perDay: '/day',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
-           land: 'land', commercial: 'commercial', garage: 'garage' },
+           land: 'land', commercial: 'commercial', garage: 'garage',
+           office: 'office', cabinet: 'private office', desk: 'coworking desk',
+           building: 'whole building', retail: 'shop',
+           warehouse: 'warehouse', production: 'workshop', container: 'retail container',
+           agriculture: 'farmland', catering: 'restaurant space', hotel: 'hotel',
+           auto: 'car service', beauty: 'beauty salon', medical: 'medical centre' },
 };
 
 const zh: Dict = {
@@ -548,6 +665,7 @@ const zh: Dict = {
   zoneSearch: '搜索…', zoneNone: '列表中没有该区域',
   regionLabel: '地区', otherPlaces: '其他地方',
   callAgent: '拨打电话', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
+  tourTitle: '全景看房', tourFlag: '全景',
   confirmedPrice: '经纪人已确认价格与可售状态',
   agentLeads: '负责经纪人',
   agentYears: (n) => `从事房地产 ${n} 年`,
@@ -603,6 +721,20 @@ const zh: Dict = {
   reqLowBudget: (floor, basedOn) =>
     `该区域没有这个价位的房源，最低为 ${floor}（依据目录中的 ${basedOn} 条房源）。`,
   reqUseFloor: '使用该金额',
+  spaceGroups: { housing: '住宅', commercial: '商业', workplace: '办公位' },
+  spaceTypes: {
+    flat: '公寓', room: '合租房间', house: '独栋',
+    townhouse: '联排别墅', land: '地块', garage: '车库、车位',
+    office: '写字楼', cabinet: '独立办公间', building: '整栋楼',
+    retail: '商铺', warehouse: '仓库', production: '生产场地',
+    desk: '共享办公工位',
+  },
+  reqTerm: '租期', reqTermHint: '按日、按月或按年——房源和价格都不同',
+  reqTermFrom: '从', reqTermTo: '到', reqTermDays: '天',
+  termPresets: {
+    daily: '按日', months3: '3 个月以内',
+    months6: '3–6 个月', year: '一年以上',
+  },
   reqErrMany: '该号码今天已提交多次。请直接致电我们。',
   reqErrGeneric: '提交失败，请重试。',
   reqWhy1: '一小时内回复',
@@ -631,8 +763,26 @@ const zh: Dict = {
   pitchStep2: '经纪人看到需求', pitchStep2Note: '一小时内回复 — 这是标准，不是口号',
   pitchStep3: '他们为您带来房源', pitchStep3Note: '日后出现也会致电：需求一直有效',
   themeSwitch: '浅色或深色主题',
+  tabDaily: '日租',
+  mapNav: '地图',
+  mapTitle: '地图找房',
+  mapLead: 'Liberterra 房源在比什凯克地图上，价格直接标在图钉上。',
+  mapMove: '移动地图时搜索',
+  mapEmpty: '这一片没有房源。请移动地图或清除筛选。',
+  mapLoading: '搜索中…',
+  mapPartial: (shown, total) => `已显示 ${total} 套中的 ${shown} 套，请放大或缩小筛选范围。`,
+  mln: '百万', thd: '千', somShort: '索姆',
+  alsoShort: '同时显示短租',
+  alsoShortHint: '按不足一个月出租的公寓、青旅和工位。',
+  forDaily: '日租',
+  perDay: '/天',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
-           land: '地块', commercial: '商业用房', garage: '车库' },
+           land: '地块', commercial: '商业用房', garage: '车库',
+           office: '办公室', cabinet: '独立办公间', desk: '联合办公工位',
+           building: '整栋楼', retail: '商铺',
+           warehouse: '仓库', production: '厂房', container: '商业集装箱',
+           agriculture: '农用地', catering: '餐饮用房', hotel: '酒店',
+           auto: '汽车服务', beauty: '美容院', medical: '医疗中心' },
 };
 
 const DICTS: Record<Lang, Dict> = { ky, ru, en, zh };
@@ -641,6 +791,32 @@ export const t = (lang: Lang): Dict => DICTS[lang] ?? DICTS[DEFAULT_LANG];
 
 /** Тип недвижимости на выбранном языке. */
 export const kindName = (lang: Lang, kind: string) => t(lang).kinds[kind] ?? kind;
+
+/**
+ * Что это за объект словами: кабинет — кабинетом, а не «коммерческой».
+ *
+ * kind огрублён — на нём держатся фильтр каталога, выгрузка в фид и
+ * порог рынка, и дробить его нельзя. Но «коммерческая» на карточке не
+ * отвечает на вопрос, что именно сдают. Поэтому показываем subkind.
+ *
+ * Запасной путь по commercial_type — для объектов, заведённых до
+ * появления subkind: у них точный вид есть, но лежит в словаре площадки.
+ * Переписывать их задним числом не стали: вывод из словаря площадки
+ * угадывает «офис» там, где агент имел в виду кабинет, а подпись,
+ * выдуманная за агента, хуже огрублённой.
+ *
+ * Жилья слой не касается, даже если поле заполнено: агент мог перевести
+ * объект из коммерческой в жильё, а значение осталось в записи.
+ * Квартира, подписанная складом, — худшее, что эта подпись может сделать.
+ */
+export const spaceName = (
+  lang: Lang,
+  o: { kind: string; subkind?: string | null; commercial_type?: string | null },
+) => kindName(
+  lang,
+  o.subkind
+    || (o.kind === 'commercial' && commercialCode(o.commercial_type)) || o.kind,
+);
 
 /** Срок последнего подтверждения словами. */
 export function freshWordIn(lang: Lang, days: number): string {

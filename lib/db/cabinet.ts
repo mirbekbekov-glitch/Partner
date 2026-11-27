@@ -3,6 +3,7 @@ import { all, jsonArray, one } from './sql';
 import { requireAgent } from './session';
 import { fromMinor } from './money';
 import { commissionShares, commissionTotal, parseRule, partnerAmount } from './commission';
+import { panoramasFrom } from './panoramas';
 import { contactVisible, dealParty, objectEditable } from './visibility';
 import { searchText } from './normalize';
 import { PAGE_SIZE } from '../list-params';
@@ -600,7 +601,9 @@ export async function linkableObjects() {
 export async function objectCard(id: string) {
   await asker();
   const row = await one<{
-    id: string; kind: string; deal_type: 'rent' | 'sale'; address: string;
+    id: string; kind: string; subkind: string | null;
+    term_days_min: number | null; term_days_max: number | null;
+    deal_type: 'rent' | 'sale'; address: string;
     city: string; zone: string | null; rooms: number | null; area: number | null;
     floor: number | null; floors_total: number | null; price: number;
     currency: string; photos: string; description: string | null;
@@ -613,20 +616,29 @@ export async function objectCard(id: string) {
     land_area: number | null; rental_term: string | null;
     commercial_type: string | null; room_location: string | null;
     parking_type: string | null; build_year: number | null;
+    panoramas: string | null;
   }>(
-    `select o.id, o.kind, o.deal_type, o.address, o.city, o.zone, o.rooms, o.area,
+    `select o.id, o.kind, o.subkind, o.term_days_min, o.term_days_max,
+            o.deal_type, o.address, o.city, o.zone,
+            o.rooms, o.area,
             o.floor, o.floors_total, o.price_minor / 100.0 as price, o.currency,
             o.photos, o.description, o.publication_state, o.published_at,
             o.actual_at, o.created_by_agent_id,
             o.latitude, o.longitude, o.region, o.district, o.micro_district,
             o.house_number, o.building_type, o.serie, o.land_area,
             o.rental_term, o.commercial_type, o.room_location, o.parking_type,
-            o.build_year
+            o.build_year, o.panoramas
        from objects o where o.id = ?`,
     id,
   );
 
-  return row && { ...row, photos: jsonArray<string>(row.photos) };
+  // Панорамы разбираются здесь, как и снимки: в колонке лежит текст, и
+  // всякий, кто её читает, обязан разбор сделать.
+  return row && {
+    ...row,
+    photos: jsonArray<string>(row.photos),
+    panoramas: panoramasFrom(row.panoramas),
+  };
 }
 
 /** Активный мандат объекта — для блока договора на карточке. */

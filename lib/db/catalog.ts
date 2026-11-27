@@ -2,6 +2,8 @@ import 'server-only';
 import { all, holders, jsonArray, one } from './sql';
 import { searchText } from './normalize';
 import { fromMinor } from './money';
+import { MONTH_DAYS } from '../space-types';
+import { panoramasFrom, type Panorama } from './panoramas';
 
 /**
  * Публичный каталог — витрина.
@@ -21,7 +23,8 @@ import { fromMinor } from './money';
 
 /** Единственный разрешённый состав публичной выдачи. */
 const COLUMNS = [
-  'id', 'kind', 'deal_type', 'address', 'city', 'zone',
+  'id', 'kind', 'subkind', 'deal_type', 'term_days_min', 'term_days_max',
+  'address', 'city', 'zone',
   'rooms', 'area', 'floor', 'floors_total',
   'price_minor', 'currency', 'photos', 'description',
   'published_at', 'actual_at',
@@ -32,6 +35,9 @@ const COLUMNS = [
   'latitude', 'longitude', 'region', 'district', 'micro_district',
   'house_number', 'building_type', 'serie', 'land_area', 'rental_term',
   'commercial_type', 'room_location', 'parking_type', 'build_year',
+  // Панорамы тура публичны по той же причине, что и снимки: их для того
+  // и снимали. Подпись комнаты — единственное, что в них написано.
+  'panoramas',
 ] as const;
 
 const SELECT = COLUMNS.map((c) => `o.${c}`).join(', ');
@@ -39,7 +45,12 @@ const SELECT = COLUMNS.map((c) => `o.${c}`).join(', ');
 export type CatalogRow = {
   id: string;
   kind: string;
+  /** Точный вид внутри kind: кабинет, склад, рабочее место. */
+  subkind: string | null;
   deal_type: 'rent' | 'sale';
+  /** Срок аренды в днях: по нему отличается посуточное от долгого. */
+  term_days_min: number | null;
+  term_days_max: number | null;
   address: string;
   city: string;
   zone: string | null;
@@ -50,6 +61,7 @@ export type CatalogRow = {
   price_minor: number;
   currency: string;
   photos: string;
+  panoramas: string | null;
   description: string | null;
   published_at: string | null;
   actual_at: string;
@@ -77,8 +89,9 @@ export type CatalogRow = {
  * показывают человеку, и переводить её в каждом месте значило бы
  * размножить одно и то же деление по всем страницам.
  */
-export type CatalogItem = Omit<CatalogRow, 'photos'> & {
+export type CatalogItem = Omit<CatalogRow, 'photos' | 'panoramas'> & {
   photos: string[];
+  panoramas: Panorama[];
   price: number;
 };
 
@@ -86,12 +99,68 @@ function view(row: CatalogRow): CatalogItem {
   return {
     ...row,
     photos: jsonArray<string>(row.photos),
+    panoramas: panoramasFrom(row.panoramas),
     price: fromMinor(row.price_minor) ?? 0,
   };
 }
 
+/**
+ * Что человек выбрал наверху: купить, снять, посуточно.
+ *
+ * «Посуточно» — не третий вид сделки, а срок: в базе это та же аренда.
+ * Заводить ради него третье значение deal_type значило бы перестраивать
+ * таблицу и делить надвое то, что в жизни одно: квартиру сдают и на
+ * ночь, и на год, и это один и тот же объект.
+ */
+export type CatalogDeal = 'rent' | 'sale' | 'daily';
+
+/**
+ * Снять, не отсекая короткое.
+ *
+ * Отдельным флагом, а не четвёртым режимом: наверху вкладок три, и
+ * четвёртая строка там появиться не должна. Это уточнение внутри
+ * «Снять», и живёт оно в складке «ещё».
+ */
+export type CatalogTerm = 'any' | null;
+
+/**
+ * Условие отбора по выбранному режиму. Одно на все запросы витрины.
+ *
+ * «Посуточно» и «снять» — одна и та же аренда, разный срок. Объект
+ * попадает в обе выдачи, если сдаётся и так и так: это правда о нём, а
+ * не недосмотр отбора — квартиру сдают и на ночь, и на год.
+ *
+ * Объект без указанного срока считается долгосрочным. Так было до
+ * появления срока, и прятать из основной выдачи объявления, заведённые
+ * раньше, нельзя.
+ *
+ * Значение в текст запроса подставляется ЧИСЛОМ из кода, а не строкой
+ * извне: MONTH_DAYS — наша константа, и внедрить через неё нечего.
+ * Режим приходит снаружи, поэтому сверяется со списком, а не попадает
+ * в запрос.
+ */
+function dealClause(
+  deal: CatalogDeal | null | undefined,
+  term?: CatalogTerm,
+): string | null {
+  // «Снять, срок неважен» — вся аренда целиком, вместе с хостелами.
+  if (deal === 'rent' && term === 'any') return `o.deal_type = 'rent'`;
+  if (deal === 'daily') {
+    return `o.deal_type = 'rent' and o.term_days_min is not null
+            and o.term_days_min < ${MONTH_DAYS}`;
+  }
+  if (deal === 'rent') {
+    return `o.deal_type = 'rent'
+            and (o.term_days_max is null or o.term_days_max > ${MONTH_DAYS})`;
+  }
+  if (deal === 'sale') return `o.deal_type = 'sale'`;
+  return null;
+}
+
 export type CatalogQuery = {
-  deal?: 'rent' | 'sale' | null;
+  deal?: CatalogDeal | null;
+  /** «any» во вкладке «Снять» — не отсекать короткий срок. */
+  term?: CatalogTerm;
   kind?: string | null;
   city?: string | null;
   /** Города региона: фильтр по региону — это фильтр по его городам. */
@@ -184,7 +253,8 @@ function conditions(query: CatalogQuery): { clause: string; params: (string | nu
   const where: string[] = [`o.publication_state = 'published'`];
   const params: (string | number)[] = [];
 
-  if (query.deal) { where.push('o.deal_type = ?'); params.push(query.deal); }
+  const deal = dealClause(query.deal, query.term);
+  if (deal) where.push(deal);
   if (query.kind) { where.push('o.kind = ?'); params.push(query.kind); }
   if (query.city) { where.push('o.city = ?'); params.push(query.city); }
   // Региона в базе нет и быть не должно: регион — это свойство города,
@@ -255,6 +325,96 @@ export async function catalogPage(query: CatalogQuery = {}): Promise<CatalogPage
 }
 
 /**
+ * Точка на карте: ровно то, что нужно булавке, и ничего больше.
+ *
+ * Отдельный состав колонок, а не CatalogRow целиком. На карту уходит до
+ * пятисот объектов разом, и тянуть на каждый описание с фотографиями
+ * значило бы гонять мегабайты ради того, что не показывается. Булавке
+ * нужны место, цена и то, по чему человек узнает объявление в списке.
+ */
+export type MapPoint = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  price: number;
+  currency: string;
+  deal_type: 'rent' | 'sale';
+  kind: string;
+  subkind: string | null;
+  address: string;
+  rooms: number | null;
+  area: number | null;
+};
+
+/**
+ * Сколько точек отдаём за раз.
+ *
+ * Это не «сколько есть», а «сколько влезает в карту». Пятьсот булавок
+ * Leaflet рисует без запинки, пять тысяч — вешают вкладку на слабом
+ * телефоне. Когда найденного больше, карта честно говорит, что показана
+ * часть, и предлагает сузить — а не отдаёт случайные пятьсот молча.
+ */
+export const MAP_LIMIT = 500;
+
+/** Видимый кусок карты: юг, запад, север, восток. */
+export type BBox = { south: number; west: number; north: number; east: number };
+
+/**
+ * Объекты в видимой части карты.
+ *
+ * Условия те же, что у выдачи, — та же conditions(): карта и список
+ * обязаны показывать одно и то же, иначе человек видит булавку, которой
+ * нет в списке, и не понимает, которая из двух частей врёт.
+ *
+ * Объекты без координат в выдачу карты не попадают вовсе: поставить их
+ * некуда. Это не потеря — в списке они есть, — но на карте их нет, и
+ * страница об этом говорит прямо.
+ *
+ * Границы приходят из браузера, то есть снаружи: они сверяются как
+ * числа и уходят параметрами. Перевёрнутые местами границы меняются
+ * местами — карту можно протащить через край, и браузер пришлёт их
+ * задом наперёд.
+ */
+export async function catalogPoints(
+  query: CatalogQuery = {},
+  bbox?: BBox | null,
+): Promise<{ points: MapPoint[]; total: number; shown: number }> {
+  const { clause, params } = conditions(query);
+  const where = [clause, 'o.latitude is not null', 'o.longitude is not null'];
+  const args = [...params];
+
+  if (bbox) {
+    const south = Math.min(bbox.south, bbox.north);
+    const north = Math.max(bbox.south, bbox.north);
+    const west = Math.min(bbox.west, bbox.east);
+    const east = Math.max(bbox.west, bbox.east);
+    where.push('o.latitude between ? and ?', 'o.longitude between ? and ?');
+    args.push(south, north, west, east);
+  }
+
+  const joined = where.join(' and ');
+
+  const counted = await one<{ n: number }>(
+    `select count(*) as n from objects o where ${joined}`, ...args,
+  );
+
+  const rows = await all<Omit<MapPoint, 'price'> & { price_minor: number }>(
+    `select o.id, o.latitude, o.longitude, o.price_minor, o.currency,
+            o.deal_type, o.kind, o.subkind, o.address, o.rooms, o.area
+       from objects o where ${joined}
+      order by o.actual_at desc limit ?`,
+    ...args, MAP_LIMIT,
+  );
+
+  const points = rows.map(({ price_minor, ...rest }) => ({
+    ...rest,
+    price: fromMinor(price_minor) ?? 0,
+  }));
+
+  return { points, total: counted?.n ?? 0, shown: points.length };
+}
+
+/**
  * Сколько объектов найдётся по этим условиям.
  *
  * Отдельно от catalogPage(), потому что считает ТЕ ЖЕ условия, но не тянет
@@ -313,13 +473,17 @@ export async function districts(): Promise<Array<{ id: string; name: string }>> 
  * было; с появлением второго это стало прямой ложью в цифре.
  */
 export async function catalogZoneCounts(
-  deal?: 'rent' | 'sale' | null,
+  deal?: CatalogDeal | null,
   city?: string | null,
   cities?: string[] | null,
+  term?: CatalogTerm,
 ): Promise<Array<{ zone: string; n: number }>> {
   const params: (string | number)[] = [];
   const filters: string[] = [];
-  if (deal) { filters.push('and o.deal_type = ?'); params.push(deal); }
+  // То же условие, что и в выдаче: иначе счётчик у района обещал бы
+  // объявления, которых в выдаче нет.
+  const clause = dealClause(deal, term);
+  if (clause) filters.push(`and ${clause}`);
   if (city) { filters.push('and o.city = ?'); params.push(city); }
   else if (cities && cities.length > 0) {
     filters.push(`and o.city in (${cities.map(() => '?').join(', ')})`);

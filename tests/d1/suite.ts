@@ -37,24 +37,34 @@ import {
   catalogAgent, catalogAgentById, catalogAgents, catalogCities, catalogCount,
   catalogCurrencies, catalogObject, catalogPage, catalogRate, priceFloor,
   catalogZoneCounts, catalogZones,
+  catalogPoints, MAP_LIMIT,
 } from '@/lib/db/catalog';
 import {
   deleteAvatar, deletePhoto, listPhotos, photoKey, photoUrl,
   photosMissingThumb, putAvatar, putPhoto, putThumb, readPhoto, sniff,
 } from '@/lib/db/photos';
+import {
+  deletePanorama, panoramasOf, putPanorama, renamePanorama, setLinks,
+} from '@/lib/db/panoramas';
+import { checkPanorama, meanLuma, sharpness } from '@/lib/photo-check';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
-import { mhouseOffers, mhouseXml } from '@/lib/mhouse-feed';
+import { mhouseOffers, mhouseXml, missingFields } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
 import { convert, parseNbkr } from '@/lib/fx';
 import { contactLinks, phoneDigits } from '@/lib/contact-links';
+import { coarseOf, isSpaceType, OBJECT_TYPES, SPACE_TYPES } from '@/lib/space-types';
+import { cluster, middle, shortPrice } from '@/lib/map-cluster';
+import {
+  COMMERCIAL_TYPE, RENTAL_TERM, commercialCode, mhouseCommercial, mhouseTerm,
+} from '@/lib/mhouse';
 import { refreshRates, usdRate } from '@/lib/db/fx';
 import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
   catalogHref, hasAnyFilter, parseCatalogFilters,
 } from '@/lib/catalog-params';
 import { listingSchema } from '@/lib/listing-schema';
-import { placeName, t } from '@/lib/i18n';
+import { LANGS, placeName, spaceName, t } from '@/lib/i18n';
 import { citiesOf, regionOf, regions, zoneMatch, zonesOf } from '@/lib/geo';
 import {
   completeTelegramLink, startTelegramLink, sweepTelegramLinks, unlinkTelegram,
@@ -849,6 +859,66 @@ export default {
     // Возвращаем как было: ниже стоит проверка «без привязанного Telegram
     // статус „нечем доставить"», и привязка, оставленная здесь, ломает её.
     await db.prepare('update agents set telegram_id = null where id = ?').bind(anna).run();
+
+    // -----------------------------------------------------------------
+    // Что ищут: словарь подробнее, срок аренды в днях
+    // -----------------------------------------------------------------
+    // Огрубление выводится ИЗ подробного типа. Иначе два поля разойдутся,
+    // и заявка на кабинет окажется заявкой на квартиру.
+    check('кабинет огрубляется до коммерческой', coarseOf('cabinet') === 'commercial');
+    check('рабочее место — тоже', coarseOf('desk') === 'commercial');
+    check('квартира остаётся квартирой', coarseOf('flat') === 'flat');
+    check('выдуманный тип не огрубляется в чужой', coarseOf('дом-мечты') === null);
+    check('у каждого вида есть группа',
+      SPACE_TYPES.every((t) => ['housing', 'commercial', 'workplace'].includes(t.group)));
+
+    const office = await submitRequest({
+      phone: '0555 20 20 01', deal: 'rent', space_type: 'cabinet',
+      term_days_min: 90, term_days_max: 180,
+    });
+    const officeRow = await db.prepare(
+      'select space_type, housing_type, term_days_min, term_days_max from requests where id = ?',
+    ).bind(office).first<{
+      space_type: string; housing_type: string;
+      term_days_min: number; term_days_max: number;
+    }>();
+
+    check('подробный тип сохранён как есть', officeRow?.space_type === 'cabinet');
+    check('а огрублённый выведен из него',
+      officeRow?.housing_type === 'commercial', String(officeRow?.housing_type));
+    check('срок сохранён в днях',
+      officeRow?.term_days_min === 90 && officeRow?.term_days_max === 180);
+
+    // Перепутанные местами границы — опечатка, а не повод терять заявку.
+    const swapped = await submitRequest({
+      phone: '0555 20 20 02', deal: 'rent', space_type: 'flat',
+      term_days_min: 180, term_days_max: 30,
+    });
+    const swappedRow = await db.prepare(
+      'select term_days_min, term_days_max from requests where id = ?',
+    ).bind(swapped).first<{ term_days_min: number; term_days_max: number }>();
+    check('перепутанные границы срока меняются местами',
+      swappedRow?.term_days_min === 30 && swappedRow?.term_days_max === 180,
+      `${swappedRow?.term_days_min}–${swappedRow?.term_days_max}`);
+
+    // У покупки срока не бывает: пришёл — значит мусор из формы.
+    const bought = await submitRequest({
+      phone: '0555 20 20 03', deal: 'buy', space_type: 'house',
+      term_days_min: 30, term_days_max: 90,
+    });
+    const boughtRow = await db.prepare(
+      'select term_days_min, term_days_max from requests where id = ?',
+    ).bind(bought).first<{ term_days_min: number | null; term_days_max: number | null }>();
+    check('у покупки срок не сохраняется',
+      boughtRow?.term_days_min === null && boughtRow?.term_days_max === null);
+
+    // Выдуманный тип не подменяет огрубление чужим значением.
+    const weird = await submitRequest({
+      phone: '0555 20 20 04', deal: 'rent', space_type: 'нечто',
+    });
+    check('выдуманный тип не сохраняется',
+      (await db.prepare('select space_type from requests where id = ?')
+        .bind(weird).first<{ space_type: string | null }>())?.space_type === null);
 
     check('курса в пустой базе нет', (await usdRate()) === null);
     check('и витрина его тоже не выдумывает', (await catalogRate()) === null);
@@ -2251,6 +2321,35 @@ export default {
       !mhFull.includes(anna) && !mhFull.includes('Собственник витрины')
       && !mhFull.includes('555121314'));
 
+    // Выгрузка берёт вид коммерции ИЗ НАШЕГО кода, а не из отдельного
+    // поля: иначе агенту пришлось бы отвечать на один вопрос дважды, а
+    // двум ответам — расходиться.
+    const shop = await createObject({
+      kind: 'commercial', subkind: 'catering', deal_type: 'rent',
+      address: 'Общепитная 2', price_minor: 4_000_000, area: 120,
+      latitude: 42.87, longitude: 74.6, region: 'Бишкек',
+      rental_term: 'на долгий срок',
+      description: 'Помещение под кафе', photos: ['/photos/c.jpg'],
+    });
+    await createMandate({ object_id: shop.id, kind: 'non_exclusive' });
+    await publishObject(shop.id);
+
+    const withShop = await mhouseXml('https://liberterra.kg');
+    check('коммерческое помещение уходит в фид MHouse', withShop.includes(shop.id));
+    check('и вид коммерции в нём выведен из нашего кода',
+      withShop.includes('<commercial-type>рестораны, кафе, общепит</commercial-type>'));
+    // Без точного вида площадка объявление не возьмёт — и кабинет сообщает
+    // об этом ТЕМ ЖЕ missingFields, которым строится фид.
+    check('карточка не жалуется на вид коммерции, когда он указан',
+      !missingFields({
+        ...shop, photos: ['/photos/c.jpg'], subkind: 'catering',
+      }).includes('вид коммерции'));
+    check('а без него — жалуется',
+      missingFields({
+        ...shop, photos: ['/photos/c.jpg'], subkind: null, commercial_type: null,
+      }).includes('вид коммерции'));
+    await withdrawObject(shop.id);
+
     // Значение не из справочника площадка не примет. Пропустить такое
     // поле — потерять объявление целиком, поэтому оно и не выводится.
     await updateObject(shown.id, { serie: 'какая-то своя серия' });
@@ -2724,6 +2823,367 @@ export default {
     check('а в витрине он при этом есть — значит дело в фиде, а не в публикации',
       (await catalogPage({})).items.some((i) => i.id === commercial.id));
 
+    // -----------------------------------------------------------------
+    // Точный вид объекта: кабинет кабинетом, коворкинг коворкингом
+    // -----------------------------------------------------------------
+    // Словарь объектов шире словаря заявок на семь значений: так требует
+    // справочник площадки. Будь он беднее — ресторанное помещение уехало
+    // бы в выгрузку «офисом».
+    check('кабинет огрубляется в коммерческую', coarseOf('cabinet') === 'commercial');
+    check('и общепит тоже', coarseOf('catering') === 'commercial');
+    check('словарь объектов шире словаря заявок',
+      OBJECT_TYPES.length > SPACE_TYPES.length);
+    // В колонке заявок стоит CHECK с коротким списком: пропусти мы туда
+    // объектный код — база ответила бы отказом вместо внятной ошибки.
+    check('объектный код в заявку не проходит', !isSpaceType('hotel'));
+    check('а заявочный проходит', isSpaceType('cabinet'));
+
+    await updateObject(commercial.id, { subkind: 'cabinet' });
+    const cabinet = (await catalogPage({})).items.find((i) => i.id === commercial.id);
+    check('витрина отдаёт точный вид', cabinet?.subkind === 'cabinet');
+    check('и подписывает объект кабинетом',
+      spaceName('ru', cabinet!) === 'кабинет', spaceName('ru', cabinet!));
+    // Витрина четырёхъязычна: код без перевода вышел бы на карточку как есть.
+    check('на другом языке — словом этого языка',
+      spaceName('en', cabinet!) === 'private office', spaceName('en', cabinet!));
+    check('огрублённый вид при этом не подменён',
+      cabinet?.kind === 'commercial', String(cabinet?.kind));
+
+    // Несогласованный вид не уточнение, а противоречие: каталог фильтрует
+    // по kind, а карточка показывала бы другое.
+    await updateObject(commercial.id, { subkind: 'flat' });
+    const afterBogus = (await catalogPage({})).items.find((i) => i.id === commercial.id);
+    check('вид, не огрубляющийся в этот kind, не сохраняется',
+      afterBogus?.subkind === null, String(afterBogus?.subkind));
+    check('и kind из-за него не меняется', afterBogus?.kind === 'commercial');
+
+    // Смена kind снимает уточнение сама: «склад» при квартире — ложь.
+    await updateObject(commercial.id, { subkind: 'warehouse' });
+    await updateObject(commercial.id, { kind: 'flat' });
+    const asFlat = (await catalogPage({})).items.find((i) => i.id === commercial.id);
+    check('смена вида объекта снимает прежнее уточнение',
+      asFlat?.subkind === null, String(asFlat?.subkind));
+    check('и объект подписан новым видом',
+      spaceName('ru', asFlat!) === 'квартира', spaceName('ru', asFlat!));
+    await updateObject(commercial.id, { kind: 'commercial', subkind: 'warehouse' });
+
+    // Запасной путь для объектов, заведённых до появления колонки: у них
+    // точный вид лежит в словаре площадки, и терять его нельзя.
+    const legacy = await createObject({
+      kind: 'commercial', deal_type: 'rent', address: 'Складская 7',
+      price_minor: 1_500_000, commercial_type: 'склады',
+    });
+    await createMandate({ object_id: legacy.id, kind: 'non_exclusive' });
+    await publishObject(legacy.id);
+    const legacyRow = (await catalogPage({})).items.find((i) => i.id === legacy.id);
+    check('у старого объекта точного вида нет', legacyRow?.subkind === null);
+    check('но он всё равно подписан складом, а не «коммерческой»',
+      spaceName('ru', legacyRow!) === 'склад', spaceName('ru', legacyRow!));
+    check('и на другом языке тоже',
+      spaceName('en', legacyRow!) === 'warehouse', spaceName('en', legacyRow!));
+
+    // Жилья слой не касается, даже если поле площадки заполнено: агент мог
+    // перевести объект из коммерческой в жильё, а значение осталось.
+    // Квартира, подписанная складом, — худшее, что подпись может сделать.
+    await updateObject(forSale.id, { commercial_type: 'склады' });
+    const flatShown = (await catalogPage({})).items.find((i) => i.id === forSale.id);
+    check('вид коммерции у квартиры в записи остался',
+      flatShown?.commercial_type === 'склады');
+    check('но квартира остаётся квартирой',
+      spaceName('ru', flatShown!) === 'квартира', spaceName('ru', flatShown!));
+    await updateObject(forSale.id, { commercial_type: null });
+
+    // «Другая коммерческая недвижимость» точнее «коммерческой» не стала:
+    // это единственное значение справочника без нашего кода.
+    check('неточный вид площадки не подменяется точным',
+      commercialCode('другая коммерческая недвижимость') === null);
+    check('незаполненный — тоже', commercialCode(null) === null);
+    // Значения приходят не только из нашего select'а: разбор чужих
+    // объявлений даёт их как попало. Приведение в JS, а не в SQL: в SQLite
+    // lower() кириллицу не трогает.
+    check('лишние пробелы и регистр узнать вид не мешают',
+      commercialCode('  Склады ') === 'warehouse');
+
+    // Иначе новое значение в справочнике площадки молча показывалось бы
+    // «коммерческой», и никто бы не заметил.
+    check('весь справочник площадки разобран, кроме «другой»',
+      COMMERCIAL_TYPE.filter((v) => commercialCode(v) === null).length === 1,
+      COMMERCIAL_TYPE.filter((v) => commercialCode(v) === null).join('; '));
+
+    // Обратное направление — главное: наш код ведущий, значение площадки
+    // выводится. Код без вывода унёс бы объявление из выгрузки целиком.
+    check('каждый нежилой вид умеет назваться словом площадки',
+      OBJECT_TYPES.filter((t) => t.coarse === 'commercial')
+        .every((t) => {
+          const value = mhouseCommercial(t.code);
+          return value !== null && COMMERCIAL_TYPE.includes(
+            value as (typeof COMMERCIAL_TYPE)[number],
+          );
+        }));
+    // Площадка кабинета и коворкинга не знает — уезжают офисами, и это
+    // осознанный выбор: иначе объявления не будет вовсе.
+    check('кабинет уезжает на площадку офисом', mhouseCommercial('cabinet') === 'офисы');
+    check('рабочее место — тоже', mhouseCommercial('desk') === 'офисы');
+    check('жильё словом площадки не называется', mhouseCommercial('flat') === null);
+
+    // Код без подписи вывел бы на карточку сам код: «warehouse» по-русски.
+    check('у каждого вида объекта есть подпись на всех языках',
+      LANGS.every((l) => OBJECT_TYPES.every((type) => t(l).kinds[type.code] !== undefined)),
+      LANGS.map((l) => OBJECT_TYPES.filter((type) => t(l).kinds[type.code] === undefined)
+        .map((type) => `${l}:${type.code}`).join(',')).join(' '));
+
+    await withdrawObject(legacy.id);
+
+    // -----------------------------------------------------------------
+    // Посуточно: отдельный раздел витрины, а не третий вид сделки
+    // -----------------------------------------------------------------
+    // Квартира сдаётся и на ночь, и на год — это ОДИН объект, и он
+    // обязан быть в обеих выдачах. Прятать его из одной ради красоты
+    // разделения значило бы врать о товаре.
+    const bothWays = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Суточная 1', zone: 'Суточный',
+      price_minor: 250_000, rooms: 1, term_days_min: 1, term_days_max: 365,
+    });
+    await createMandate({ object_id: bothWays.id, kind: 'non_exclusive' });
+    await publishObject(bothWays.id);
+
+    // Хостел и рабочее место в коворкинге — тот же раздел: так ими и
+    // пользуются.
+    const hostel = await createObject({
+      kind: 'commercial', subkind: 'hotel', deal_type: 'rent',
+      address: 'Хостельная 2', price_minor: 80_000, zone: 'Суточный',
+      term_days_min: 1, term_days_max: 30,
+    });
+    await createMandate({ object_id: hostel.id, kind: 'non_exclusive' });
+    await publishObject(hostel.id);
+
+    const longOnly = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Годовая 3', zone: 'Суточный',
+      price_minor: 400_000, rooms: 2, term_days_min: 365,
+    });
+    await createMandate({ object_id: longOnly.id, kind: 'non_exclusive' });
+    await publishObject(longOnly.id);
+
+    const dailyIds = (await catalogPage({ deal: 'daily', pageSize: 100 })).items
+      .map((i) => i.id);
+    const rentIds = (await catalogPage({ deal: 'rent', pageSize: 100 })).items
+      .map((i) => i.id);
+
+    check('посуточная выдача берёт объект с коротким сроком',
+      dailyIds.includes(bothWays.id));
+    check('и хостел', dailyIds.includes(hostel.id));
+    check('годовая аренда в посуточную не попадает', !dailyIds.includes(longOnly.id));
+    check('а в обычную попадает', rentIds.includes(longOnly.id));
+    // Тот же объект в обеих — не ошибка отбора, а правда о нём.
+    check('сдающийся и так и так — в обеих выдачах', rentIds.includes(bothWays.id));
+    // Хостел сдаётся только до месяца: в долгой аренде его быть не должно.
+    check('только суточное в обычную аренду не попадает', !rentIds.includes(hostel.id));
+    // Продажа не попадает никуда из аренды, иначе раздел терял бы смысл.
+    check('продажа в посуточную не попадает', !dailyIds.includes(forSale.id));
+
+    // Объекты, заведённые до появления срока, остаются в обычной аренде:
+    // срок у них неизвестен, и прятать их нельзя.
+    const noTerm = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Бессрочная 4',
+      price_minor: 300_000, rooms: 1,
+    });
+    await createMandate({ object_id: noTerm.id, kind: 'non_exclusive' });
+    await publishObject(noTerm.id);
+    const rent2 = (await catalogPage({ deal: 'rent', pageSize: 100 })).items
+      .map((i) => i.id);
+    check('объект без срока остаётся в обычной аренде', rent2.includes(noTerm.id));
+    check('и в посуточную не попадает',
+      !(await catalogPage({ deal: 'daily', pageSize: 100 })).items
+        .some((i) => i.id === noTerm.id));
+
+    // Галочка «и краткосрочную тоже» в складке «ещё»: человеку, который
+    // снимет что угодно, хостел показать надо, а по умолчанию — нет.
+    const anyTerm = (await catalogPage({ deal: 'rent', term: 'any', pageSize: 100 }))
+      .items.map((i) => i.id);
+    check('с галочкой хостел появляется в аренде', anyTerm.includes(hostel.id));
+    check('и годовая аренда никуда не делась', anyTerm.includes(longOnly.id));
+    check('а продажа не подмешивается', !anyTerm.includes(forSale.id));
+    // Галочка живёт только в «Снять»: в посуточной она означала бы то,
+    // что уже выбрано вкладкой, и молча расширяла бы выдачу.
+    check('в посуточной галочка ничего не меняет',
+      (await catalogPage({ deal: 'daily', term: 'any', pageSize: 100 }))
+        .items.length === dailyIds.length);
+    // Разбор ссылки: галочка переносится только во вкладке «Снять».
+    check('ссылка несёт галочку из «Снять»',
+      catalogHref('ru', { ...parseCatalogFilters({ deal: 'rent', term: 'any' }) }, 1)
+        .includes('term=any'));
+    check('а из посуточной не несёт',
+      !catalogHref('ru', { ...parseCatalogFilters({ deal: 'daily', term: 'any' }) }, 1)
+        .includes('term=any'));
+
+    // Счётчик у района считает ТЕМ ЖЕ условием, что и выдача: иначе он
+    // обещал бы объявления, которых в выдаче нет. В районе «Суточный»
+    // три объявления: одно и туда и туда, одно только суточное, одно
+    // только годовое, — и числа у вкладок обязаны разойтись.
+    const zoneOf = async (deal: 'daily' | 'rent', term?: 'any' | null) =>
+      (await catalogZoneCounts(deal, null, null, term ?? null))
+        .find((z) => z.zone === 'Суточный')?.n ?? 0;
+    check('счётчик района в посуточной считает только суточные',
+      (await zoneOf('daily')) === 2, String(await zoneOf('daily')));
+    check('а в обычной аренде — только долгие',
+      (await zoneOf('rent')) === 2, String(await zoneOf('rent')));
+    check('с галочкой — все три',
+      (await zoneOf('rent', 'any')) === 3, String(await zoneOf('rent', 'any')));
+
+    // Перепутанные границы — опечатка, а не повод терять объявление.
+    const swappedTerm = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Перепутанная 5',
+      price_minor: 200_000, term_days_min: 180, term_days_max: 3,
+    });
+    check('перепутанные границы срока меняются местами',
+      swappedTerm.term_days_min === 3 && swappedTerm.term_days_max === 180,
+      `${swappedTerm.term_days_min}–${swappedTerm.term_days_max}`);
+
+    // У продажи срока не бывает: пришёл — значит мусор из формы.
+    const soldWithTerm = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Продажная 6',
+      price_minor: 5_000_000, term_days_min: 30, term_days_max: 90,
+    });
+    check('у продажи срок не сохраняется',
+      soldWithTerm.term_days_min === null && soldWithTerm.term_days_max === null);
+
+    // Перевод в продажу снимает срок: «сдаётся от месяца» у продающегося
+    // объекта — мусор от прежнего намерения.
+    const turned = await updateObject(bothWays.id, { deal_type: 'sale' });
+    check('перевод в продажу снимает срок',
+      turned.term_days_min === null && turned.term_days_max === null);
+    await updateObject(bothWays.id, {
+      deal_type: 'rent', term_days_min: 1, term_days_max: 365,
+    });
+
+    // Слово для площадки выводится из дней — тем же приёмом, что вид
+    // коммерции. Отдельного поля для него нет.
+    check('короткий срок уезжает «посуточно»', mhouseTerm(1, 30) === 'посуточно');
+    check('средний — «помесячно»', mhouseTerm(30, 90) === 'помесячно');
+    check('годовой — «на долгий срок»', mhouseTerm(365, null) === 'на долгий срок');
+    check('без срока выводить нечего', mhouseTerm(null, null) === null);
+    check('каждое выведенное слово есть в справочнике площадки',
+      ([[1, 30], [30, 90], [90, 180], [365, null]] as [number, number | null][])
+        .every(([lo, hi]) => {
+          const word = mhouseTerm(lo, hi);
+          return word !== null
+            && RENTAL_TERM.includes(word as (typeof RENTAL_TERM)[number]);
+        }));
+
+    // -----------------------------------------------------------------
+    // Карта: точки в видимой части, сгущения, короткая цена
+    // -----------------------------------------------------------------
+    // Объект без координат поставить некуда — на карте его нет, и это
+    // не потеря: в списке он остаётся.
+    const onMap = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Картовая 1',
+      price_minor: 500_000, rooms: 2,
+      latitude: 42.8746, longitude: 74.6122,
+      term_days_min: 365,
+    });
+    await createMandate({ object_id: onMap.id, kind: 'non_exclusive' });
+    await publishObject(onMap.id);
+
+    const far = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Далёкая 2',
+      price_minor: 600_000, rooms: 3,
+      latitude: 40.5283, longitude: 72.7985, term_days_min: 365,
+    });
+    await createMandate({ object_id: far.id, kind: 'non_exclusive' });
+    await publishObject(far.id);
+
+    const mapAll = await catalogPoints({ deal: 'rent' });
+    check('объект с координатами попадает на карту',
+      mapAll.points.some((p) => p.id === onMap.id));
+    check('объект без координат на карту не попадает',
+      !mapAll.points.some((p) => p.id === noTerm.id));
+
+    // Рамка — главное в карте: двинул — выдача другая.
+    const inFrame = await catalogPoints({ deal: 'rent' }, {
+      south: 42.8, west: 74.5, north: 42.95, east: 74.7,
+    });
+    check('в рамке Бишкека свой объект есть',
+      inFrame.points.some((p) => p.id === onMap.id));
+    check('а ошский в неё не попадает',
+      !inFrame.points.some((p) => p.id === far.id), String(inFrame.shown));
+
+    // Перевёрнутую рамку браузер присылает, протащив карту через край.
+    const flipped = await catalogPoints({ deal: 'rent' }, {
+      south: 42.95, west: 74.7, north: 42.8, east: 74.5,
+    });
+    check('перевёрнутая рамка понимается так же',
+      flipped.points.some((p) => p.id === onMap.id)
+      && !flipped.points.some((p) => p.id === far.id));
+
+    // Карта и список обязаны показывать одно: условия у них общие.
+    const dailyMap = await catalogPoints({ deal: 'daily' });
+    check('посуточная карта не показывает годовую аренду',
+      !dailyMap.points.some((p) => p.id === onMap.id));
+
+    // На точке нет ни агента, ни собственника, ни комиссии — состав
+    // колонок задан отдельно и узко.
+    const sample = mapAll.points.find((p) => p.id === onMap.id)!;
+    check('на точке карты только публичные поля',
+      Object.keys(sample).sort().join(',')
+        === 'address,area,currency,deal_type,id,kind,latitude,longitude,'
+         + 'price,rooms,subkind',
+      Object.keys(sample).sort().join(','));
+
+    // Отдаём не больше потолка, и говорим, сколько всего: молчаливые
+    // пятьсот случайных булавок выглядели бы как весь рынок.
+    check('потолок точек объявлен и невелик', MAP_LIMIT > 0 && MAP_LIMIT <= 1000);
+    check('отданных не больше потолка', mapAll.shown <= MAP_LIMIT);
+    check('всего считается отдельно от отданных', mapAll.total >= mapAll.shown);
+
+    await withdrawObject(onMap.id);
+    await withdrawObject(far.id);
+
+    // Сгущения: сетка по экрану. Две точки в одной клетке — один кружок,
+    // далёкая — своя булавка.
+    // Четвёртая точка — прямо под первой: тот же столбец, другая строка.
+    // Без неё сетка, считающая только по горизонтали, прошла бы
+    // проверку, а на экране слепила бы в один кружок весь проспект.
+    const grid = cluster(
+      [{ id: 'a', x: 10, y: 10 }, { id: 'b', x: 20, y: 20 },
+       { id: 'c', x: 400, y: 10 }, { id: 'd', x: 10, y: 400 }],
+      (p) => p,
+      64,
+    );
+    check('близкие точки собираются в одну клетку', grid.length === 3,
+      String(grid.length));
+    check('в ближней клетке две точки',
+      grid.find((c) => c.items.length === 2)?.items.length === 2);
+    check('точка под первой — в своей клетке, а не в её',
+      grid.find((c) => c.items.some((i) => i.id === 'd'))?.items.length === 1);
+    // Порядок клеток повторяет порядок точек: иначе булавки прыгали бы
+    // при каждой перерисовке, хотя карта стоит.
+    check('порядок клеток идёт от порядка точек', grid[0]!.items[0]!.id === 'a');
+    // Клетка в ноль пикселей — деление на ноль и клетка на каждую точку.
+    check('нулевая клетка не ломает сетку',
+      cluster([{ id: 'a', x: 1, y: 1 }], (p) => p, 0).length === 1);
+
+    check('центр сгущения — середина точек',
+      middle([{ latitude: 42, longitude: 74 }, { latitude: 44, longitude: 76 }])
+        .join(',') === '43,75');
+
+    // Короткая цена: на булавке помещается только она.
+    const units = { mln: ' млн', thd: ' тыс.', som: ' с' };
+    check('миллионы сокращаются', shortPrice(7_345_800, 'KGS', units) === '7.3 млн с');
+    check('тысячи тоже', shortPrice(84_000, 'USD', units) === '$84 тыс.');
+    check('мелкое остаётся как есть', shortPrice(450, 'USD', units) === '$450');
+    // Без знака валюты «84 тыс.» читается как сомы — и это разница в
+    // восемьдесят семь раз.
+    check('доллар на булавке помечен',
+      shortPrice(84_000, 'USD', units).startsWith('$')
+      && !shortPrice(84_000, 'KGS', units).startsWith('$'));
+    // Сокращения приходят словарём, а не вписаны в код.
+    check('сокращения берутся из словаря',
+      shortPrice(2_000_000, 'USD', { mln: 'M', thd: 'K', som: '' }) === '$2.0M');
+
+    await withdrawObject(bothWays.id);
+    await withdrawObject(hostel.id);
+    await withdrawObject(longOnly.id);
+    await withdrawObject(noTerm.id);
     await withdrawObject(commercial.id);
     await updateObject(shown.id, { description: null, photos: [] });
 
@@ -2898,6 +3358,87 @@ export default {
     // вычистить снимки соседнего объекта.
     await throws('ключ от другого объекта не принимается',
       () => deletePhoto(withPhotos.id, `objects/${shown.id}/подделка.jpg`), Invalid);
+
+    // -----------------------------------------------------------------
+    // Панорамы тура
+    // -----------------------------------------------------------------
+    // Панорама — не снимок, и это главное, что здесь проверяется: она
+    // лежит под своим префиксом, не попадает в список снимков и потому
+    // не может стать обложкой объявления.
+
+    const pano = await putPanorama(withPhotos.id, jpeg, '  Кухня  ', { w: 4096, h: 1024 });
+    check('панорама загружается', pano.url.startsWith('/photos/panoramas/'));
+    check('подпись комнаты обрезается по краям', pano.room === 'Кухня');
+    check('размеры сохраняются — по ним считаются углы обзора',
+      pano.w === 4096 && pano.h === 1024);
+    check('панорама не попала в снимки объекта',
+      (await listPhotos(withPhotos.id)).every((k) => !k.includes('panoramas/')));
+
+    check('панорама читается из объекта',
+      (await panoramasOf(withPhotos.id)).length === 1);
+
+    await renamePanorama(withPhotos.id, pano.key, 'Гостиная');
+    check('комнату можно переподписать',
+      (await panoramasOf(withPhotos.id))[0]?.room === 'Гостиная');
+
+    await loginAs(db, vera);
+    await throws('в чужой объект панораму не загрузить',
+      () => putPanorama(withPhotos.id, jpeg, 'Кухня', { w: 4096, h: 1024 }), Forbidden);
+    await throws('чужую панораму не удалить',
+      () => deletePanorama(withPhotos.id, pano.key), Forbidden);
+
+    await loginAs(db, anna);
+    await throws('ключ панорамы от другого объекта не принимается',
+      () => deletePanorama(withPhotos.id, `panoramas/${shown.id}/подделка.jpg`), Invalid);
+
+    // Переходы: дверь ведёт только в комнату ЭТОГО объекта, иначе она
+    // однажды открылась бы в чужую квартиру.
+    const bedroom = await putPanorama(withPhotos.id, jpeg, 'Спальня', { w: 4096, h: 1024 });
+    await setLinks(withPhotos.id, pano.key, [
+      { to: bedroom.key, yaw: 400, pitch: 120 },
+      { to: 'panoramas/чужой/х.jpg', yaw: 0, pitch: 0 },
+      { to: pano.key, yaw: 0, pitch: 0 },
+    ]);
+    const linked = (await panoramasOf(withPhotos.id)).find((p) => p.key === pano.key);
+    check('чужая и сама-на-себя ссылки отброшены', linked?.links?.length === 1);
+    check('поворот приведён к кругу, наклон ограничен',
+      linked?.links?.[0].yaw === 40 && linked?.links?.[0].pitch === 90,
+      JSON.stringify(linked?.links));
+
+    await deletePanorama(withPhotos.id, bedroom.key);
+    await deletePanorama(withPhotos.id, pano.key);
+    check('панорама убирается и из записи',
+      (await panoramasOf(withPhotos.id)).length === 0);
+
+    // Проверка съёмки — чистые функции, и проверяются они как функции:
+    // ни холста, ни картинок в Worker'е нет, а арифметика та же самая.
+    const flat = (v: number, w: number, h: number) => {
+      const data = new Float32Array(w * h).fill(v);
+      return { data, w, h };
+    };
+    const noisy = (w: number, h: number) => {
+      const data = new Float32Array(w * h);
+      for (let i = 0; i < data.length; i++) data[i] = (i % 2) * 255;
+      return { data, w, h };
+    };
+
+    check('ровная серая картинка считается размытой',
+      sharpness(flat(128, 32, 32)) === 0);
+    check('чересполосица считается резкой',
+      sharpness(noisy(32, 32)) > 100, String(sharpness(noisy(32, 32))));
+    check('средняя яркость считается', meanLuma(flat(100, 8, 8)) === 100);
+
+    check('тёмная панорама получает замечание',
+      checkPanorama(flat(20, 32, 16), 4096, 2048).some((i) => i.kind === 'dark'));
+    check('смазанная панорама получает замечание',
+      checkPanorama(flat(128, 32, 16), 4096, 2048).some((i) => i.kind === 'blurry'));
+    check('обычный снимок опознаётся не как панорама',
+      checkPanorama(null, 1600, 1200).some((i) => i.kind === 'narrow'));
+    check('мелкая панорама получает замечание',
+      checkPanorama(null, 1200, 400).some((i) => i.kind === 'small'));
+    check('хорошая панорама замечаний не получает',
+      checkPanorama(noisy(64, 32), 4096, 2048).length === 0,
+      JSON.stringify(checkPanorama(noisy(64, 32), 4096, 2048)));
 
     // -----------------------------------------------------------------
     // Миниатюры

@@ -6,7 +6,7 @@ import {
   allPhotos, firstPhoto, daysSince, publicMoney, priceView, parseCatalogFilters,
 } from '@/lib/catalog-params';
 import type { Money } from '@/lib/fx';
-import { t, kindName, freshWordIn, LOCALE, LANGS, isLang, type Lang } from '@/lib/i18n';
+import { t, spaceName, freshWordIn, LOCALE, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { AGENCY_PHONES } from '@/lib/agency';
 import { siteUrl } from '@/lib/site';
 import { listingSchema } from '@/lib/listing-schema';
@@ -18,6 +18,7 @@ import { Photo } from '../../../Photo';
 import { AgentFace } from '../../../AgentFace';
 import { LeadForm } from '../../../LeadForm';
 import { ContactRow } from '../../../ContactRow';
+import { Tour360 } from '../../../Tour360';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,7 +72,7 @@ export async function generateMetadata(
   const d = t(lang);
   const o = await load(id);
   if (!o) return { title: d.notFound };
-  const what = `${kindName(lang, o.kind)}${o.rooms ? `, ${o.rooms} ${d.roomsShort}` : ''}`;
+  const what = `${spaceName(lang, o)}${o.rooms ? `, ${o.rooms} ${d.roomsShort}` : ''}`;
   const title = `${o.address} — ${publicMoney(lang, o.price, o.currency)}`;
   const description = `${o.deal_type === 'sale' ? d.sale : d.rent}: ${what}, ${o.address}.`;
   const photo = firstPhoto(o.photos);
@@ -183,7 +184,7 @@ export default async function PublicObject({
             <div className="dhead">
               <h1>{o.address}</h1>
               <p className="sub">
-                {o.deal_type === 'sale' ? d.sale : d.rent} · {kindName(lang, o.kind)}
+                {o.deal_type === 'sale' ? d.sale : d.rent} · {spaceName(lang, o)}
                 {o.zone ? ` · ${o.zone}` : ''}
               </p>
               {/* В заголовке вкладки и в разметке для поисковика цена
@@ -201,6 +202,19 @@ export default async function PublicObject({
                 </p>
               ) : null}
             </div>
+
+            {/* Тур стоит ПОСЛЕ снимков и до характеристик: снимки
+                решают, смотреть ли дальше, а тур — то, ради чего
+                остаются на странице. Нет панорам — нет и блока. */}
+            {o.panoramas.length > 0 ? (
+              <Tour360
+                title={d.tourTitle}
+                rooms={o.panoramas.map((p) => ({
+                  key: p.key, url: p.url, room: p.room, w: p.w, h: p.h,
+                  links: p.links ?? [],
+                }))}
+              />
+            ) : null}
 
             <dl className="specs">
               {specs.map(([k, v]) => (
