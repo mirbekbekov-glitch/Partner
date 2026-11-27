@@ -44,6 +44,7 @@ import { feedXml, inFeed } from '@/lib/feed';
 import { mhouseXml } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
 import { convert, parseNbkr } from '@/lib/fx';
+import { contactLinks, phoneDigits } from '@/lib/contact-links';
 import { refreshRates, usdRate } from '@/lib/db/fx';
 import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
@@ -550,6 +551,45 @@ export default {
     check('без курса пересчёта нет', convert(100, 'USD', 'KGS', null) === null);
     check('нулевой курс не принимается', convert(100, 'USD', 'KGS', 0) === null);
     check('третья валюта без курса — пусто', convert(100, 'EUR', 'KGS', 87.45) === null);
+
+    // -----------------------------------------------------------------
+    // WhatsApp: кнопка ведёт в переписку с готовым сообщением
+    // -----------------------------------------------------------------
+    const LABELS = { call: 'Позвонить', whatsapp: 'WhatsApp', telegram: 'Telegram' };
+    const withWa = { phone: '0700 11 22 33', whatsapp: 1, telegram_user: null };
+
+    const wa = contactLinks(withWa, LABELS,
+      'Добрый день! Объект: Чүй 120, 55 000 $.\nhttps://liberterra.kg/ru/objects/abc')
+      .find((l) => l.kind === 'whatsapp');
+
+    check('ссылка ведёт на wa.me с международным номером',
+      wa?.href.startsWith('https://wa.me/996700112233?text=') === true, String(wa?.href));
+
+    // Текст обязан быть закодирован: пробелы, перенос строки и ссылка
+    // внутри параметра иначе обрежут сообщение по первому же знаку,
+    // который браузер прочтёт как служебный.
+    check('пробелы закодированы', wa?.href.includes('%20') === true);
+    check('перенос строки закодирован', wa?.href.includes('%0A') === true);
+    check('в ссылке нет сырых пробелов', !/ /.test(wa?.href ?? ' '));
+    check('и текст восстанавливается обратно',
+      decodeURIComponent((wa?.href ?? '').split('text=')[1] ?? '')
+        .includes('Чүй 120, 55 000 $'));
+
+    // Без текста — обычная ссылка, без хвоста.
+    const bare = contactLinks(withWa, LABELS).find((l) => l.kind === 'whatsapp');
+    check('без сообщения ссылка остаётся чистой',
+      bare?.href === 'https://wa.me/996700112233', String(bare?.href));
+    check('пустое сообщение хвоста не добавляет',
+      contactLinks(withWa, LABELS, '   ').find((l) => l.kind === 'whatsapp')?.href
+        === 'https://wa.me/996700112233');
+
+    // Агент не отметил WhatsApp — кнопки нет, сколько ни передавай текст.
+    check('без отметки кнопки WhatsApp нет',
+      !contactLinks({ phone: '0700 11 22 33', whatsapp: 0, telegram_user: null },
+        LABELS, 'текст').some((l) => l.kind === 'whatsapp'));
+
+    check('номер приводится к международному виду',
+      phoneDigits('0700 11 22 33') === '996700112233');
 
     check('курса в пустой базе нет', (await usdRate()) === null);
     check('и витрина его тоже не выдумывает', (await catalogRate()) === null);

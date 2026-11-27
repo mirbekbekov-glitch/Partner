@@ -8,6 +8,7 @@ import {
 import type { Money } from '@/lib/fx';
 import { t, kindName, freshWordIn, LOCALE, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { AGENCY_PHONES } from '@/lib/agency';
+import { siteUrl } from '@/lib/site';
 import { listingSchema } from '@/lib/listing-schema';
 import { CatalogHeader } from '../../../CatalogHeader';
 import { CatalogFooter } from '../../../CatalogFooter';
@@ -243,7 +244,20 @@ export default async function PublicObject({
                     Раньше здесь не было ничего, а звонок шёл в отдел
                     продаж — решение владельца площадки изменилось в
                     пользу скорости ответа. */}
-                <ContactRow lang={lang} contact={agent} />
+                {/* Текст готовится ЗДЕСЬ, а не в компоненте связи: только
+                    страница объекта знает, о каком объекте речь. Цена — из
+                    объявления, в валюте собственника, а не пересчитанная:
+                    клиент цитирует то, что увидел, и пересчёт в его
+                    сообщении выглядел бы торгом ещё до разговора. */}
+                <ContactRow
+                  lang={lang}
+                  contact={agent}
+                  message={d.waText(
+                    o.address,
+                    publicMoney(lang, o.price, o.currency),
+                    siteUrl(`/${lang}/objects/${o.id}`),
+                  )}
+                />
                 {agent.certificate_no ? (
                   <p className="registry">
                     {d.agentRegistry(agent.certificate_no)}

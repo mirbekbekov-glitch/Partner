@@ -50,6 +50,8 @@ type Dict = {
   // Пустая выдача: не тупик, а развилка.
   emptyAsk: string; emptyAskGo: string; emptyTab: string;
   moneySwitch: string; priceFromAd: string; rateNote: (date: string) => string;
+  /** Готовый текст для WhatsApp: адрес, цена и ссылка на объявление. */
+  waText: (address: string, price: string, url: string) => string;
   otherDeal: (n: number) => string; otherDealGo: string;
   pageOf: (cur: number, total: number) => string;
   back: string; forward: string;
@@ -144,6 +146,9 @@ const ru: Dict = {
   moneySwitch: 'Валюта',
   priceFromAd: 'в объявлении',
   rateNote: (date) => `Пересчёт по курсу Нацбанка на ${date}`,
+  waText: (address, price, url) =>
+    `Добрый день! Пишу с сайта Liberterra по объекту: ${address}, ${price}.\n`
+    + `${url}\n\nПодскажите, пожалуйста, актуально ли предложение?`,
   otherDeal: (n) => `А в другой вкладке сейчас ${n}`,
   otherDealGo: 'Посмотреть',
   catalogDown: 'каталог временно недоступен',
@@ -275,6 +280,9 @@ const ky: Dict = {
   moneySwitch: 'Валюта',
   priceFromAd: 'жарнамада',
   rateNote: (date) => `Улуттук банктын ${date} курсу боюнча эсептелди`,
+  waText: (address, price, url) =>
+    `Кутмандуу küнüңüз! Liberterra сайтынан объект боюнча жазып жатам: ${address}, ${price}.\n`
+    + `${url}\n\nСунуш актуалдуубу?`,
   otherDeal: (n) => `Башка баракта азыр ${n}`,
   otherDealGo: 'Көрүү',
   catalogDown: 'каталог убактылуу жеткиликсиз',
@@ -396,6 +404,9 @@ const en: Dict = {
   moneySwitch: 'Currency',
   priceFromAd: 'as listed',
   rateNote: (date) => `Converted at the National Bank rate of ${date}`,
+  waText: (address, price, url) =>
+    `Hello! I am writing from the Liberterra website about: ${address}, ${price}.\n`
+    + `${url}\n\nIs this listing still available?`,
   otherDeal: (n) => `The other tab has ${n} right now`,
   otherDealGo: 'Open it',
   catalogDown: 'the catalogue is temporarily unavailable',
@@ -517,6 +528,9 @@ const zh: Dict = {
   moneySwitch: '货币',
   priceFromAd: '广告中价格',
   rateNote: (date) => `按吉尔吉斯国家银行 ${date} 汇率换算`,
+  waText: (address, price, url) =>
+    `您好！我从 Liberterra 网站看到这套房源：${address}，${price}。\n`
+    + `${url}\n\n请问该房源还在吗？`,
   otherDeal: (n) => `另一个标签页现有 ${n} 套`,
   otherDealGo: '查看',
   catalogDown: '目录暂时无法访问',

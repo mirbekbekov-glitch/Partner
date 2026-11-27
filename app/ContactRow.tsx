@@ -14,11 +14,16 @@ import { t, type Lang } from '@/lib/i18n';
  * и кнопка наугад обманывала бы клиента.
  */
 
-export function ContactRow({ lang, contact }: { lang: Lang; contact: Contact }) {
+export function ContactRow({ lang, contact, message }: {
+  lang: Lang;
+  contact: Contact;
+  /** Готовый текст для WhatsApp. Есть там, где известно, о чём речь. */
+  message?: string;
+}) {
   const d = t(lang);
   const links = contactLinks(contact, {
     call: d.callAgent, whatsapp: d.writeWhatsapp, telegram: d.writeTelegram,
-  });
+  }, message);
 
   if (links.length === 0) return null;
   const shown = phoneText(contact.phone);
