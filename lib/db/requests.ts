@@ -3,6 +3,7 @@ import { all, batch, flag, newId, now, one, run, stmt } from './sql';
 import { auditStmt } from './audit';
 import { isAdmin, requireAgent } from './session';
 import { normalizeName, normalizePhone } from './normalize';
+import { coarseOf, isSpaceType } from '../space-types';
 import { BudgetTooLow, Conflict, Forbidden, Invalid, NotFound } from './errors';
 import { priceFloor } from './catalog';
 import { fromMinor } from './money';
@@ -34,7 +35,12 @@ export type RequestRow = {
   /** Адрес предлагаемого объекта. У заявки на поиск его не бывает. */
   address: string | null;
   housing_type: string | null;
+  /** Подробный вид: офис, кабинет, рабочее место. */
+  space_type: string | null;
   rooms: number | null;
+  /** Срок аренды в днях. */
+  term_days_min: number | null;
+  term_days_max: number | null;
   district_id: string | null;
   district_other: string | null;
   budget_minor: number | null;
@@ -68,7 +74,12 @@ export type NewRequest = {
   name?: string | null;
   deal?: string | null;
   housing_type?: string | null;
+  /** Подробный тип: офис, кабинет, рабочее место. Огрубление выводится. */
+  space_type?: string | null;
   rooms?: number | null;
+  /** Срок аренды в днях. У покупки не бывает. */
+  term_days_min?: number | null;
+  term_days_max?: number | null;
   district?: string | null;
   budget_minor?: number | null;
   budget_currency?: string | null;
@@ -116,6 +127,23 @@ export async function submitRequest(input: NewRequest): Promise<string> {
     ? input.housing_type : null;
 
   const rooms = input.rooms && input.rooms >= 1 && input.rooms <= 20 ? input.rooms : null;
+
+  // Что именно ищут. Словарь подробнее, чем housing_type, и огрублённое
+  // значение выводится ИЗ НЕГО, а не приходит отдельно: иначе два поля
+  // разойдутся, и заявка на кабинет окажется заявкой на квартиру.
+  const space = isSpaceType(input.space_type ?? null) ? input.space_type! : null;
+  const coarse = space ? coarseOf(space) : kind;
+
+  // Срок аренды в днях. У покупки срока нет — и если он пришёл, это
+  // мусор из формы, а не намерение человека.
+  const isRent = deal === 'rent';
+  const day = (v: number | null | undefined) =>
+    isRent && v && v > 0 && v <= 3650 ? Math.trunc(v) : null;
+  let termMin = day(input.term_days_min);
+  let termMax = day(input.term_days_max);
+  // Перепутанные местами границы — обычная опечатка, а не повод терять
+  // заявку: меняем местами молча.
+  if (termMin && termMax && termMin > termMax) [termMin, termMax] = [termMax, termMin];
 
   const currency = (input.budget_currency ?? 'USD').toUpperCase();
   const budget = input.budget_minor && input.budget_minor > 0 ? input.budget_minor : null;
@@ -191,12 +219,15 @@ export async function submitRequest(input: NewRequest): Promise<string> {
   await batch([
     stmt(
       `insert into requests (id, deal, offer_deal, address, housing_type, rooms,
+                             space_type, term_days_min, term_days_max,
                              district_id, district_other, budget_minor,
                              budget_currency, wishes,
                              name, phone, phone_normalized, public_consent,
                              status, source, created_at, updated_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
-      id, deal, offer, address, kind, rooms, districtId, districtOther, budget,
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
+      id, deal, offer, address, coarse, rooms,
+      space, termMin, termMax,
+      districtId, districtOther, budget,
       currency === 'KGS' ? 'KGS' : 'USD', wishes, name, phone, normalized,
       flag(input.consent ?? false), (input.source ?? '').trim() || null, at, at,
     ),

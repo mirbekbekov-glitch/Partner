@@ -103,6 +103,12 @@ type Dict = {
   /** Бюджет ниже рынка: порог и на скольки объявлениях он стоит. */
   reqLowBudget: (floor: string, basedOn: number) => string;
   reqUseFloor: string;
+  /** Группы и виды помещений в заявке. */
+  spaceGroups: Record<string, string>;
+  spaceTypes: Record<string, string>;
+  /** Срок аренды. */
+  reqTerm: string; reqTermHint: string; reqTermFrom: string; reqTermTo: string;
+  reqTermDays: string; termPresets: Record<string, string>;
   reqWhy1: string; reqWhy2: string; reqWhy3: string;
   // Заявка собственника: «сдам или продам». Та же форма, другая сторона.
   reqSideLegend: string; reqSideFind: string; reqSideOwn: string;
@@ -233,6 +239,20 @@ const ru: Dict = {
     + ` (по ${basedOn} объявлениям в каталоге). Укажите хотя бы эту сумму —`
     + ` так агент начнёт искать, а не объяснять, почему не находит.`,
   reqUseFloor: 'Подставить эту сумму',
+  spaceGroups: { housing: 'Жильё', commercial: 'Коммерция', workplace: 'Рабочее место' },
+  spaceTypes: {
+    flat: 'Квартира', room: 'Комната, подселение', house: 'Дом',
+    townhouse: 'Таунхаус', land: 'Участок', garage: 'Гараж, паркинг',
+    office: 'Офис', cabinet: 'Кабинет', building: 'Здание целиком',
+    retail: 'Торговое помещение', warehouse: 'Склад', production: 'Производство',
+    desk: 'Рабочее место в коворкинге',
+  },
+  reqTerm: 'Срок аренды', reqTermHint: 'Посуточно, на месяц или на год — это разные объекты и разные цены',
+  reqTermFrom: 'от', reqTermTo: 'до', reqTermDays: 'дней',
+  termPresets: {
+    daily: 'Посуточно', months3: 'До 3 месяцев',
+    months6: '3–6 месяцев', year: 'От года',
+  },
   reqErrMany: 'С этого номера сегодня уже несколько заявок. Позвоните нам напрямую.',
   reqErrGeneric: 'Не удалось отправить заявку. Попробуйте ещё раз.',
   reqWhy1: 'Отвечаем в течение часа',
@@ -361,6 +381,20 @@ const ky: Dict = {
     `Мындай баада бул районда бир дагы вариант жок: эң арзаны — ${floor}`
     + ` (каталогдогу ${basedOn} жарнама боюнча).`,
   reqUseFloor: 'Ушул сумманы коюу',
+  spaceGroups: { housing: 'Турак жай', commercial: 'Коммерция', workplace: 'Жумуш орду' },
+  spaceTypes: {
+    flat: 'Батир', room: 'Бөлмө, подселение', house: 'Үй',
+    townhouse: 'Таунхаус', land: 'Участок', garage: 'Гараж, паркинг',
+    office: 'Офис', cabinet: 'Кабинет', building: 'Имарат толугу менен',
+    retail: 'Соода жайы', warehouse: 'Склад', production: 'Өндүрүш',
+    desk: 'Коворкингдеги жумуш орду',
+  },
+  reqTerm: 'Ижара мөөнөтү', reqTermHint: 'Күндөп, айга же жылга — бул ар башка объекттер',
+  reqTermFrom: 'баштап', reqTermTo: 'чейин', reqTermDays: 'күн',
+  termPresets: {
+    daily: 'Күндөп', months3: '3 айга чейин',
+    months6: '3–6 ай', year: 'Жылдан',
+  },
   reqErrMany: 'Бул номерден бүгүн бир нече арыз келди. Бизге түз чалыңыз.',
   reqErrGeneric: 'Арызды жөнөтүү мүмкүн болгон жок. Кайра аракет кылыңыз.',
   reqWhy1: 'Бир сааттын ичинде жооп беребиз',
@@ -489,6 +523,20 @@ const en: Dict = {
     `There is nothing at that price in this district: the cheapest is ${floor}`
     + ` (based on ${basedOn} listings in the catalogue).`,
   reqUseFloor: 'Use this amount',
+  spaceGroups: { housing: 'Housing', commercial: 'Commercial', workplace: 'Workplace' },
+  spaceTypes: {
+    flat: 'Flat', room: 'Room, shared', house: 'House',
+    townhouse: 'Townhouse', land: 'Land', garage: 'Garage, parking',
+    office: 'Office', cabinet: 'Private room in an office', building: 'Whole building',
+    retail: 'Retail space', warehouse: 'Warehouse', production: 'Production',
+    desk: 'Desk in a coworking space',
+  },
+  reqTerm: 'Rental term', reqTermHint: 'Nightly, monthly or yearly — different listings, different prices',
+  reqTermFrom: 'from', reqTermTo: 'to', reqTermDays: 'days',
+  termPresets: {
+    daily: 'Nightly', months3: 'Up to 3 months',
+    months6: '3–6 months', year: 'A year or more',
+  },
   reqErrMany: 'Several requests from this number today already. Please call us directly.',
   reqErrGeneric: 'The request could not be sent. Please try again.',
   reqWhy1: 'We answer within the hour',
@@ -616,6 +664,20 @@ const zh: Dict = {
   reqLowBudget: (floor, basedOn) =>
     `该区域没有这个价位的房源，最低为 ${floor}（依据目录中的 ${basedOn} 条房源）。`,
   reqUseFloor: '使用该金额',
+  spaceGroups: { housing: '住宅', commercial: '商业', workplace: '办公位' },
+  spaceTypes: {
+    flat: '公寓', room: '合租房间', house: '独栋',
+    townhouse: '联排别墅', land: '地块', garage: '车库、车位',
+    office: '写字楼', cabinet: '独立办公间', building: '整栋楼',
+    retail: '商铺', warehouse: '仓库', production: '生产场地',
+    desk: '共享办公工位',
+  },
+  reqTerm: '租期', reqTermHint: '按日、按月或按年——房源和价格都不同',
+  reqTermFrom: '从', reqTermTo: '到', reqTermDays: '天',
+  termPresets: {
+    daily: '按日', months3: '3 个月以内',
+    months6: '3–6 个月', year: '一年以上',
+  },
   reqErrMany: '该号码今天已提交多次。请直接致电我们。',
   reqErrGeneric: '提交失败，请重试。',
   reqWhy1: '一小时内回复',

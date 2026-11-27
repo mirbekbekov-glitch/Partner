@@ -1548,3 +1548,14 @@ a.agent-row:hover { background: var(--sunk); }
   border-left: 3px solid var(--accent); border-radius: var(--r-md);
   padding: 14px 16px; margin-top: 12px; }
 .low-budget p { margin: 0 0 10px; font-size: 0.9375rem; line-height: 1.55; }
+
+/* Срок аренды: пресеты и диапазон. */
+.cell-wide { grid-column: 1 / -1; }
+.term-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.term-presets .chip { border: 1px solid var(--line); background: var(--bg);
+  color: var(--fg); border-radius: var(--r-full); padding: 7px 14px;
+  font: inherit; font-size: 0.8125rem; font-weight: 600; cursor: pointer;
+  transition: border-color .18s, color .18s; }
+.term-presets .chip:hover { border-color: var(--accent); color: var(--accent); }
+.term-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.term-range input { width: 92px; }

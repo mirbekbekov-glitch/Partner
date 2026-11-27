@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 import { submitRequest, type RequestError } from './request-actions';
 import { t, type Lang } from '@/lib/i18n';
+import { SPACE_TYPES, TERM_PRESETS } from '@/lib/space-types';
 import { publicMoney } from '@/lib/catalog-params';
 
 /** Сторона заявки: человек ищет жильё или отдаёт своё. */
@@ -37,6 +38,16 @@ export function RequestForm({ lang, districts, side: initial = 'find' }: {
 }) {
   const d = t(lang);
   const [side, setSide] = useState<RequestSide>(initial);
+  const [space, setSpace] = useState('');
+  const [term, setTerm] = useState<{ min: string; max: string }>({ min: '', max: '' });
+  const [rent, setRent] = useState(false);
+
+  // Комнаты и срок спрашиваются не всегда: у склада комнат не считают, а
+  // у покупки нет срока. Прятать лишнее важнее, чем показать всё: длинная
+  // форма с неуместными полями читается как невнимательная.
+  const housingChosen = space === '' || SPACE_TYPES.some(
+    (t) => t.code === space && t.group === 'housing',
+  );
   const own = side === 'own';
   // useActionState, а не обработчик onSubmit: так форма уходит на сервер
   // POST-ом и без JavaScript. С ним — без перезагрузки страницы.
@@ -89,28 +100,92 @@ export function RequestForm({ lang, districts, side: initial = 'find' }: {
       ) : (
         <fieldset className="seg" key="find">
           <legend>{d.reqDeal}</legend>
-          <label><input type="radio" name="deal" value="buy" defaultChecked />{d.reqBuy}</label>
-          <label><input type="radio" name="deal" value="rent" />{d.reqRent}</label>
+          <label>
+            <input type="radio" name="deal" value="buy" defaultChecked
+                   onChange={() => setRent(false)} />{d.reqBuy}
+          </label>
+          <label>
+            <input type="radio" name="deal" value="rent"
+                   onChange={() => setRent(true)} />{d.reqRent}
+          </label>
         </fieldset>
       )}
 
       <div className="reqgrid">
         <div className="cell">
+          {/* Сгруппированный список, а не плоский. Человек сначала
+              понимает, что ему нужно — жильё, коммерция или место за
+              столом, — и только потом уточняет. Плоский список из
+              тринадцати пунктов заставляет прочесть все тринадцать.
+
+              И это же первое, что видит заявитель: по составу списка
+              сразу понятно, что площадка знает про кабинеты, склады и
+              коворкинг, а не только про квартиры. */}
           <label htmlFor="rq-type">{d.reqType}</label>
-          <select id="rq-type" name="housing_type" defaultValue="">
+          <select id="rq-type" name="space_type" defaultValue=""
+                  onChange={(e) => setSpace(e.target.value)}>
             <option value="">{d.anyKind}</option>
-            {Object.entries(d.kinds).map(([k, name]) => (
-              <option key={k} value={k}>{name.charAt(0).toUpperCase() + name.slice(1)}</option>
+            {(['housing', 'commercial', 'workplace'] as const).map((group) => (
+              <optgroup key={group} label={d.spaceGroups[group]}>
+                {SPACE_TYPES.filter((t) => t.group === group).map((t) => (
+                  <option key={t.code} value={t.code}>{d.spaceTypes[t.code]}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
-        <div className="cell">
+        {/* Комнаты спрашиваются только у жилья: у склада и рабочего
+            места их не считают. */}
+        <div className="cell" hidden={!housingChosen}>
           <label htmlFor="rq-rooms">{d.reqRooms}</label>
           <select id="rq-rooms" name="rooms" defaultValue="">
             <option value="">{d.anyRooms}</option>
             {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
+        {/* Срок аренды. Только у аренды: у покупки срока нет.
+            «Сниму квартиру» значит разное — посуточно на выходные, на три
+            месяца под командировку, на год с семьёй. Это три разных
+            объекта и три разные цены, и спросить дешевле, чем выяснять
+            звонком.
+
+            Пресеты заполняют те же два поля в днях, а не живут отдельно:
+            два источника правды разошлись бы при первой же правке. */}
+        {!own && rent ? (
+          <div className="cell cell-wide">
+            <label htmlFor="rq-term-min">{d.reqTerm}</label>
+            <div className="term-presets">
+              {TERM_PRESETS.map((p) => (
+                <button
+                  key={p.code}
+                  type="button"
+                  className="chip"
+                  onClick={() => setTerm({
+                    min: String(p.min),
+                    max: p.max === null ? '' : String(p.max),
+                  })}
+                >
+                  {d.termPresets[p.code]}
+                </button>
+              ))}
+            </div>
+            <div className="term-range">
+              <span className="key">{d.reqTermFrom}</span>
+              <input id="rq-term-min" name="term_days_min" type="number"
+                     min={1} max={3650} inputMode="numeric"
+                     value={term.min}
+                     onChange={(e) => setTerm((v) => ({ ...v, min: e.target.value }))} />
+              <span className="key">{d.reqTermTo}</span>
+              <input name="term_days_max" type="number" min={1} max={3650}
+                     inputMode="numeric"
+                     value={term.max}
+                     onChange={(e) => setTerm((v) => ({ ...v, max: e.target.value }))} />
+              <span className="key">{d.reqTermDays}</span>
+            </div>
+            <p className="key">{d.reqTermHint}</p>
+          </div>
+        ) : null}
+
         <div className="cell">
           <label htmlFor="rq-district">{d.reqDistrict}</label>
           {/* Список, а не свободный текст: на прежнем сайте свободное поле

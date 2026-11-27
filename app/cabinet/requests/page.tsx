@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { requestCounts, requestFeed, type RequestTab } from '@/lib/db/requests';
 import { parseFilters } from '@/lib/list-params';
 import { Pager } from '../Pager';
-import { KIND_LABEL } from '@/lib/request-labels';
+import { KIND_LABEL, SPACE_LABEL, termLabel } from '@/lib/request-labels';
 import { RequestActions } from './RequestActions';
 
 export const metadata = { title: 'Заявки клиентов' };
@@ -16,7 +16,10 @@ type Row = {
   offer_deal: 'sale' | 'rent' | null;
   address: string | null;
   housing_type: string | null;
+  space_type: string | null;
   rooms: number | null;
+  term_days_min: number | null;
+  term_days_max: number | null;
   district: string | null;
   district_other: string | null;
   budget: number | null;
@@ -152,10 +155,19 @@ export default async function Requests({
                       {r.offer_deal
                         ? OFFER[r.offer_deal]
                         : r.deal ? DEAL[r.deal] : 'Направление не указано'}
-                      {r.housing_type
-                        ? ` · ${KIND_LABEL[r.housing_type] ?? r.housing_type}`
-                        : ''}
+                      {/* Подробный вид, если он есть: «коммерческая» не
+                          отвечает на вопрос, звонить по офисам или по
+                          складам. Огрублённый — только для старых заявок,
+                          заведённых до появления словаря. */}
+                      {r.space_type
+                        ? ` · ${SPACE_LABEL[r.space_type] ?? r.space_type}`
+                        : r.housing_type
+                          ? ` · ${KIND_LABEL[r.housing_type] ?? r.housing_type}`
+                          : ''}
                       {r.rooms ? ` · ${r.rooms} комн.` : ''}
+                      {termLabel(r.term_days_min, r.term_days_max)
+                        ? ` · ${termLabel(r.term_days_min, r.term_days_max)}`
+                        : ''}
                     </span>
                     {/* Сторона — первое, что должен увидеть агент: заявка
                         с объектом это будущий мандат, а не подбор. */}

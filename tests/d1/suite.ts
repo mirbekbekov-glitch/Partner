@@ -48,6 +48,7 @@ import { mhouseOffers, mhouseXml } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
 import { convert, parseNbkr } from '@/lib/fx';
 import { contactLinks, phoneDigits } from '@/lib/contact-links';
+import { coarseOf, SPACE_TYPES } from '@/lib/space-types';
 import { refreshRates, usdRate } from '@/lib/db/fx';
 import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
@@ -849,6 +850,66 @@ export default {
     // Возвращаем как было: ниже стоит проверка «без привязанного Telegram
     // статус „нечем доставить"», и привязка, оставленная здесь, ломает её.
     await db.prepare('update agents set telegram_id = null where id = ?').bind(anna).run();
+
+    // -----------------------------------------------------------------
+    // Что ищут: словарь подробнее, срок аренды в днях
+    // -----------------------------------------------------------------
+    // Огрубление выводится ИЗ подробного типа. Иначе два поля разойдутся,
+    // и заявка на кабинет окажется заявкой на квартиру.
+    check('кабинет огрубляется до коммерческой', coarseOf('cabinet') === 'commercial');
+    check('рабочее место — тоже', coarseOf('desk') === 'commercial');
+    check('квартира остаётся квартирой', coarseOf('flat') === 'flat');
+    check('выдуманный тип не огрубляется в чужой', coarseOf('дом-мечты') === null);
+    check('у каждого вида есть группа',
+      SPACE_TYPES.every((t) => ['housing', 'commercial', 'workplace'].includes(t.group)));
+
+    const office = await submitRequest({
+      phone: '0555 20 20 01', deal: 'rent', space_type: 'cabinet',
+      term_days_min: 90, term_days_max: 180,
+    });
+    const officeRow = await db.prepare(
+      'select space_type, housing_type, term_days_min, term_days_max from requests where id = ?',
+    ).bind(office).first<{
+      space_type: string; housing_type: string;
+      term_days_min: number; term_days_max: number;
+    }>();
+
+    check('подробный тип сохранён как есть', officeRow?.space_type === 'cabinet');
+    check('а огрублённый выведен из него',
+      officeRow?.housing_type === 'commercial', String(officeRow?.housing_type));
+    check('срок сохранён в днях',
+      officeRow?.term_days_min === 90 && officeRow?.term_days_max === 180);
+
+    // Перепутанные местами границы — опечатка, а не повод терять заявку.
+    const swapped = await submitRequest({
+      phone: '0555 20 20 02', deal: 'rent', space_type: 'flat',
+      term_days_min: 180, term_days_max: 30,
+    });
+    const swappedRow = await db.prepare(
+      'select term_days_min, term_days_max from requests where id = ?',
+    ).bind(swapped).first<{ term_days_min: number; term_days_max: number }>();
+    check('перепутанные границы срока меняются местами',
+      swappedRow?.term_days_min === 30 && swappedRow?.term_days_max === 180,
+      `${swappedRow?.term_days_min}–${swappedRow?.term_days_max}`);
+
+    // У покупки срока не бывает: пришёл — значит мусор из формы.
+    const bought = await submitRequest({
+      phone: '0555 20 20 03', deal: 'buy', space_type: 'house',
+      term_days_min: 30, term_days_max: 90,
+    });
+    const boughtRow = await db.prepare(
+      'select term_days_min, term_days_max from requests where id = ?',
+    ).bind(bought).first<{ term_days_min: number | null; term_days_max: number | null }>();
+    check('у покупки срок не сохраняется',
+      boughtRow?.term_days_min === null && boughtRow?.term_days_max === null);
+
+    // Выдуманный тип не подменяет огрубление чужим значением.
+    const weird = await submitRequest({
+      phone: '0555 20 20 04', deal: 'rent', space_type: 'нечто',
+    });
+    check('выдуманный тип не сохраняется',
+      (await db.prepare('select space_type from requests where id = ?')
+        .bind(weird).first<{ space_type: string | null }>())?.space_type === null);
 
     check('курса в пустой базе нет', (await usdRate()) === null);
     check('и витрина его тоже не выдумывает', (await catalogRate()) === null);
