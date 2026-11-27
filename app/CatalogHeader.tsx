@@ -36,6 +36,7 @@ export function CatalogHeader({ lang }: { lang: Lang }) {
         </Link>
         {/* Единственный раздел рядом со знаком: человек, не нашедший
             объект в каталоге, не должен искать, куда написать. */}
+        <Link href={`/${lang}/agents`} className="nav-link">{d.agentsNav}</Link>
         <Link href={`/${lang}/request`} className="nav-link">{d.reqNav}</Link>
         <span className="spacer" />
         <ThemeSwitch label={d.themeSwitch} />

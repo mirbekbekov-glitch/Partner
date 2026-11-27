@@ -25,6 +25,13 @@ const COLUMNS = [
   'rooms', 'area', 'floor', 'floors_total',
   'price_minor', 'currency', 'photos', 'description',
   'published_at', 'actual_at',
+  // Поля для выгрузки на площадки. Они публичны по смыслу: координаты,
+  // серия дома и срок аренды — это то, что площадка показывает в самом
+  // объявлении. Ничего о собственнике, агенте и комиссии здесь нет и быть
+  // не может: такие колонки в этот список не попадают.
+  'latitude', 'longitude', 'region', 'district', 'micro_district',
+  'house_number', 'building_type', 'serie', 'land_area', 'rental_term',
+  'commercial_type', 'room_location', 'parking_type', 'build_year',
 ] as const;
 
 const SELECT = COLUMNS.map((c) => `o.${c}`).join(', ');
@@ -46,6 +53,20 @@ export type CatalogRow = {
   description: string | null;
   published_at: string | null;
   actual_at: string;
+  latitude: number | null;
+  longitude: number | null;
+  region: string | null;
+  district: string | null;
+  micro_district: string | null;
+  house_number: string | null;
+  building_type: string | null;
+  serie: string | null;
+  land_area: number | null;
+  rental_term: string | null;
+  commercial_type: string | null;
+  room_location: string | null;
+  parking_type: string | null;
+  build_year: number | null;
 };
 
 /**
@@ -80,6 +101,8 @@ export type CatalogQuery = {
   priceMin?: number | null;
   priceMax?: number | null;
   q?: string | null;
+  /** Объекты одного агента — для его публичной страницы. */
+  agent?: string | null;
   sort?: 'fresh' | 'cheap' | 'big';
   page?: number;
   pageSize?: number;
@@ -146,6 +169,15 @@ function conditions(query: CatalogQuery): { clause: string; params: (string | nu
   }
   if (query.priceMax != null) {
     where.push('o.price_minor <= ?'); params.push(query.priceMax * 100);
+  }
+
+  // Объекты агента — через АКТИВНЫЙ мандат, как и везде в витрине: ведёт
+  // объект тот, у кого договор, а не тот, кто завёл запись.
+  if (query.agent) {
+    where.push(`exists (select 1 from mandates m
+                         where m.object_id = o.id and m.status = 'active'
+                           and m.listing_agent_id = ?)`);
+    params.push(query.agent);
   }
 
   if (query.q) {
@@ -283,6 +315,14 @@ export async function catalogZoneCounts(
  * (инвариант 1), так что пустой ответ здесь означает снятый объект.
  */
 export type CatalogAgent = {
+  /**
+   * Идентификатор нужен ссылке на страницу агента, и с её появлением он
+   * перестал быть внутренним: он и так стоит в адресе `/agents/<id>`.
+   * Держать его закрытым здесь, публикуя в адресе, было бы
+   * непоследовательностью, а не защитой. Телефон, почта и статус
+   * по-прежнему закрыты.
+   */
+  id: string;
   full_name: string;
   avatar_key: string | null;
   works_since: number | null;
@@ -292,7 +332,7 @@ export type CatalogAgent = {
 
 export async function catalogAgent(objectId: string): Promise<CatalogAgent | null> {
   return one<CatalogAgent>(
-    `select ag.full_name, ag.avatar_key, ag.works_since,
+    `select ag.id, ag.full_name, ag.avatar_key, ag.works_since,
             case when ag.certificate_confirmed = 1 then ag.certificate_no end
               as certificate_no
        from objects o
@@ -300,6 +340,80 @@ export async function catalogAgent(objectId: string): Promise<CatalogAgent | nul
        join agents ag on ag.id = m.listing_agent_id
       where o.id = ? and o.publication_state = 'published'`,
     objectId,
+  );
+}
+
+/**
+ * Агент для публичной страницы — тот же состав полей, что и на карточке
+ * объекта, плюс агентство и число объектов.
+ *
+ * Агентство отдаётся ТОЛЬКО подтверждённое, по тому же правилу, что и
+ * номер в реестре: принадлежность к фирме агент заявляет сам, и
+ * непроверенное утверждение от имени агентства остаётся обманом.
+ *
+ * Телефона и почты здесь нет, как и на карточке объекта: звонок идёт в
+ * отдел продаж. Это не экономия полей — иначе объект уводят мимо
+ * агентства, и смысл витрины пропадает.
+ */
+export type CatalogAgentCard = CatalogAgent & {
+  id: string;
+  organization: string | null;
+  objects: number;
+};
+
+/**
+ * Состав выдачи записан здесь один раз и используется обоими запросами —
+ * списком и страницей одного агента. Два разных списка колонок однажды
+ * разошлись бы, и поле, закрытое в одном месте, уехало бы наружу в другом.
+ */
+const AGENT_SELECT = `
+  ag.id, ag.full_name, ag.avatar_key, ag.works_since,
+  case when ag.certificate_confirmed = 1 then ag.certificate_no end
+    as certificate_no,
+  case when ag.org_confirmed = 1 then org.name end as organization,
+  (select count(*) from mandates m
+     join objects o on o.id = m.object_id
+    where m.listing_agent_id = ag.id and m.status = 'active'
+      and o.publication_state = 'published') as objects`;
+
+/**
+ * Условие «агента вообще видно клиенту».
+ *
+ * Одобрен — иначе на сайте оказался бы человек, которому ещё не открыли
+ * доступ, или тот, кого выставили за дверь. И у него есть хотя бы один
+ * опубликованный объект: страница агента без объектов это страница, на
+ * которой нечего делать, а в списке — пустое обещание.
+ */
+const AGENT_VISIBLE = `
+  ag.status = 'approved'
+  and exists (select 1 from mandates m
+                join objects o on o.id = m.object_id
+               where m.listing_agent_id = ag.id and m.status = 'active'
+                 and o.publication_state = 'published')`;
+
+/** Агенты, которых видно клиенту. */
+export async function catalogAgents(): Promise<CatalogAgentCard[]> {
+  const rows = await all<CatalogAgentCard>(
+    `select ${AGENT_SELECT}
+       from agents ag
+       left join organizations org on org.id = ag.organization_id
+      where ${AGENT_VISIBLE}`,
+  );
+
+  // Порядок в коде: SQLite сравнивает строки побайтно, и для кириллицы
+  // это значит, что все заглавные идут перед всеми строчными. Список
+  // маленький и не постраничный, поэтому localeCompare здесь уместен.
+  return rows.sort((a, b) => a.full_name.localeCompare(b.full_name, 'ru'));
+}
+
+/** Один агент. Пусто означает «такого на сайте нет», и страница даёт 404. */
+export async function catalogAgentById(id: string): Promise<CatalogAgentCard | null> {
+  return one<CatalogAgentCard>(
+    `select ${AGENT_SELECT}
+       from agents ag
+       left join organizations org on org.id = ag.organization_id
+      where ag.id = ? and ${AGENT_VISIBLE}`,
+    id,
   );
 }
 

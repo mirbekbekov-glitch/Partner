@@ -28,7 +28,8 @@ import { createRequirement, updateRequirement } from '@/lib/db/requirements';
 import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import {
-  catalogAgent, catalogCities, catalogCount, catalogObject, catalogPage,
+  catalogAgent, catalogAgentById, catalogAgents, catalogCities, catalogCount,
+  catalogObject, catalogPage,
   catalogZoneCounts, catalogZones,
 } from '@/lib/db/catalog';
 import {
@@ -37,6 +38,7 @@ import {
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
+import { mhouseXml } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
 import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
@@ -1500,17 +1502,97 @@ export default {
     // Состав выдачи. Та же проверка, что защищает объекты витрины, и по
     // той же причине: сюда легко дописать «ещё одно поле».
     const agentKeys = Object.keys((await catalogAgent(shown.id)) ?? {});
-    const forbiddenAgent = ['phone', 'email', 'id', 'telegram_id', 'role',
+    // Идентификатор из этого списка УБРАН осознанно, вместе с появлением
+    // страницы агента: он стоит в её адресе, и прятать его здесь, публикуя
+    // в адресе, было бы непоследовательностью. Телефон, почта и статус
+    // закрыты как были.
+    const forbiddenAgent = ['phone', 'email', 'telegram_id', 'role',
       'status', 'organization_id', 'certificate_confirmed'];
-    check('в выдаче агента нет ни телефона, ни почты, ни идентификатора',
+    check('в выдаче агента нет ни телефона, ни почты, ни статуса',
       forbiddenAgent.every((k) => !agentKeys.includes(k)),
       `просочилось: ${agentKeys.join(', ')}`);
+    check('а идентификатор отдаётся — на него ведёт ссылка со страницы объекта',
+      (await catalogAgent(shown.id))?.id === anna);
 
     // А в самой таблице эти колонки есть — иначе проверка была бы пустой.
     const agentRow = await db.prepare('select * from agents where id = ?')
       .bind(anna).first<Record<string, unknown>>();
     check('а в таблице агентов эти колонки есть',
       Boolean(agentRow) && 'phone' in (agentRow ?? {}) && 'email' in (agentRow ?? {}));
+
+    // -----------------------------------------------------------------
+    // Публичная страница агента: только настоящее
+    // -----------------------------------------------------------------
+    await confirmAgentCertificate(anna, true);
+    const listed = await catalogAgents();
+    const me = listed.find((a) => a.id === anna);
+
+    check('агент с опубликованным объектом есть в списке', Boolean(me));
+    check('и у него считаются объекты', (me?.objects ?? 0) >= 1, `${me?.objects}`);
+    check('подтверждённый номер в реестре отдаётся', me?.certificate_no === 'КР-777');
+
+    // Состав выдачи — та же проверка, что у карточки объекта: сюда так же
+    // легко дописать «ещё одно поле», и это так же необратимо.
+    const cardKeys = Object.keys(me ?? {}).sort();
+    check('в выдаче агента нет ни телефона, ни почты, ни статуса',
+      !cardKeys.includes('phone') && !cardKeys.includes('email')
+      && !cardKeys.includes('status') && !cardKeys.includes('certificate_confirmed'),
+      cardKeys.join(', '));
+
+    // Агентство — только подтверждённое. То же правило, что у сертификата:
+    // принадлежность к фирме агент заявляет сам.
+    await setMyOrganization('Этажи');
+    check('незаверенное агентство наружу не уходит',
+      (await catalogAgentById(anna))?.organization === null,
+      String((await catalogAgentById(anna))?.organization));
+    await confirmAgentOrganization(anna, true);
+    check('подтверждённое — отдаётся',
+      (await catalogAgentById(anna))?.organization === 'Этажи');
+
+    // Неодобренного и заблокированного на сайте быть не должно.
+    await db.prepare(`update agents set status = 'blocked' where id = ?`).bind(anna).run();
+    check('заблокированного агента в списке нет',
+      !(await catalogAgents()).some((a) => a.id === anna));
+    check('и по прямой ссылке его нет', (await catalogAgentById(anna)) === null);
+    await db.prepare(`update agents set status = 'approved' where id = ?`).bind(anna).run();
+
+    // Агент без опубликованных объектов — не страница, а пустое обещание.
+    const noObjects = await ensureAgentByEmail('bezobektov@example.kg', 'Безобъектов Агент');
+    await db.prepare(`update agents set status = 'approved' where id = ?`)
+      .bind(noObjects.id).run();
+    check('агента без опубликованных объектов в списке нет',
+      !(await catalogAgents()).some((a) => a.id === noObjects.id));
+    check('и его страницы тоже нет', (await catalogAgentById(noObjects.id)) === null);
+
+    // Объекты на странице агента — те же, что в каталоге, и только его.
+    //
+    // Чужой объект здесь обязан быть ОПУБЛИКОВАННЫМ: на черновике
+    // проверка проходила бы и без фильтра по агенту, потому что черновика
+    // в каталоге нет в принципе. Проверено мутацией — первая версия с
+    // черновиком её не поймала.
+    await loginAs(db, vera);
+    const hersPublished = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Чужая 7', price_minor: 2_200_000,
+    });
+    await createMandate({ object_id: hersPublished.id, kind: 'non_exclusive' });
+    await publishObject(hersPublished.id);
+    await loginAs(db, anna);
+
+    const mine2 = await catalogPage({ agent: anna });
+    check('на странице агента есть его объект',
+      mine2.items.some((i) => i.id === shown.id));
+    check('а объект коллеги — опубликованный — туда не попадает',
+      mine2.items.every((i) => i.id !== hersPublished.id),
+      mine2.items.map((i) => i.address).join(' | '));
+    check('и в общем каталоге он при этом есть — значит дело в фильтре',
+      (await catalogPage({})).items.some((i) => i.id === hersPublished.id));
+
+    // Убираем за собой: дальше по прогону считаются объекты агентов, и
+    // лишний объект Веры ломает счётчики. Правило простое — проверка не
+    // должна менять то, на чём стоят соседние.
+    await db.prepare('delete from mandates where object_id = ?')
+      .bind(hersPublished.id).run();
+    await db.prepare('delete from objects where id = ?').bind(hersPublished.id).run();
 
     // Неопубликованный объект агента не раскрывает.
     //
@@ -1627,6 +1709,81 @@ export default {
       FEED_PHONE: '0700 11 22 33', FEED_ORG: 'Liberterra' });
     check('телефон собственника в фид не просочился',
       !(await feedXml('https://liberterra.kg')).includes('555121314'));
+
+    // -----------------------------------------------------------------
+    // Фид MHouse
+    // -----------------------------------------------------------------
+    // У площадки свой формат и свои справочники: значение не из списка
+    // она не примет, а без обязательного поля не опубликует объявление.
+    // Поэтому здесь проверяется не разметка, а отбор: уходит ли наружу
+    // то, что площадка возьмёт, и остаётся ли дома то, что она отклонит.
+
+    setEnv({ ...(env as unknown as Record<string, unknown>),
+      FEED_PHONE: '0700 11 22 33', FEED_ORG: 'Liberterra' });
+
+    const incomplete = await mhouseXml('https://liberterra.kg');
+    check('без координат и серии квартира в фид MHouse не идёт',
+      !incomplete.includes(shown.id));
+
+    // Дозаполняем ровно то, чего требует площадка от квартиры.
+    await updateObject(shown.id, {
+      latitude: 42.819242, longitude: 74.619628,
+      building_type: 'монолитный', serie: 'элитка',
+      rooms: 3, area: 85.27, floor: 8, floors_total: 15,
+    });
+
+    const mhFull = await mhouseXml('https://liberterra.kg');
+    check('заполненная квартира в фид MHouse идёт', mhFull.includes(shown.id));
+    check('регион Бишкека подставлен по справочнику',
+      mhFull.includes('<region>Чуйская область / Бишкек</region>'));
+    check('координаты на месте',
+      mhFull.includes('<latitude>42.819242</latitude>')
+      && mhFull.includes('<longitude>74.619628</longitude>'));
+    check('серия и тип дома на языке площадки',
+      mhFull.includes('<serie>элитка</serie>')
+      && mhFull.includes('<building-type>монолитный</building-type>'));
+    check('контакт MHouse называет имя и роль подающего',
+      mhFull.includes('<owner-type>агент</owner-type>')
+      && mhFull.includes('<name>Liberterra</name>'));
+
+    // Главное правило витрины держится и здесь: фид уходит наружу
+    // навсегда, и собственник в нём невозможен.
+    check('в фиде MHouse нет ни агента, ни собственника, ни его телефона',
+      !mhFull.includes(anna) && !mhFull.includes('Собственник витрины')
+      && !mhFull.includes('555121314'));
+
+    // Значение не из справочника площадка не примет. Пропустить такое
+    // поле — потерять объявление целиком, поэтому оно и не выводится.
+    await updateObject(shown.id, { serie: 'какая-то своя серия' });
+    const bogus = await mhouseXml('https://liberterra.kg');
+    check('выдуманная серия не уходит в фид и уносит объявление с собой',
+      !bogus.includes('какая-то своя серия') && !bogus.includes(shown.id));
+    await updateObject(shown.id, { serie: 'элитка' });
+
+    // Аренда без срока — отказ площадки, и объявление остаётся дома.
+    const rentNoTerm = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Арендная 3',
+      price_minor: 3_500_000, rooms: 1, area: 40, floor: 2, floors_total: 9,
+      latitude: 42.8, longitude: 74.6,
+      building_type: 'панельный', serie: '105 серия',
+      description: 'Сдаётся', photos: ['/photos/a.jpg'],
+    });
+    await createMandate({ object_id: rentNoTerm.id, kind: 'non_exclusive' });
+    await publishObject(rentNoTerm.id);
+    check('аренда без срока в фид MHouse не идёт',
+      !(await mhouseXml('https://liberterra.kg')).includes(rentNoTerm.id));
+
+    await updateObject(rentNoTerm.id, { rental_term: 'на долгий срок' });
+    const withTerm = await mhouseXml('https://liberterra.kg');
+    check('со сроком аренда уходит в фид',
+      withTerm.includes(rentNoTerm.id)
+      && withTerm.includes('<rental-term>на долгий срок</rental-term>'));
+
+    // Без контакта площадка не примет ни одного объявления: фид пустой.
+    setEnv({ ...(env as unknown as Record<string, unknown>), FEED_PHONE: '' });
+    const noAgent = await mhouseXml('https://liberterra.kg');
+    check('без телефона агентства фид MHouse пуст',
+      !noAgent.includes('<offer ') && noAgent.includes('</realty-feed>'));
 
     setEnv(env as unknown as Record<string, unknown>);
 

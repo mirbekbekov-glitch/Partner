@@ -23,7 +23,7 @@
  * удалять его надо не «потом», а в том же сеансе.
  */
 import type { MetadataRoute } from 'next';
-import { publishedIds } from '@/lib/db/catalog';
+import { catalogAgents, publishedIds } from '@/lib/db/catalog';
 import { LANGS } from '@/lib/i18n';
 import { siteUrl } from '@/lib/site';
 
@@ -45,6 +45,23 @@ const MAX_OBJECTS = 6000;
  */
 
 type Row = { id: string; actual_at: string };
+
+/**
+ * Агенты, у которых есть что показать.
+ *
+ * Тот же список, что и на странице «Кто ведёт объекты»: витрина уже
+ * отсекает неодобренных и тех, у кого нет опубликованных объектов, так
+ * что в карту попадает ровно то, что отдаёт страница. Своего фильтра
+ * здесь нет намеренно — второй список условий однажды разошёлся бы с
+ * первым, и робот получал бы адреса, отвечающие 404.
+ */
+async function agentIds(): Promise<string[]> {
+  try {
+    return (await catalogAgents()).map((a) => a.id);
+  } catch {
+    return [];
+  }
+}
 
 async function objects(): Promise<Row[]> {
   try {
@@ -78,7 +95,7 @@ function cluster(
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const rows = await objects();
+  const [rows, agents] = await Promise.all([objects(), agentIds()]);
   const now = new Date();
 
   return [
@@ -97,6 +114,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'monthly' as const,
       priority: 0.7,
     },
+
+    // Список агентов и страница каждого.
+    ...cluster((l) => `/${l}/agents`, now, 'weekly', 0.6),
+    ...agents.flatMap((id) =>
+      cluster((l) => `/${l}/agents/${id}`, now, 'weekly', 0.5),
+    ),
 
     // Карточки объектов. lastModified — actual_at, дата последнего
     // подтверждения актуальности агентом: именно она говорит роботу,
