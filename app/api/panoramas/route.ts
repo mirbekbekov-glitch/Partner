@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { deletePanorama, putPanorama, renamePanorama } from '@/lib/db/panoramas';
+import {
+  deletePanorama, putPanorama, renamePanorama, setLinks, type Link,
+} from '@/lib/db/panoramas';
 import { Forbidden } from '@/lib/db/errors';
 import { explain } from '@/lib/db/report';
 
@@ -46,14 +48,24 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { object_id: objectId, key, room } = await request.json() as {
-      object_id?: string; key?: string; room?: string;
+    const { object_id: objectId, key, room, links } = await request.json() as {
+      object_id?: string; key?: string; room?: string; links?: Link[];
     };
     if (!objectId || !key) {
       return NextResponse.json({ error: 'Не указана панорама.' }, { status: 400 });
     }
 
-    const list = await renamePanorama(objectId, key, String(room ?? ''));
+    // Подпись и переходы — разные правки одной записи, и приходят они
+    // разными нажатиями: подпись при уходе из поля, переходы кнопкой в
+    // редакторе. Поэтому не «или-или», а что прислали, то и меняем.
+    let list = Array.isArray(links)
+      ? await setLinks(objectId, key, links)
+      : null;
+    if (room !== undefined) list = await renamePanorama(objectId, key, String(room));
+
+    if (!list) {
+      return NextResponse.json({ error: 'Нечего менять.' }, { status: 400 });
+    }
     return NextResponse.json({ panoramas: list });
   } catch (e) {
     return fail(e);

@@ -25,6 +25,9 @@ export function PanoramaUpload({
   initial: Panorama[];
 }) {
   const [list, setList] = useState<Panorama[]>(initial);
+  // Замечания по съёмке живут отдельно от записи: они не сохраняются и
+  // не мешают загрузке — это подсказка, а не запрет.
+  const [notes, setNotes] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +59,9 @@ export function PanoramaUpload({
           continue;
         }
         setList((prev) => [...prev, data]);
+        if (ready.issues.length > 0) {
+          setNotes((prev) => ({ ...prev, [data.key]: ready.issues.map((i) => i.text) }));
+        }
       } catch {
         setError(`${file.name}: связь прервалась`);
       }
@@ -159,6 +165,13 @@ export function PanoramaUpload({
               <button type="button" className="btn ghostlink" onClick={() => remove(p.key)}>
                 Убрать
               </button>
+              {/* Замечание к конкретной панораме, а не общим списком:
+                  при шести комнатах иначе непонятно, какую переснимать. */}
+              {notes[p.key]?.length ? (
+                <ul className="pano-notes">
+                  {notes[p.key].map((n) => <li key={n}>{n}</li>)}
+                </ul>
+              ) : null}
             </li>
           ))}
         </ul>

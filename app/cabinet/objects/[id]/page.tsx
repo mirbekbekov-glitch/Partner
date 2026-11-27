@@ -16,6 +16,7 @@ import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
 import { ObjectActions } from '../ObjectActions';
 import { CommissionForm } from '../CommissionForm';
+import { TourEditor } from '../TourEditor';
 import { StartDealButton } from '../../deals/StartDealButton';
 import { MatchStatus } from '../../MatchStatus';
 import { TransferForm, type Colleague } from '../../TransferForm';
@@ -341,6 +342,18 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
           </>
         )}
       </div>
+
+      {/* Переходы между комнатами: расставляет их агент, и только он
+          знает, где в этой квартире дверь. Блок появляется, когда
+          панорам стало две — ходить до этого некуда. */}
+      {canEdit === true && object.panoramas.length > 1 ? (
+        <>
+          <h2>Переходы в туре</h2>
+          <div className="card">
+            <TourEditor objectId={object.id} panoramas={object.panoramas} />
+          </div>
+        </>
+      ) : null}
 
       <h2>Подборы ({rows.length})</h2>
 

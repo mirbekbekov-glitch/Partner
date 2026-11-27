@@ -552,3 +552,32 @@ a.tbl-sub:hover { color: var(--accent); }
 .pano-item img { width: 160px; height: 44px; object-fit: cover;
   border-radius: var(--r-md); border: 1px solid var(--line); flex: none; }
 .pano-item input { flex: 1 1 160px; }
+
+/* --- Редактор переходов -------------------------------------------------- */
+.tour-edit { display: flex; flex-direction: column; gap: 10px; }
+.tour-edit-wrap { position: relative; }
+.tour-edit .tour-box { height: 420px; }
+/* Перекрестие в середине окна: именно эта точка и записывается, и видеть
+   её надо до нажатия, а не узнавать о ней из подписи. */
+.tour-aim { position: absolute; left: 50%; top: 50%; z-index: 3;
+  width: 26px; height: 26px; margin: -13px 0 0 -13px; pointer-events: none;
+  border: 2px solid #FFFFFF; border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0,0,0,.35), inset 0 0 0 2px rgba(0,0,0,.35); }
+.tour-aim::before, .tour-aim::after { content: ""; position: absolute;
+  background: #FFFFFF; box-shadow: 0 0 2px rgba(0,0,0,.6); }
+.tour-aim::before { left: 50%; top: -10px; bottom: -10px; width: 2px; margin-left: -1px; }
+.tour-aim::after { top: 50%; left: -10px; right: -10px; height: 2px; margin-top: -1px; }
+.tour-targets { display: flex; flex-wrap: wrap; gap: 8px; }
+.tour-targets .btn { cursor: pointer; font-family: inherit; font-size: 0.9375rem; }
+.tour-links { list-style: none; margin: 4px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 6px; }
+.tour-links li { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; font-size: 0.9375rem; }
+.tour-links .btn { cursor: pointer; font-family: inherit; }
+
+/* Замечания по съёмке: это подсказка, а не ошибка, — цвет
+   предупреждения, а не отказа, и строка под самой панорамой. */
+.pano-notes { flex: 1 1 100%; list-style: none; margin: 2px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  font-size: 0.875rem; color: var(--warn-fg); }
+.pano-item { flex-wrap: wrap; }
