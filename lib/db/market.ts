@@ -1,8 +1,12 @@
 import 'server-only';
-import { all, batch, newId, now, stmt } from './sql';
+import { all, batch, from_now, newId, now, one, stmt } from './sql';
 import { searchText } from './normalize';
 import { MINOR } from './money';
 import type { DealType, Kind, MarketCard } from '@/lib/market/house-kg';
+import {
+  AREA_SPREAD, rateFromPairs, valuate,
+  type Comparable, type Valuation, type Widening,
+} from '@/lib/market/valuation';
 
 /**
  * Индекс рынка: запись наблюдений за чужими объявлениями.
@@ -224,4 +228,182 @@ export async function marketSize(): Promise<{ live: number; gone: number }> {
     live: rows.find((r) => r.gone === 0)?.n ?? 0,
     gone: rows.find((r) => r.gone === 1)?.n ?? 0,
   };
+}
+
+/** Что оцениваем. */
+export type ValueSpec = {
+  deal: DealType;
+  kind: Kind;
+  city: string;
+  /** Район или ориентир словами — как агент его называет. */
+  zone: string | null;
+  rooms: number | null;
+  area: number;
+  /** В какой валюте нужен ответ. */
+  currency: 'USD' | 'KGS';
+  /** Для аренды: месячная или посуточная. */
+  period: 'month' | 'day' | null;
+};
+
+/** Почему оценки нет. Отказ — это ответ, а не пустота. */
+export type NoValue =
+  | 'нет площади'
+  | 'индекс пуст'
+  | 'мало похожих';
+
+export type EstimateResult = {
+  valuation: Valuation | null;
+  reason: NoValue | null;
+  /** Курс, по которому приводились валюты. null — приведения не было. */
+  rate: number | null;
+  /** Сколько объявлений вообще было в сегменте до сужения. */
+  pool: number;
+};
+
+/**
+ * Сколько дней объявление считается годным для сравнения.
+ *
+ * Полгода — не «чем больше, тем лучше». Рынок Бишкека за год двигался на
+ * заметные проценты, и позапрошлогодняя цена говорит о позапрошлом годе.
+ * Но и месяц брать нельзя: по редкой связке за месяц наберётся три
+ * объявления, а на трёх медианы не бывает.
+ */
+const FRESH_DAYS = 180;
+
+type Row = {
+  id: string;
+  url: string;
+  price_usd_minor: number | null;
+  price_kgs_minor: number | null;
+  area: number;
+  rooms: number | null;
+  address: string | null;
+  seller_kind: 'owner' | 'agency' | 'unknown';
+  bumped_at: string | null;
+  search_text: string;
+};
+
+/**
+ * Курс по самим объявлениям: медиана отношения цен там, где площадка
+ * назвала обе валюты. Подробно — в lib/market/valuation.ts.
+ */
+export async function observedRate(): Promise<number | null> {
+  const rows = await all<{ price_usd_minor: number; price_kgs_minor: number }>(
+    `select price_usd_minor, price_kgs_minor
+       from market_listings
+      where price_usd_minor is not null and price_kgs_minor is not null
+        and gone_at is null
+      limit 2000`,
+  );
+  return rateFromPairs(
+    rows.map((r) => ({ usdMinor: r.price_usd_minor, kgsMinor: r.price_kgs_minor })),
+  );
+}
+
+/** Цена строки в нужной валюте; при нехватке — приведение по курсу. */
+function priceIn(row: Row, currency: 'USD' | 'KGS', rate: number | null): number | null {
+  if (currency === 'USD') {
+    if (row.price_usd_minor !== null) return row.price_usd_minor;
+    if (row.price_kgs_minor !== null && rate) return Math.round(row.price_kgs_minor / rate);
+    return null;
+  }
+  if (row.price_kgs_minor !== null) return row.price_kgs_minor;
+  if (row.price_usd_minor !== null && rate) return Math.round(row.price_usd_minor * rate);
+  return null;
+}
+
+/**
+ * Оценка объекта по сопоставимым.
+ *
+ * Выборка сужается ЛЕСТНИЦЕЙ: сперва тот же район и та же комнатность,
+ * и только если объявлений не набралось — шаг за шагом шире. Насколько
+ * пришлось отойти, возвращается наружу и показывается агенту: оценка «по
+ * шести квартирам в том же районе» и «по сорока по всему городу» — это
+ * разные оценки, и выдавать их одинаково было бы обманом.
+ */
+export async function estimate(spec: ValueSpec): Promise<EstimateResult> {
+  if (!(spec.area > 0)) {
+    return { valuation: null, reason: 'нет площади', rate: null, pool: 0 };
+  }
+
+  const since = from_now(-FRESH_DAYS * 24 * 3600_000);
+  const rate = await observedRate();
+
+  const rows = await all<Row>(
+    `select id, url, price_usd_minor, price_kgs_minor, area, rooms, address,
+            seller_kind, bumped_at, search_text
+       from market_listings
+      where source = ? and deal_type = ? and kind = ? and city = ?
+        and gone_at is null and area is not null and last_seen_at >= ?
+        and (? is null or rent_period = ?)`,
+    HOUSE_KG, spec.deal, spec.kind, spec.city, since,
+    spec.period, spec.period,
+  );
+
+  if (rows.length === 0) {
+    return { valuation: null, reason: 'индекс пуст', rate, pool: 0 };
+  }
+
+  const pool: Comparable[] = [];
+  for (const row of rows) {
+    const priceMinor = priceIn(row, spec.currency, rate);
+    if (priceMinor === null || priceMinor <= 0) continue;
+    pool.push({
+      id: row.id,
+      url: row.url,
+      priceMinor,
+      area: row.area,
+      rooms: row.rooms,
+      address: row.address,
+      sellerKind: row.seller_kind,
+      bumpedAt: row.bumped_at,
+    });
+  }
+
+  const zoneKey = spec.zone ? searchText(spec.zone) : '';
+  const byZone = (c: Comparable) =>
+    zoneKey === '' || searchText(c.address).includes(zoneKey);
+
+  const low = spec.area * (1 - AREA_SPREAD);
+  const high = spec.area * (1 + AREA_SPREAD);
+  const byArea = (c: Comparable) => c.area >= low && c.area <= high;
+
+  const sameRooms = (c: Comparable) => spec.rooms === null || c.rooms === spec.rooms;
+  const nearRooms = (c: Comparable) =>
+    spec.rooms === null || (c.rooms !== null && Math.abs(c.rooms - spec.rooms) <= 1);
+
+  // Лестница: от точного к широкому. Первая ступень, на которой
+  // объявлений хватило, и становится ответом.
+  const ladder: Array<{ widening: Widening; pick: (c: Comparable) => boolean }> = [
+    { widening: 'точно', pick: (c) => byZone(c) && sameRooms(c) && byArea(c) },
+    { widening: 'без района', pick: (c) => sameRooms(c) && byArea(c) },
+    { widening: 'комнаты ±1', pick: (c) => nearRooms(c) && byArea(c) },
+    { widening: 'без комнат', pick: byArea },
+    { widening: 'широко', pick: () => true },
+  ];
+
+  for (const step of ladder) {
+    const picked = pool.filter(step.pick);
+    const valuation = valuate(picked, spec.area, step.widening);
+    if (valuation) return { valuation, reason: null, rate, pool: pool.length };
+  }
+
+  return { valuation: null, reason: 'мало похожих', rate, pool: pool.length };
+}
+
+/** Города, по которым в индексе вообще что-то есть. */
+export async function marketCities(): Promise<string[]> {
+  const rows = await all<{ city: string }>(
+    `select city, count(*) as n from market_listings
+      where gone_at is null group by city order by n desc`,
+  );
+  return rows.map((r) => r.city);
+}
+
+/** Когда индекс обновлялся в последний раз: без этого оценка безродная. */
+export async function marketUpdatedAt(): Promise<string | null> {
+  const row = await one<{ at: string | null }>(
+    `select max(last_seen_at) as at from market_listings`,
+  );
+  return row?.at ?? null;
 }

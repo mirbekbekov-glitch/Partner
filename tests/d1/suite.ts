@@ -83,7 +83,10 @@ import houseKgRent from '../fixtures/house-kg-rent.html?raw';
 import {
   bumpedAt, parsePrices, parseSearchPage, searchUrl, sellerOf, specsOf,
 } from '@/lib/market/house-kg';
-import { markGone, marketSize, saveCards } from '@/lib/db/market';
+import { estimate, markGone, marketSize, observedRate, saveCards } from '@/lib/db/market';
+import {
+  awayFromMarket, median, quantile, rateFromPairs, valuate, type Comparable,
+} from '@/lib/market/valuation';
 
 type Result = { name: string; ok: boolean; note?: string };
 const results: Result[] = [];
@@ -2987,6 +2990,172 @@ export default {
     const sizeBack = await marketSize();
     check('вернувшееся объявление снова живое',
       sizeBack.live === 3 && sizeBack.gone === 0, JSON.stringify(sizeBack));
+
+
+    // -----------------------------------------------------------------
+    // Оценка по сопоставимым
+    // -----------------------------------------------------------------
+
+    const comp = (priceMinor: number, area: number, rooms = 2): Comparable => ({
+      id: crypto.randomUUID(), url: 'https://www.house.kg/details/x',
+      priceMinor, area, rooms, address: null, sellerKind: 'unknown', bumpedAt: null,
+    });
+
+    check('медиана берёт середину, а не среднее',
+      median([1, 2, 3, 4, 100]) === 3, String(median([1, 2, 3, 4, 100])));
+    check('квантиль считается с интерполяцией',
+      quantile([10, 20, 30, 40], 0.5) === 25, String(quantile([10, 20, 30, 40], 0.5)));
+
+    // На четырёх объявлениях медиана — среднее двух средних, и одно
+    // кривое двигает её заметно. Поэтому ниже пяти — отказ.
+    check('на четырёх похожих оценки не бывает',
+      valuate([comp(100, 1), comp(110, 1), comp(120, 1), comp(130, 1)], 50, 'точно') === null);
+
+    const even = valuate(
+      [comp(1000_00, 50), comp(1100_00, 50), comp(1200_00, 50),
+       comp(1300_00, 50), comp(1400_00, 50)], 50, 'точно',
+    );
+    check('вилка это четверть и три четверти рынка, а не «плюс-минус»',
+      even?.lowMinor === 1100_00 && even?.midMinor === 1200_00 && even?.highMinor === 1300_00,
+      JSON.stringify({ l: even?.lowMinor, m: even?.midMinor, h: even?.highMinor }));
+
+    // Главное, ради чего медиана. В индексе лежит НАСТОЯЩЕЕ объявление
+    // «комната 20 м² за 2 002 810 $»: так написал продавец, курс там
+    // сходится, то есть разбор не ошибся. Среднее от такой строки уезжает
+    // в разы.
+    const withJunk = valuate(
+      [comp(1000_00, 50), comp(1100_00, 50), comp(1200_00, 50),
+       comp(1300_00, 50), comp(1400_00, 50), comp(2_002_810_00, 50)], 50, 'точно',
+    );
+    check('объявление с безумной ценой не двигает оценку',
+      withJunk !== null && withJunk.midMinor === 1250_00,
+      String(withJunk?.midMinor));
+
+    check('отклонение от рынка считается от середины выборки',
+      even !== null && awayFromMarket(1500_00, even) === 25,
+      String(even === null ? 'нет оценки' : awayFromMarket(1500_00, even)));
+
+    // Курс берётся из самих объявлений: ключей к курсовым службам нет, а
+    // вписанное в код число молча устаревает.
+    const ratePairs = (n: number, rate: number) =>
+      Array.from({ length: n }, () => ({ usdMinor: 100_00, kgsMinor: Math.round(100_00 * rate) }));
+    check('на девяти парах курс не считается — это случайность, а не курс',
+      rateFromPairs(ratePairs(9, 87)) === null);
+    check('на десяти считается', rateFromPairs(ratePairs(10, 87)) === 87,
+      String(rateFromPairs(ratePairs(10, 87))));
+    check('пары с невозможным курсом в расчёт не идут',
+      rateFromPairs([...ratePairs(10, 87), { usdMinor: 100_00, kgsMinor: 100 }]) === 87);
+
+    // --- оценка по настоящей базе ------------------------------------
+
+    const seedMarket = async (
+      n: number, deal: string, kind: string, city: string,
+      usd: number | null, kgs: number | null, area: number, rooms: number,
+      address: string, period: string | null, seenAt: string,
+    ) => {
+      for (let i = 0; i < n; i++) {
+        await db.prepare(
+          `insert into market_listings
+             (id, source, source_id, url, deal_type, kind, city, address, rooms, area,
+              price_usd_minor, price_kgs_minor, rent_period, search_text,
+              first_seen_at, last_seen_at)
+           values (?, 'house.kg', ?, 'https://www.house.kg/details/s', ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          crypto.randomUUID(), crypto.randomUUID(), deal, kind, city, address, rooms, area,
+          usd === null ? null : (usd + i * 100) * 100,
+          kgs === null ? null : (kgs + i * 8700) * 100,
+          period, address.toLowerCase(), seenAt, seenAt,
+        ).run();
+      }
+    };
+
+    // Шесть двушек в Асанбае и шесть в другом районе, дороже.
+    await seedMarket(6, 'sale', 'flat', 'Ош', 50000, 4350000, 60, 2, 'Асанбай 1', null, iso());
+    await seedMarket(6, 'sale', 'flat', 'Ош', 90000, 7830000, 60, 2, 'Джал 5', null, iso());
+
+    const inZone = await estimate({
+      deal: 'sale', kind: 'flat', city: 'Ош', zone: 'Асанбай',
+      rooms: 2, area: 60, currency: 'USD', period: null,
+    });
+    check('оценка по своему району берёт только свой район',
+      inZone.valuation?.basis.widening === 'точно' && inZone.valuation?.basis.count === 6,
+      JSON.stringify(inZone.valuation?.basis));
+    check('оценка по району не утягивается соседним, который дороже',
+      inZone.valuation !== null && inZone.valuation.midMinor < 60_000_00,
+      String(inZone.valuation?.midMinor));
+
+    // Район, которого в индексе нет: лестница обязана шагнуть шире и
+    // СКАЗАТЬ об этом, а не молча посчитать по всему городу.
+    const noZone = await estimate({
+      deal: 'sale', kind: 'flat', city: 'Ош', zone: 'Кызыл-Аскер',
+      rooms: 2, area: 60, currency: 'USD', period: null,
+    });
+    check('нет района — выборка расширяется и это названо',
+      noZone.valuation?.basis.widening === 'без района'
+      && noZone.valuation?.basis.count === 12,
+      JSON.stringify(noZone.valuation?.basis));
+
+    // Посуточная аренда не должна попадать в месячную оценку.
+    await seedMarket(6, 'rent', 'flat', 'Ош', null, 60000, 50, 2, 'Асанбай 1', 'month', iso());
+    await seedMarket(6, 'rent', 'flat', 'Ош', null, 3000, 50, 2, 'Асанбай 1', 'day', iso());
+
+    const rentMonthly = await estimate({
+      deal: 'rent', kind: 'flat', city: 'Ош', zone: null,
+      rooms: 2, area: 50, currency: 'KGS', period: 'month',
+    });
+    check('посуточная аренда в месячную оценку не попадает',
+      rentMonthly.valuation?.basis.count === 6
+      && rentMonthly.valuation !== null && rentMonthly.valuation.midMinor > 50_000_00,
+      JSON.stringify({ n: rentMonthly.valuation?.basis.count, mid: rentMonthly.valuation?.midMinor }));
+
+    // Аренда лежит только в сомах, а спросили в долларах: приведение
+    // идёт по курсу, посчитанному из объявлений продажи.
+    const rate = await observedRate();
+    check('курс посчитан по самим объявлениям', rate !== null && rate > 60 && rate < 130,
+      String(rate));
+
+    const inUsd = await estimate({
+      deal: 'rent', kind: 'flat', city: 'Ош', zone: null,
+      rooms: 2, area: 50, currency: 'USD', period: 'month',
+    });
+    check('цену в сомах приводят к доллару по этому курсу',
+      inUsd.valuation !== null && rate !== null
+      && Math.abs(inUsd.valuation.midMinor - (rentMonthly.valuation?.midMinor ?? 0) / rate) < 100,
+      JSON.stringify({ usd: inUsd.valuation?.midMinor, kgs: rentMonthly.valuation?.midMinor }));
+
+    // Протухшие объявления в оценку не идут.
+    const longAgo = new Date(Date.now() - 400 * 24 * 3600_000).toISOString();
+    await seedMarket(8, 'sale', 'house', 'Ош', 30000, 2610000, 100, 4, 'Старьё', null, longAgo);
+    const staleValue = await estimate({
+      deal: 'sale', kind: 'house', city: 'Ош', zone: null,
+      rooms: 4, area: 100, currency: 'USD', period: null,
+    });
+    check('позапрошлогодние объявления в оценку не идут',
+      staleValue.valuation === null && staleValue.reason === 'индекс пуст',
+      JSON.stringify({ r: staleValue.reason, pool: staleValue.pool }));
+
+    // Три участка в индексе есть, а оценки нет: три — это не выборка.
+    // Отказ при этом РАЗНЫЙ по причине, и это важно: «индекс пуст»
+    // чинится обходом, «мало похожих» не чинится ничем.
+    await seedMarket(3, 'sale', 'land', 'Ош', 20000, 1740000, 500, 0, 'Поле', null, iso());
+    const fewLand = await estimate({
+      deal: 'sale', kind: 'land', city: 'Ош', zone: null,
+      rooms: null, area: 500, currency: 'USD', period: null,
+    });
+    check('три объявления — это отказ, а не оценка',
+      fewLand.valuation === null && fewLand.reason === 'мало похожих' && fewLand.pool === 3,
+      JSON.stringify({ r: fewLand.reason, pool: fewLand.pool }));
+
+    // Город, которого в индексе нет вовсе. Типы здесь ограничены теми,
+    // которые обход умеет брать: оценивать гараж нечем, и это запрещено
+    // типом, а не проверкой во время работы.
+    const emptySegment = await estimate({
+      deal: 'sale', kind: 'flat', city: 'Нарын', zone: null,
+      rooms: 2, area: 60, currency: 'USD', period: null,
+    });
+    check('пустой сегмент отличается от «мало похожих»',
+      emptySegment.reason === 'индекс пуст', String(emptySegment.reason));
 
     } catch (e) {
       // Падение посреди набора — это тоже результат, и он должен быть виден

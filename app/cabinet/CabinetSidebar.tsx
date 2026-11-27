@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   Activity,
   Building2,
+  Calculator,
   CalendarCheck,
   FileText,
   Handshake,
@@ -40,6 +41,7 @@ const ITEMS = [
   { href: '/cabinet/activities', label: 'Задачи', icon: CalendarCheck },
   { href: '/cabinet/leads', label: 'По объектам', icon: Activity },
   { href: '/cabinet/requests', label: 'Заявки', icon: Inbox },
+  { href: '/cabinet/assistant', label: 'Оценка', icon: Calculator },
 ] as const;
 
 export function CabinetSidebar({
