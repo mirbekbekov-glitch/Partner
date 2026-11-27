@@ -487,3 +487,25 @@ form.stack.card { max-width: 760px; }
   padding: 1px 8px;
   font-size: 0.8125rem;
 }
+
+/* --- Точка на карте ----------------------------------------------------- */
+.mappick { gap: 8px; }
+.mappick-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mappick-head .btn { border: 0; cursor: pointer; font-family: inherit; }
+.mappick-head .key { margin-right: auto; }
+/* Высота в пикселях, а не в долях экрана: карта стоит внутри длинной
+   формы, и доля экрана на ноутбуке съела бы всё поле зрения. 320 px —
+   это квартал вокруг дома на масштабе улицы. */
+.mappick-box { height: 320px; border: 1px solid var(--line); border-radius: var(--r-md);
+  overflow: hidden; background: var(--sunk); }
+.mappick-box:focus-within { border-color: var(--accent); }
+/* Метка — та же ступенька красного, что и везде, а не картинка из
+   пакета: пути к картинкам при сборке ломаются, и метка пропадает молча. */
+.map-pin { background: var(--accent); border: 3px solid #FFFFFF; border-radius: 50%;
+  box-shadow: 0 1px 6px rgba(0,0,0,.45); cursor: grab; }
+.map-pin:active { cursor: grabbing; }
+/* Подписи Leaflet живут по своим правилам и не знают нашей темы. */
+.mappick-box.leaflet-container { font: inherit; font-size: 0.75rem; background: var(--sunk); }
+.mappick-box .leaflet-control-attribution { background: rgba(255,255,255,.75); }
+/* Кнопки масштаба Leaflet рисует сам; приводим к нашим скруглениям. */
+.mappick-box .leaflet-bar a { border-radius: 6px; color: var(--fg); }

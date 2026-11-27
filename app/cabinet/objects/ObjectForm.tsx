@@ -5,6 +5,7 @@ import { useActionState, useRef, useState, useTransition } from 'react';
 import type { FormResult } from './form-actions';
 import { draftDescription } from './form-actions';
 import { PhotoUpload } from './PhotoUpload';
+import { MapPick } from './MapPick';
 import { Suggest } from '../../Suggest';
 import { citiesOf, zonesOf } from '@/lib/geo';
 import {
@@ -232,18 +233,7 @@ export function ObjectForm({
         зависит от типа объекта.
       </p>
 
-      <div className="grid2">
-        <div className="field">
-          <label className="key" htmlFor="latitude">Широта</label>
-          <input id="latitude" name="latitude" type="text" inputMode="decimal"
-                 defaultValue={draft?.latitude ?? ''} placeholder="42.819242" />
-        </div>
-        <div className="field">
-          <label className="key" htmlFor="longitude">Долгота</label>
-          <input id="longitude" name="longitude" type="text" inputMode="decimal"
-                 defaultValue={draft?.longitude ?? ''} placeholder="74.619628" />
-        </div>
-      </div>
+      <MapPick lat={draft?.latitude ?? null} lng={draft?.longitude ?? null} />
 
       <div className="grid2">
         <Pick name="region" label="Регион" values={REGION} value={draft?.region}
