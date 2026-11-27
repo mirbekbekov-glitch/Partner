@@ -15,3 +15,4 @@ cf-secrets.json
 
 # Сборка тестового Worker: пересоздаётся прогоном.
 .test-build/
+.test-build-market
