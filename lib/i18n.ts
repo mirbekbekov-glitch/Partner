@@ -37,7 +37,7 @@ type Dict = {
   // Герой
   heroTitle: string; heroEm: string;
   // Поиск
-  address: string; addressHint: string; deal: string; anyDeal: string;
+  deal: string; anyDeal: string;
   tabBuy: string; tabRent: string;
   moreFilters: string; priceFrom: string;
   sale: string; rent: string; kind: string; anyKind: string;
@@ -111,7 +111,6 @@ const ru: Dict = {
   country: 'Кыргызстан',
   cabinetLine: 'Кабинет и CRM — по входу для агентов.',
   heroTitle: 'Найдите своё пространство для комфортной', heroEm: 'работы и жилья',
-  address: 'Адрес или район', addressHint: 'Чүй, Асанбай, Джал…',
   deal: 'Сделка', anyDeal: 'Любая', sale: 'Продажа', rent: 'Аренда',
   kind: 'Тип', anyKind: 'Любой', rooms: 'Комнат', anyRooms: 'Любое',
   priceTo: 'Цена до', search: 'Показать', searchCount: (n) => `Найти ${n}`,
@@ -216,7 +215,6 @@ const ky: Dict = {
   country: 'Кыргызстан',
   cabinetLine: 'Кабинет жана CRM — агенттер үчүн кирүү аркылуу.',
   heroTitle: 'Ыңгайлуу жашоо жана жумуш үчүн', heroEm: 'өз мейкиндигиңизди табыңыз',
-  address: 'Дарек же район', addressHint: 'Чүй, Асанбай, Жал…',
   deal: 'Бүтүм', anyDeal: 'Баары', sale: 'Сатуу', rent: 'Ижара',
   kind: 'Түрү', anyKind: 'Баары', rooms: 'Бөлмө', anyRooms: 'Баары',
   priceTo: 'Баасы чейин', search: 'Көрсөтүү', searchCount: (n) => `${n} табуу`,
@@ -311,7 +309,6 @@ const en: Dict = {
   country: 'Kyrgyzstan',
   cabinetLine: 'The agent cabinet and CRM are behind the agent login.',
   heroTitle: 'Find your space for comfortable', heroEm: 'living and work',
-  address: 'Address or district', addressHint: 'Chuy, Asanbay, Jal…',
   deal: 'Deal', anyDeal: 'Any', sale: 'For sale', rent: 'For rent',
   kind: 'Type', anyKind: 'Any', rooms: 'Rooms', anyRooms: 'Any',
   priceTo: 'Price up to', search: 'Show', searchCount: (n) => `Show ${n}`,
@@ -406,7 +403,6 @@ const zh: Dict = {
   country: '吉尔吉斯斯坦',
   cabinetLine: '经纪人工作台与 CRM 需登录后使用。',
   heroTitle: '找到适合您的', heroEm: '居住与工作空间',
-  address: '地址或区域', addressHint: '楚河、阿桑拜、扎尔…',
   deal: '交易', anyDeal: '不限', sale: '出售', rent: '出租',
   kind: '类型', anyKind: '不限', rooms: '房间数', anyRooms: '不限',
   priceTo: '价格上限', search: '查找', searchCount: (n) => `查找 ${n} 套`,

@@ -705,12 +705,11 @@ main:has(.auth) { max-width: none; padding: 0; }
    пульта меняется: город показывается только когда городов несколько,
    район — только когда он где-то есть. При жёсткой сетке шестое поле
    сбрасывало кнопку «Найти» на вторую строку, и пульт разъезжался.
-   Поток расставляет то, что пришло: каждое поле просит 150 px, адрес —
-   вдвое больше, кнопка занимает ровно себя. */
+   Поток расставляет то, что пришло: каждое поле просит 150 px, кнопка
+   занимает ровно себя. */
 .console .row { display: flex; flex-wrap: wrap; align-items: flex-end;
   gap: 10px; padding: 14px; }
 .console .row > .cell { flex: 1 1 150px; }
-.console .row > .cell.wide { flex: 2 1 240px; }
 .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cell label { font-size: 0.75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
