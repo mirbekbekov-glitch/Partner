@@ -54,6 +54,20 @@ export type Resemblance = {
   /** Совпавшие признаки — показываются как есть. */
   signals: string[];
   differences: Difference[];
+  /**
+   * Объявление подано НАМИ ЖЕ.
+   *
+   * У агентства есть свой аккаунт на площадке, и его объявления попадают
+   * в наш же индекс. Без этого признака проверка объекта говорила бы
+   * «похоже, объект уже висит на house.kg» про собственное объявление —
+   * то есть пугала бы агента его же работой.
+   *
+   * Расхождения при этом показывать НАДО, и они даже важнее: если в
+   * кабинете цена одна, а в нашем же объявлении другая, это наша
+   * собственная несогласованность, и видеть её должен тот, кто ведёт
+   * объект.
+   */
+  ours: boolean;
 };
 
 /**
@@ -155,6 +169,7 @@ export function resemble(
   ours: OurObject,
   candidate: Candidate,
   rate: number | null,
+  agencyName?: string | null,
 ): Resemblance | null {
   const overlap = addressOverlap(ours.address + ' ' + (ours.zone ?? ''), candidate.address);
   const signals: string[] = [];
@@ -232,7 +247,14 @@ export function resemble(
       : SELLER_RU[candidate.sellerKind],
   });
 
-  return { candidate, signals, differences };
+  // Своё объявление узнаётся по подписи продавца. Площадка подписывает
+  // агентства их названием — «От Avangard style», — значит и нас своим.
+  // Сверка нестрогая: регистр и пробелы по краям не считаются.
+  const theirName = (candidate.sellerName ?? '').trim().toLowerCase();
+  const mine = (agencyName ?? '').trim().toLowerCase();
+  const isOurs = mine !== '' && theirName !== '' && theirName === mine;
+
+  return { candidate, signals, differences, ours: isOurs };
 }
 
 /** Сличение со всеми кандидатами: сперва те, у кого признаков больше. */
@@ -240,9 +262,12 @@ export function resembleAll(
   ours: OurObject,
   candidates: Candidate[],
   rate: number | null,
+  agencyName?: string | null,
 ): Resemblance[] {
   return candidates
-    .map((c) => resemble(ours, c, rate))
+    .map((c) => resemble(ours, c, rate, agencyName))
     .filter((r): r is Resemblance => r !== null)
-    .sort((a, b) => b.signals.length - a.signals.length);
+    // Своё объявление показывается первым: несогласованность в
+    // собственной карточке важнее похожего чужого объявления.
+    .sort((a, b) => (Number(b.ours) - Number(a.ours)) || (b.signals.length - a.signals.length));
 }

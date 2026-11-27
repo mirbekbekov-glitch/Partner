@@ -236,9 +236,21 @@ function offer(item: CatalogItem, agent: string, origin: string): string {
 }
 
 /** Весь фид строкой. */
-export async function mhouseXml(origin: string): Promise<string> {
+/**
+ * Фид и СПИСОК объектов, которые в него попали.
+ *
+ * Список нужен маршруту, чтобы отметить выгруженное в кабинете: до этого
+ * кабинет не знал, что именно уходит на площадку, и ответить «наше
+ * объявление уже там?» можно было только сходив на house.kg руками.
+ *
+ * Отдельной функцией, а не сменой подписи mhouseXml: тот отдаёт строку, и
+ * его зовёт прогон. Менять подпись ради одного нового потребителя значит
+ * править все старые вызовы без нужды.
+ */
+export async function mhouseOffers(origin: string): Promise<{ xml: string; ids: string[] }> {
   const agent = salesAgent();
   const offers: string[] = [];
+  const ids: string[] = [];
 
   // Контакта нет — выгружать нечего: площадка не примет ни одного
   // объявления без телефона и имени.
@@ -247,15 +259,26 @@ export async function mhouseXml(origin: string): Promise<string> {
       const { items, total } = await catalogPage({ page, pageSize: PAGE, sort: 'fresh' });
       for (const item of items) {
         const xml = offer(item, agent, origin);
-        if (xml) offers.push(xml);
+        if (xml) {
+          offers.push(xml);
+          ids.push(item.id);
+        }
       }
       if (items.length === 0 || page * PAGE >= total) break;
     }
   }
 
-  return '<?xml version="1.0" encoding="UTF-8"?>\n'
-    + '<realty-feed>\n'
-    + `  <generation-date>${new Date().toISOString()}</generation-date>\n`
-    + offers.join('')
-    + '</realty-feed>\n';
+  return {
+    xml: '<?xml version="1.0" encoding="UTF-8"?>\n'
+      + '<realty-feed>\n'
+      + `  <generation-date>${new Date().toISOString()}</generation-date>\n`
+      + offers.join('')
+      + '</realty-feed>\n',
+    ids,
+  };
+}
+
+/** Только файл — для прогона и для всех, кому список не нужен. */
+export async function mhouseXml(origin: string): Promise<string> {
+  return (await mhouseOffers(origin)).xml;
 }

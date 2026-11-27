@@ -9,6 +9,7 @@ import {
 } from '@/lib/market/valuation';
 import { resembleAll, type Resemblance } from '@/lib/market/duplicate';
 import { rank, type OwnerLead } from '@/lib/market/owners';
+import { AGENCY_NAME } from '@/lib/agency';
 
 /**
  * Индекс рынка: запись наблюдений за чужими объявлениями.
@@ -484,6 +485,7 @@ export async function marketLookalikes(ours: {
         bumpedAt: r.bumped_at,
       })),
       rate,
+      AGENCY_NAME,
     ),
   };
 }

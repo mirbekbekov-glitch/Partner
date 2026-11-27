@@ -32,6 +32,12 @@
   --on-ink-faint: #8B929C;
   --steel: #8A95A3;
   --art-ink: #12161C;
+  /* Рисунок первого экрана: ступени графитовые, фигура того же тона.
+     Красная — только одна, та, на которую человек шагает. */
+  --step-top: #2E323A;
+  --step-nose: #15181D;
+  --step-side: #0C0E11;
+  --figure: #15181C;
   --chip-fg: #4B4B46;
   /* Свет за курсором: на светлом фоне он осветляет заметно, на тёмном
      почти неразличим — там яркое пятно читается как клякса. */
@@ -97,6 +103,12 @@
     --on-ink-faint: #8B929C;
     --steel: #6B7684;
     --art-ink: #343C46;
+    /* На тёмном графит сливается с фоном: ступени и фигура становятся
+       светлыми. Красная ступень остаётся красной в обеих темах. */
+    --step-top: #DAD9D4;
+    --step-nose: #A9A8A3;
+    --step-side: #8C8B86;
+    --figure: #E4E3DE;
     --chip-fg: #ADADA8;
     --glow: rgba(255,255,255,.055);
     --accent-2: #F06A64;
@@ -143,6 +155,12 @@
   --on-ink-faint: #8B929C;
   --steel: #6B7684;
   --art-ink: #343C46;
+  /* На тёмном графит сливается с фоном: ступени и фигура становятся
+     светлыми. Красная ступень остаётся красной в обеих темах. */
+  --step-top: #DAD9D4;
+  --step-nose: #A9A8A3;
+  --step-side: #8C8B86;
+  --figure: #E4E3DE;
   --chip-fg: #ADADA8;
   --glow: rgba(255,255,255,.055);
   --accent-2: #F06A64;
@@ -654,10 +672,19 @@ main:has(.auth) { max-width: none; padding: 0; }
   to   { opacity: 1; transform: none; }
 }
 
+/* Фигура появляется, когда лестница построена: сперва место, потом тот,
+   кто по нему идёт. Поднимается на шаг снизу — то же движение, что она
+   и делает на рисунке. */
+.hero-art .climber { animation: climber-in .6s cubic-bezier(.2, .85, .25, 1) .42s both; }
+@keyframes climber-in {
+  from { opacity: 0; transform: translate(-14px, 16px); }
+  to   { opacity: 1; transform: none; }
+}
+
 /* «Меньше движения» — значит меньше движения: рисунок сразу в конечном
    виде. */
 @media (prefers-reduced-motion: reduce) {
-  .hero-art .slab { animation: none; }
+  .hero-art .slab, .hero-art .climber { animation: none; }
 }
 .hero-art svg { position: absolute; right: 0; top: 0; width: 48%; min-width: 320px;
   /* Не на всю высоту героя: нижние сто пикселей закрыты пультом поиска,
@@ -669,7 +696,7 @@ main:has(.auth) { max-width: none; padding: 0; }
      поле рисунка было нельзя — оно заодно меняло масштаб. Правый край
      при этом уходит за кромку экрана, и это нормально: чертёж
      продолжается за рамкой. */
-  transform: translate3d(calc(var(--px, 0px) + 9%), var(--py, 0px), 0);
+  transform: translate3d(calc(var(--px, 0px) + 3%), var(--py, 0px), 0);
   transition: transform .4s cubic-bezier(.2,.7,.3,1); }
 /* Свет идёт за курсором. Координаты ставит HeroArt; пока их нет —
    пятно стоит там же, где раньше стояло статичное свечение. */
