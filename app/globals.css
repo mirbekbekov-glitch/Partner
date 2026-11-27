@@ -615,13 +615,6 @@ main:has(.auth) { max-width: none; padding: 0; }
   white-space: nowrap; transition: border-color .18s, color .18s, background .18s; }
 .enter:hover { border-color: var(--accent); color: var(--accent); background: var(--sunk); }
 .enter .narrow { display: none; }
-/* Вход собственника: контур фирменным цветом. Громче серого контура
-   «входа для агентов» — к нему идёт клиент, а не сотрудник, — и тише
-   залитой кнопки, которая на сайте значит «главное действие страницы». */
-.nav-cta { color: var(--accent); border: 1px solid var(--accent); border-radius: var(--r-full);
-  padding: 10px 17px; font-weight: 700; font-size: 0.875rem; text-decoration: none;
-  white-space: nowrap; transition: background .18s, color .18s; }
-.nav-cta:hover { background: var(--accent); color: #fff; }
 
 /* --- Герой -------------------------------------------------------------- */
 .hero { position: relative; background: var(--sunk); color: var(--fg); overflow: hidden; }
@@ -642,7 +635,12 @@ main:has(.auth) { max-width: none; padding: 0; }
                     linear-gradient(90deg, rgba(18,22,28,.05) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: linear-gradient(to bottom, rgba(0,0,0,.9), transparent 78%); }
-.hero-art { position: absolute; inset: 0; pointer-events: none; }
+/* Рисунок держится той же полосы, что и текст, а не края экрана. На
+   широком мониторе текст уходил к левому краю, рисунок — к правому, и
+   между ними оставалась пустая середина в треть экрана. Теперь оба в
+   одной колонке, и она уже самой полосы: нечему разъезжаться. */
+.hero-art { position: absolute; inset: 0; pointer-events: none;
+  max-width: 1320px; margin-inline: auto; }
 /* Линии построения: тонкие, серые и заметно тише объёма. На чертеже
    конструкция читается, но не спорит с деталью. */
 .hero-art .frame { stroke: var(--steel); opacity: .62; fill: none; }
@@ -681,14 +679,18 @@ main:has(.auth) { max-width: none; padding: 0; }
   transform: translate3d(calc(var(--px, 0px) + 3%), var(--py, 0px), 0);
   transition: transform .4s cubic-bezier(.2,.7,.3,1); }
 @keyframes art-in { from { opacity: 0; } to { opacity: 1; } }
-/* В тёмной теме рисунка нет: он сделан на белой бумаге, и умножение на
-   тёмном фоне съело бы его целиком, а светлый прямоугольник посреди
-   тёмной страницы выглядел бы вклейкой. Условия те же, по которым
-   переключается знак в шапке. */
+/* Два файла, светлый и тёмный, переключаются теми же условиями, что и
+   знак в шапке. Режим наложения у них разный: у светлого лист белый и
+   он уходит умножением, у тёмного лист чёрный и он уходит осветлением.
+   Каждый растворяет свой лист в своём фоне, и прямоугольника вокруг
+   рисунка не видно ни в одной теме. */
+.hero-art .on-dark { display: none; mix-blend-mode: screen; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .hero-art img { display: none; }
+  :root:not([data-theme='light']) .hero-art .on-light { display: none; }
+  :root:not([data-theme='light']) .hero-art .on-dark { display: block; }
 }
-:root[data-theme='dark'] .hero-art img { display: none; }
+:root[data-theme='dark'] .hero-art .on-light { display: none; }
+:root[data-theme='dark'] .hero-art .on-dark { display: block; }
 /* «Меньше движения» — значит меньше движения: рисунок сразу на месте. */
 @media (prefers-reduced-motion: reduce) {
   .hero-art img { animation: none; }
@@ -715,12 +717,18 @@ main:has(.auth) { max-width: none; padding: 0; }
    «Найдите своё пространство» на 58 не умещалось в строку, и заголовок
    на широком экране разъезжался с трёх строк на четыре, теряя ритм.
    На 56 первая строка сходится, и composition остаётся прежней. */
-.hero h1 { font-size: clamp(34px, 5.2vw, 56px); line-height: 1.04; font-weight: 800;
+.hero h1 { font-size: clamp(30px, 3.4vw, 46px); line-height: 1.08; font-weight: 800;
   letter-spacing: -.035em; margin: 0; text-wrap: balance;
-  /* Мера строки: 800 px — это примерно 28 слов на кегле 56, предел, после
-     которого глаз теряет начало следующей строки. Доля 46vw держит
-     заголовок левее чертежа лестницы, который занимает правую половину. */
-  max-width: min(800px, 46vw); }
+  /* Заголовок ложится в две строки, а не в четыре. Четыре строки из
+     пяти слов — это лестница из обрывков: глаз читает её по одному
+     куску и собирает фразу заново. Ради двух строк кегль уступил
+     десять пунктов: на первом экране важнее, чтобы фраза прочиталась
+     целиком, чем чтобы каждая буква была крупной.
+
+     Мера — 64vw и не больше 900 px. Шире заголовок заезжает на чертёж
+     лестницы; 64vw оставляет его в пределах растушёвки левого края
+     рисунка, где тот почти прозрачен. */
+  max-width: min(900px, 64vw); }
 /* Фирменный красный, а не яркий. --accent-2 заведён «для текста на
    тёмных полосах» и достался заголовку с тех времён, когда герой был
    тёмным. Герой давно светлый, и на нём рядом оказались два разных
@@ -729,6 +737,11 @@ main:has(.auth) { max-width: none; padding: 0; }
    заголовок там остаётся читаемым. */
 .hero h1 em { font-style: normal; color: var(--accent); }
 .hero .lede { color: var(--muted); font-size: 1.0625rem; line-height: 1.5; max-width: 56ch; margin: 0; }
+/* Строка над кнопками: что человек сейчас сделает. Темнее и плотнее
+   абзаца выше — иначе она сливалась бы с ним и снова оставалась
+   непрочитанной. Но не крупнее: криком эту мысль не доносят. */
+.hero-call { color: var(--fg); font-size: 1.0625rem; font-weight: 700; line-height: 1.45;
+  max-width: 48ch; margin: 2px 0 0; }
 .props { display: flex; flex-wrap: wrap; gap: 10px 26px; margin: 6px 0 0; padding: 0; list-style: none; }
 .prop { display: flex; align-items: center; gap: 9px; font-size: 0.875rem; font-weight: 600;
   color: var(--fg); }
@@ -745,7 +758,35 @@ main:has(.auth) { max-width: none; padding: 0; }
    для меньшинства (у кого объект на руках), и две залитых кнопки рядом
    превращают первый экран в выбор между ними. Ряд переносится, а кнопки
    не сжимаются: обрезанная подпись действия хуже переноса. */
-.hero-go { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+/* Блок заявки отделён от страницы одной красной чертой слева. Без неё
+   подпись, кнопки и строка под ними были тремя отдельными вещами на
+   общем фоне и не ловили взгляд как целое: человек, пришедший искать,
+   скользил по ним к фильтру. Черта связывает их в один столбец и
+   ничего при этом не закрашивает — подложка добавляла на кремовую
+   страницу розовый прямоугольник, которому нечем себя оправдать. */
+.hero-go { display: inline-flex; flex-direction: column; align-items: stretch; gap: 10px;
+  margin-top: 18px; padding: 2px 0 18px 20px;
+  border-left: 3px solid var(--accent); border-bottom: 3px solid var(--accent); }
+/* Подпись над развилкой. Эти же слова стояли кнопкой в шапке, рядом с
+   «Агентами»: они называли действие, но не показывали, куда нажать.
+   Здесь они — заголовок двух кнопок, и связь видна без объяснений.
+   Ступенька из знака работает указателем: взгляд идёт по ней вниз, к
+   кнопкам. */
+.go-head { display: flex; align-items: center; gap: 11px; margin: 0; align-self: flex-start;
+  font-size: 1.25rem; font-weight: 800; letter-spacing: -.01em; color: var(--accent); }
+/* Ступенька крупнее, чем у списков: здесь она не маркер пункта, а
+   указатель — взгляд входит в неё и идёт вниз, к двум кнопкам.
+   Фирменный цвет на подписи даёт 5.02 : 1 на кремовом фоне героя. */
+.go-head .mk { width: 21px; height: 15px;
+  background: linear-gradient(var(--accent) 0 0) 0 9px / 6px 6px no-repeat,
+              linear-gradient(var(--accent) 0 0) 7px 4px / 6px 11px no-repeat,
+              linear-gradient(var(--accent) 0 0) 14px 0 / 6px 15px no-repeat; }
+.go-row { display: flex; flex-wrap: wrap; gap: 12px; align-self: flex-start; }
+/* Тише кнопок и тише строки над ними: это не призыв, а ответ на
+   невысказанный вопрос «что со мной будет, если нажму». Такие вещи
+   читают после того, как решение уже почти принято. */
+.hero-note { color: var(--muted); font-size: 0.9375rem; line-height: 1.5;
+  max-width: 46ch; margin: 2px 0 0; }
 .go-main, .go-side { display: inline-flex; align-items: center; justify-content: center;
   gap: 9px; border-radius: var(--r-full); padding: 14px 24px; font-size: 1rem;
   font-weight: 700; text-decoration: none; white-space: nowrap;
@@ -760,26 +801,6 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* Нажатие видно без скриптов: кнопка проседает на пиксель. Единственное
    движение на первом экране — у того, что человек трогает пальцем. */
 .go-main:active, .go-side:active { transform: translateY(1px); }
-
-/* Числа под действиями: сколько объектов, сколько агентов, за сколько
-   отвечаем. Крупные цифры моноширинным — состояние дела, а не обещание;
-   их показывает страница только когда они не нули. */
-.facts { display: flex; flex-wrap: wrap; gap: 18px 0; margin: 22px 0 0; padding: 18px 0 0;
-  list-style: none; border-top: 1px solid var(--line); align-self: stretch;
-  max-width: min(800px, 46vw); }
-/* Число над подписью, а не перед ней: в строку «5 объектов в каталоге 2
-   агента в работе» читалось как одно предложение, и числа переставали
-   быть числами. Столбиком глаз берёт три величины, а не фразу. */
-.facts li { display: flex; flex-direction: column; gap: 3px; }
-.facts b { font-size: 1.75rem; font-weight: 800; letter-spacing: -.035em; line-height: 1;
-  color: var(--fg); }
-.facts span { font-size: 0.8125rem; font-weight: 600; color: var(--muted); max-width: 18ch; }
-/* Волосяная черта между величинами. Без неё подписи соседних чисел
-   смыкаются в одну фразу: расстояния в 44 px мало, когда сама подпись
-   втрое длиннее. */
-.facts li + li { padding-left: 34px; margin-left: 34px; position: relative; }
-.facts li + li::before { content: ""; position: absolute; left: -1px; top: 2px; bottom: 2px;
-  width: 1px; background: var(--line); }
 
 /* Герой страницы заявки ниже: там под ним форма, а не выдача, и высокий
    герой отодвинул бы первое поле за сгиб. */
@@ -1249,6 +1270,10 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* --- Узкие экраны ------------------------------------------------------- */
 @media (max-width: 1040px) {
   .hero-art img { width: 56%; opacity: .8; }
+  /* Здесь рисунок шире, и его левый край уходит под заголовок. Две
+     строки тут стоили бы наложения текста на чертёж, поэтому мера
+     заголовка сужается и он снова переносится на три. */
+  .hero h1 { max-width: min(560px, 52vw); }
   .go { flex: 1 1 100%; padding: 13px; }
   .grid { grid-template-columns: repeat(2, 1fr); }
   .detail { grid-template-columns: 1fr; }
@@ -1271,12 +1296,9 @@ main:has(.auth) { max-width: none; padding: 0; }
   .hero h1, .hero-slim h1 { max-width: none; }
   /* На телефоне величины переносятся, и черта оказалась бы в начале
      строки — убираем её вместе с отступом. */
-  .facts { max-width: none; gap: 14px 28px; }
-  .facts li + li { padding-left: 0; margin-left: 0; }
-  .facts li + li::before { display: none; }
   /* Кнопки во всю ширину: на телефоне ряд из двух всё равно переносится,
      и кнопка в полстроки читалась бы как менее важная, чем она есть. */
-  .hero-go { width: 100%; }
+  .hero-go, .go-row { width: 100%; }
   .go-main, .go-side { flex: 1 1 100%; }
   .grid { grid-template-columns: 1fr; }
   .gal { grid-template-columns: 1fr; }
@@ -1292,7 +1314,6 @@ main:has(.auth) { max-width: none; padding: 0; }
      И это выдерживает третий раздел, когда он появится. */
   .nav-in { flex-wrap: wrap; row-gap: 10px; gap: 8px; }
   .nav-link { font-size: 0.8125rem; }
-  .nav-cta { padding: 9px 13px; font-size: 0.8125rem; }
   /* Разделы — отдельной строкой целиком. order сам по себе не помог:
      первая строка доедала один из разделов, и одинокой внизу оставалась
      вторая ссылка. flex-basis: 100% заставляет обёртку занять всю

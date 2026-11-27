@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import {
-  catalogAgentCount, catalogCities, catalogCount, catalogCurrencies, catalogPage,
+  catalogCities, catalogCount, catalogCurrencies, catalogPage,
   catalogRate, catalogZoneCounts, type CatalogDeal,
 } from '@/lib/db/catalog';
 import { GEO, citiesOf, regionOf, zonesOf } from '@/lib/geo';
@@ -280,14 +280,6 @@ export default async function Catalog({
     priceMin: f.priceMin, priceMax: f.priceMax, money, rate,
   }).catch(() => 0);
 
-  // Числа для первого экрана: весь каталог и все агенты, без фильтров.
-  // Фильтрованное число живёт над выдачей и меняется от нажатий; на
-  // первом экране нужно состояние дела, а не след чужого поиска.
-  const [catalogTotal, agentsTotal] = failed ? [0, 0] : await Promise.all([
-    catalogCount({}).catch(() => 0),
-    catalogAgentCount().catch(() => 0),
-  ]);
-
   // Валюта для подписи поля «цена до». Одна на весь каталог — подписываем
   // ею; несколько — подписывать нечем, и выбирать за человека нельзя.
   const currencies = failed ? [] : await catalogCurrencies();
@@ -349,49 +341,59 @@ export default async function Catalog({
         <div className="hero-in wrap">
           <span className="eyebrow">Liberterra · {placeName(cities, d)}</span>
           <h1>{d.heroTitle} <em>{d.heroEm}</em></h1>
-          <p className="lede">{d.heroLede}</p>
 
-          {/* Два действия на первом экране, и оба — не поиск: искать можно
-              пультом, который стоит сразу ниже. Здесь то, чего пультом не
-              сделать: попросить найти то, чего в каталоге нет, и отдать
-              свой объект агенту.
+          {/* Единственный абзац первого экрана, и он про действие. Над
+              ним стояло ещё описание каталога — оно отодвигало кнопки, а
+              на телефоне вместе с числами внизу уводило пульт поиска за
+              сгиб. Про состав каталога человек узнаёт из самого
+              каталога, он сразу ниже.
 
-              Залита одна кнопка. Заявка на поиск нужна большинству тех,
-              кто дошёл до сайта, а объект приносит меньшинство — и когда
-              залиты обе, человек выбирает между ними вместо того, чтобы
-              делать своё. */}
+              Шаг назван прямо здесь: кнопки говорят, ЧЕГО хочет человек
+              («снять или купить», «сдать или продать»), но не говорят,
+              ЧТО он сейчас сделает. */}
+          <p className="hero-call">{d.heroCall}</p>
+
+          {/* Две стороны рынка, названные словами самого человека:
+              «снять или купить» и «сдать или продать». Обе ведут в одну
+              форму заявки, каждая — на свою сторону, и теми же словами
+              подписана развилка внутри неё: человек видит, что попал
+              туда, куда шёл.
+
+              Прежняя подпись «Оставить заявку» называла действие сайта, а
+              не намерение человека, и рядом со второй кнопкой пара не
+              читалась парой.
+
+              Залита одна. Снять или купить хочет большинство дошедших до
+              сайта, объект приносит меньшинство — а когда залиты обе,
+              человек выбирает между кнопками вместо того, чтобы делать
+              своё. */}
+          {/* «Оставить заявку» стоит прямо над развилкой, а не кнопкой в
+              шапке рядом с «Агентами». В шапке эти слова называли
+              действие, но не показывали, куда нажать: человек читал их у
+              логотипа, а выбор стороны был экраном ниже и никак с ними
+              не связан. Здесь подпись и две кнопки — один блок: что
+              сделать и чем именно это делается. */}
           <div className="hero-go">
-            <Link href={`/${lang}/request`} className="go-main">
-              {d.heroAsk}
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                <path d="M3 9h12M10 4l5 5-5 5" stroke="currentColor" strokeWidth="2"
-                      strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </Link>
-            <Link href={`/${lang}/request?side=own`} className="go-side">{d.heroOwn}</Link>
+            <p className="go-head"><span className="mk" aria-hidden="true" />{d.reqNav}</p>
+            <div className="go-row">
+              <Link href={`/${lang}/request`} className="go-main">
+                {d.heroAsk}
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <path d="M3 9h12M10 4l5 5-5 5" stroke="currentColor" strokeWidth="2"
+                        strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </Link>
+              <Link href={`/${lang}/request?side=own`} className="go-side">{d.heroOwn}</Link>
+            </div>
+            {/* Строка под кнопками снимает то, из-за чего не нажимают:
+                сколько это стоит, много ли писать и кто окажется на том
+                конце. Цифр здесь нет намеренно — ни срока отклика, ни
+                числа агентов: это обещания, за которые кто-то отвечает,
+                и первое, что человек вспомнит, если агент перезвонит
+                через два часа. «Проверенные» же держится на реестре:
+                номер свидетельства виден в карточке агента. */}
+            <p className="hero-note">{d.heroNote}</p>
           </div>
-
-          {/* Числа показываются, только когда они есть. Пустой каталог,
-              объявивший «0 объектов», отговаривает лучше любого
-              конкурента — а молчание о числе не обманывает никого. */}
-          {catalogTotal > 0 ? (
-            <ul className="facts">
-              <li>
-                <b className="num">{catalogTotal}</b>
-                <span>{d.heroFactObjects(catalogTotal)}</span>
-              </li>
-              {agentsTotal > 0 ? (
-                <li>
-                  <b className="num">{agentsTotal}</b>
-                  <span>{d.heroFactAgents(agentsTotal)}</span>
-                </li>
-              ) : null}
-              <li>
-                <b>{d.heroFactSlaValue}</b>
-                <span>{d.heroFactSla}</span>
-              </li>
-            </ul>
-          ) : null}
         </div>
       </section>
 

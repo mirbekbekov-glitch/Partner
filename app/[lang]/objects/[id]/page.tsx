@@ -12,6 +12,7 @@ import { siteUrl } from '@/lib/site';
 import { listingSchema } from '@/lib/listing-schema';
 import { CatalogHeader } from '../../../CatalogHeader';
 import { CatalogFooter } from '../../../CatalogFooter';
+import { RequestPitch } from '../../../RequestPitch';
 import { Facade } from '../../../Facade';
 import { Photo } from '../../../Photo';
 import { AgentFace } from '../../../AgentFace';
@@ -291,6 +292,11 @@ export default async function PublicObject({
         </div>
       </div>
 
+      {/* Вход в форму заявки. Раньше он был в шапке кнопкой; теперь на
+          главной подпись «Оставить заявку» стоит над развилкой первого
+          экрана, а на внутренних страницах формой заканчивается
+          страница — там же, где человек понимает, что нужного не нашёл. */}
+      <RequestPitch lang={lang} />
       <CatalogFooter lang={lang} />
     </>
   );

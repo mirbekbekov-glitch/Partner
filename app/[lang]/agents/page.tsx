@@ -4,6 +4,7 @@ import { catalogAgents } from '@/lib/db/catalog';
 import { t, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { CatalogHeader } from '../../CatalogHeader';
 import { CatalogFooter } from '../../CatalogFooter';
+import { RequestPitch } from '../../RequestPitch';
 import { AgentFace } from '../../AgentFace';
 
 export const dynamic = 'force-dynamic';
@@ -79,6 +80,11 @@ export default async function AgentsPage({
           </div>
         )}
       </div>
+      {/* Вход в форму заявки. Раньше он был в шапке кнопкой; теперь на
+          главной подпись «Оставить заявку» стоит над развилкой первого
+          экрана, а на внутренних страницах формой заканчивается
+          страница — там же, где человек понимает, что нужного не нашёл. */}
+      <RequestPitch lang={lang} />
       <CatalogFooter lang={lang} />
     </>
   );

@@ -8,6 +8,7 @@ import { t, spaceName, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { AGENCY_PHONES } from '@/lib/agency';
 import { CatalogHeader } from '../../../CatalogHeader';
 import { CatalogFooter } from '../../../CatalogFooter';
+import { RequestPitch } from '../../../RequestPitch';
 import { AgentFace } from '../../../AgentFace';
 import { Facade } from '../../../Facade';
 import { Photo } from '../../../Photo';
@@ -123,6 +124,11 @@ export default async function AgentPage({
           })}
         </div>
       </div>
+      {/* Вход в форму заявки. Раньше он был в шапке кнопкой; теперь на
+          главной подпись «Оставить заявку» стоит над развилкой первого
+          экрана, а на внутренних страницах формой заканчивается
+          страница — там же, где человек понимает, что нужного не нашёл. */}
+      <RequestPitch lang={lang} />
       <CatalogFooter lang={lang} />
     </>
   );
