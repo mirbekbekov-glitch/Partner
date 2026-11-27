@@ -679,14 +679,18 @@ main:has(.auth) { max-width: none; padding: 0; }
   transform: translate3d(calc(var(--px, 0px) + 3%), var(--py, 0px), 0);
   transition: transform .4s cubic-bezier(.2,.7,.3,1); }
 @keyframes art-in { from { opacity: 0; } to { opacity: 1; } }
-/* В тёмной теме рисунка нет: он сделан на белой бумаге, и умножение на
-   тёмном фоне съело бы его целиком, а светлый прямоугольник посреди
-   тёмной страницы выглядел бы вклейкой. Условия те же, по которым
-   переключается знак в шапке. */
+/* Два файла, светлый и тёмный, переключаются теми же условиями, что и
+   знак в шапке. Режим наложения у них разный: у светлого лист белый и
+   он уходит умножением, у тёмного лист чёрный и он уходит осветлением.
+   Каждый растворяет свой лист в своём фоне, и прямоугольника вокруг
+   рисунка не видно ни в одной теме. */
+.hero-art .on-dark { display: none; mix-blend-mode: screen; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .hero-art img { display: none; }
+  :root:not([data-theme='light']) .hero-art .on-light { display: none; }
+  :root:not([data-theme='light']) .hero-art .on-dark { display: block; }
 }
-:root[data-theme='dark'] .hero-art img { display: none; }
+:root[data-theme='dark'] .hero-art .on-light { display: none; }
+:root[data-theme='dark'] .hero-art .on-dark { display: block; }
 /* «Меньше движения» — значит меньше движения: рисунок сразу на месте. */
 @media (prefers-reduced-motion: reduce) {
   .hero-art img { animation: none; }
