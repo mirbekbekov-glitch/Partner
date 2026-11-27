@@ -1,5 +1,5 @@
 import 'server-only';
-import { all, batch, flag, newId, now, one, stmt } from './sql';
+import { all, batch, flag, newId, now, one, run, stmt } from './sql';
 import { auditStmt } from './audit';
 import { requireAdmin, requireAgent, requireSelf, type Agent } from './session';
 import { normalizeName, searchText } from './normalize';
@@ -113,6 +113,18 @@ export async function ensureAgentByEmail(
   const existing = await one<AgentRow>('select * from agents where email = ?', clean);
 
   if (existing) {
+    // Починка строк, заведённых ДО появления name_sort: колонка пришла с
+    // пустым значением по умолчанию, а пустое сортируется первым. Чинится
+    // при следующем входе, без отдельного переноса данных и без ручной
+    // правки боевой базы. Отдельной записи в журнал не делается: это не
+    // изменение данных, а приведение служебной колонки к имени, которое
+    // уже стоит в строке.
+    if (!existing.name_sort && existing.full_name) {
+      await run('update agents set name_sort = ? where id = ?',
+        searchText(existing.full_name), existing.id);
+      existing.name_sort = searchText(existing.full_name);
+    }
+
     const name = (fullName ?? '').trim();
     if (name && name !== existing.full_name) {
       await batch([

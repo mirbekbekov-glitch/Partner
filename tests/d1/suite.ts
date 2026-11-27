@@ -36,7 +36,9 @@ import {
   photosMissingThumb, putAvatar, putPhoto, putThumb, readPhoto, sniff,
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
-import { feedXml } from '@/lib/feed';
+import { feedXml, inFeed } from '@/lib/feed';
+import { toCsv } from '@/lib/csv';
+import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
   catalogHref, hasAnyFilter, parseCatalogFilters,
 } from '@/lib/catalog-params';
@@ -480,6 +482,59 @@ export default {
     check('а в обратном порядке — позже',
       desc.indexOf('Яковлев Клиент') < desc.indexOf('абрамов Клиент'),
       `порядок: ${desc.join(' | ')}`);
+
+    // -----------------------------------------------------------------
+    // Выгрузка в CSV: файл не должен исполняться в Excel
+    // -----------------------------------------------------------------
+    // Значение, начинающееся с =, +, - или @, Excel и LibreOffice считают
+    // формулой. Заметка агента «=HYPERLINK(...)» стала бы в файле ссылкой,
+    // по которой кто-то щёлкнет. Защита была, проверки на неё — не было.
+    for (const dangerous of ['=1+1', '+1', '-1', '@SUM(A1)', '\t=1', '\r=1']) {
+      const csv = toCsv(['Заметка'], [[dangerous]]);
+      check(`значение «${JSON.stringify(dangerous)}» обезврежено апострофом`,
+        csv.includes(`'${dangerous}`) || csv.includes(`"'${dangerous}`),
+        csv);
+    }
+
+    const plain = toCsv(['Имя'], [['Орозов Нурлан']]);
+    check('обычное значение апострофом не портится',
+      plain.includes('Орозов Нурлан') && !plain.includes("'Орозов"), plain);
+
+    // Метка порядка байтов и переводы строк: без них Excel в русской
+    // локали открывает файл кракозябрами и одной колонкой.
+    const shaped = toCsv(['А', 'Б'], [['1', '2']]);
+    check('файл начинается с метки порядка байтов', shaped.charCodeAt(0) === 0xfeff);
+    check('строки разделены CRLF', shaped.includes('\r\n'));
+    check('колонки разделены точкой с запятой', shaped.includes('А;Б'));
+
+    // Кавычки и разделители внутри значения.
+    const tricky = toCsv(['Заметка'], [['он сказал "да"; потом ушёл']]);
+    check('кавычки удваиваются и значение берётся в кавычки',
+      tricky.includes('"он сказал ""да""; потом ушёл"'), tricky);
+
+    const breaks = toCsv(['Заметка'], [['первая\nвторая']]);
+    check('перенос строки внутри значения не разрывает строку файла',
+      breaks.includes('"первая\nвторая"'), breaks);
+
+    // Строго: пустая строка целиком, а не «где-то есть переводы строк».
+    const empties = toCsv(['А', 'Б'], [[null, undefined]]);
+    check('пустые значения дают пустые ячейки, а не «null»',
+      empties === '\ufeffА;Б\r\n;\r\n', JSON.stringify(empties));
+
+    // И сама выгрузка: она обязана видеть ровно то же, что список.
+    await loginAs(db, anna);
+    const exported = await (await exportContacts(
+      new Request('https://liberterra.kg/cabinet/contacts/export'),
+    )).text();
+    check('в выгрузке есть свой контакт', exported.includes('Пётр Петров'));
+    check('а чужого в выгрузке нет', !exported.includes('Клиент Бориса'));
+
+    resetCookies();
+    const refused = await exportContacts(
+      new Request('https://liberterra.kg/cabinet/contacts/export'),
+    );
+    check('без входа выгрузка отказывает, а не падает пятисотой',
+      refused.status === 403, `статус ${refused.status}`);
 
     // Следующий блок рассчитывает на вход Бориса — возвращаем как было.
     await loginAs(db, boris);
@@ -1165,6 +1220,19 @@ export default {
     check('у нового агента сопоставимое имя заполнено',
       (await sortOf(freshAgent.id))?.name_sort === 'ядрин сорт',
       String((await sortOf(freshAgent.id))?.name_sort));
+
+    // Путь 1б: строка, заведённая ДО появления колонки. Такие в базе
+    // есть — колонка пришла с пустым значением по умолчанию, и пустое
+    // сортируется первым. Чинится при следующем входе, без переноса
+    // данных и без ручной правки боевой базы.
+    await db.prepare(`update agents set name_sort = '' where id = ?`)
+      .bind(freshAgent.id).run();
+    await ensureAgentByEmail('sortirovka@example.kg', 'ЯДРИН Сорт');
+    check('пустое сопоставимое имя починилось при входе',
+      (await sortOf(freshAgent.id))?.name_sort === 'ядрин сорт',
+      String((await sortOf(freshAgent.id))?.name_sort));
+    check('а само имя при этом не тронуто',
+      (await sortOf(freshAgent.id))?.full_name === 'ЯДРИН Сорт');
 
     // Путь 2: переименование при входе.
     await ensureAgentByEmail('sortirovka@example.kg', 'АБАЕВ Сорт');
@@ -1979,6 +2047,14 @@ export default {
     const withCommercial = await feedXml('https://liberterra.kg');
     check('коммерческий объект в фид не попадает',
       !withCommercial.includes(commercial.id));
+
+    // Кабинет предупреждает об этом, и предупреждение завязано на ТОТ ЖЕ
+    // словарь, из которого строится фид. Без связки «commercial» однажды
+    // появится в фиде, а кабинет продолжит писать «не попадает».
+    check('кабинет знает, что коммерческий в выгрузку не идёт', !inFeed('commercial'));
+    check('и что квартира идёт', inFeed('flat'));
+    check('согласовано с самим фидом: что фид отдаёт, то inFeed и признаёт',
+      withCommercial.includes(forSale.id) === inFeed('flat'));
     check('а в витрине он при этом есть — значит дело в фиде, а не в публикации',
       (await catalogPage({})).items.some((i) => i.id === commercial.id));
 

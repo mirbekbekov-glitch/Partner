@@ -5,6 +5,7 @@ import {
 } from '@/lib/db/cabinet';
 import { approvedColleagues } from '@/lib/db/agents';
 import { canEditObject } from '@/lib/db/access';
+import { inFeed } from '@/lib/feed';
 import { Activities, type ActivityRow } from '../../Activities';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
@@ -81,6 +82,17 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
           <span className="key">Актуально на</span>
           <span>{when(object.actual_at)}</span>
         </div>
+        {/* Выгрузка на площадки берёт не все виды объектов. Без этой
+            строки агент считает коммерческое объявление размещённым, а
+            оно в файл не попадает вовсе. Условие спрашивается у самой
+            выгрузки, а не повторяет её список видов. */}
+        {object.publication_state === 'published' && !inFeed(object.kind) ? (
+          <p className="warn" style={{ marginTop: 8 }}>
+            В выгрузку на площадки этот объект не попадает: формат для
+            коммерческой недвижимости пока не определён. На сайте он
+            показывается как обычно.
+          </p>
+        ) : null}
         <div className="row" style={{ marginTop: 8 }}>
           <span className="key">Мандат</span>
           {mandate ? (
