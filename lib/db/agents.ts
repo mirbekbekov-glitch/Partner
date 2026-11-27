@@ -58,7 +58,19 @@ export async function listAgents(): Promise<Array<AgentRow & {
   );
 }
 
-/** Одобренные коллеги — для передачи клиента или объекта. */
+/**
+ * Одобренные коллеги — для передачи клиента, объекта или задачи.
+ *
+ * Отдаются ТОЛЬКО имя и идентификатор: список видит любой агент, а
+ * телефоны и почты коллег в выпадающем списке не нужны никому, зато
+ * утекают вместе с ним.
+ *
+ * Только одобренные. Неодобренный в кабинет не войдёт, заблокированный
+ * потерял доступ — передача любому из них это передача в пустоту, и
+ * искать потом будут не задачу, а причину, по которой её не сделали.
+ *
+ * Себя в списке нет: «передать себе» — не действие.
+ */
 export async function approvedColleagues(): Promise<Array<{ id: string; full_name: string }>> {
   const agent = await requireAgent();
   return all(
@@ -126,13 +138,27 @@ export async function ensureAgentByEmail(
   return created;
 }
 
-/** Правка профиля. Трогает ровно два поля — и в этом весь смысл функции. */
+/**
+ * Правка профиля. Принимает ровно перечисленные поля — и в этом весь
+ * смысл функции: роль, статус и почту сюда не протащить.
+ *
+ * Стаж — ГОД НАЧАЛА работы, а не число лет. «5 лет», записанное однажды,
+ * через два года станет неправдой, и поправить это никто не вспомнит.
+ *
+ * Смена номера сертификата СБРАСЫВАЕТ подтверждение. Без этого порядок
+ * обходится в два приёма: вписать настоящий номер, дождаться отметки
+ * админа, затем подменить его на любой другой — и остаться с галочкой.
+ * Тот же приём и та же защита, что у названия агентства.
+ */
 export async function updateProfile(
-  patch: { full_name?: string; phone?: string | null; focus?: 'sale' | 'rent' | 'both' },
+  patch: {
+    full_name?: string; phone?: string | null; focus?: 'sale' | 'rent' | 'both';
+    works_since?: number | null; certificate_no?: string | null;
+  },
 ): Promise<AgentRow> {
   const agent = await requireSelf();
 
-  const next: Record<string, string | null> = {};
+  const next: Record<string, string | number | null> = {};
   if (patch.full_name !== undefined) {
     const name = patch.full_name.trim();
     if (!name) throw new Invalid('Имя обязательно');
@@ -140,6 +166,29 @@ export async function updateProfile(
   }
   if (patch.phone !== undefined) next.phone = (patch.phone ?? '').trim() || null;
   if (patch.focus !== undefined) next.focus = patch.focus;
+
+  if (patch.works_since !== undefined) {
+    if (patch.works_since === null) {
+      next.works_since = null;
+    } else {
+      const year = Math.trunc(patch.works_since);
+      const nowYear = new Date().getUTCFullYear();
+      // Год из будущего — это не стаж, а опечатка. 1990 снизу: раньше
+      // рынка недвижимости в нынешнем виде здесь не было.
+      if (!Number.isFinite(year) || year < 1990 || year > nowYear) {
+        throw new Invalid(`Год начала работы — между 1990 и ${nowYear}`);
+      }
+      next.works_since = year;
+    }
+  }
+
+  if (patch.certificate_no !== undefined) {
+    const no = (patch.certificate_no ?? '').trim();
+    if (no.length > 60) throw new Invalid('Номер сертификата слишком длинный');
+    next.certificate_no = no || null;
+    // Сброс подтверждения — вместе с номером, одной записью.
+    next.certificate_confirmed = 0;
+  }
 
   if (Object.keys(next).length === 0) return agent;
 
@@ -389,6 +438,42 @@ export async function confirmAgentOrganization(
     stmt('update agents set org_confirmed = ?, updated_at = ? where id = ?',
       flag(confirmed), at, agentId),
     auditStmt('agents', agentId, 'update', admin.id, { org_confirmed: confirmed }),
+  ]);
+
+  const row = await getAgent(agentId);
+  if (!row) throw new NotFound('Агент не найден');
+  return row;
+}
+
+/**
+ * Подтвердить номер сертификата.
+ *
+ * Тот же порядок, что у агентства, и по той же причине: номер видят
+ * клиенты, и непроверенное утверждение от имени агентства — это обман,
+ * даже если агент не хотел обманывать.
+ *
+ * Подтверждать нечего, пока номера нет: иначе отметка повисла бы на
+ * пустом поле, и агент потом вписал бы в него что угодно, оставшись с
+ * галочкой. Тот же обход, что закрыт сбросом при смене номера.
+ */
+export async function confirmAgentCertificate(
+  agentId: string,
+  confirmed: boolean,
+): Promise<AgentRow> {
+  const admin = await requireAdmin();
+
+  const target = await getAgent(agentId);
+  if (!target) throw new NotFound('Агент не найден');
+  if (!target.certificate_no) {
+    throw new Invalid('У агента не указан номер сертификата — подтверждать нечего');
+  }
+
+  const at = now();
+  await batch([
+    stmt('update agents set certificate_confirmed = ?, updated_at = ? where id = ?',
+      flag(confirmed), at, agentId),
+    auditStmt('agents', agentId, 'update', admin.id,
+      { certificate_confirmed: confirmed }),
   ]);
 
   const row = await getAgent(agentId);

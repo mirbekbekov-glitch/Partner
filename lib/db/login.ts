@@ -75,9 +75,16 @@ export async function requestLogin(input: LoginRequest): Promise<void> {
   if (!looksLikeEmail(email)) throw new Invalid('Это не похоже на адрес почты');
 
   // Частота: перебор адресов и заваливание чужого ящика письмами.
+  //
+  // Выданные админом приглашения в этот счёт НЕ идут. Предел стоит против
+  // того, кто жмёт «войти» снаружи без спроса; выдача админа — осознанное
+  // действие, записанное в журнал. Если считать и её, пять приглашений
+  // подряд закрывали бы самому агенту вход на час — то есть лимит бил бы
+  // по тому, кого защищает.
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const recent = await one<{ n: number }>(
-    'select count(*) as n from login_tokens where email = ? and created_at > ?',
+    `select count(*) as n from login_tokens
+      where email = ? and created_at > ? and issued_by_agent_id is null`,
     email, hourAgo,
   );
   if ((recent?.n ?? 0) >= PER_EMAIL_PER_HOUR) {

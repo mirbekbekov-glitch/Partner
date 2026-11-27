@@ -1,5 +1,8 @@
 import { listAgents } from '@/lib/db/agents';
+
+type Row = Awaited<ReturnType<typeof listAgents>>[number];
 import { AgentActions } from './AgentActions';
+import { InviteForm } from './InviteForm';
 
 export const metadata = { title: 'Агенты' };
 
@@ -12,21 +15,6 @@ const STATUS_RU: Record<string, string> = {
 const when = (v: string | null) =>
   v == null ? '—' : new Date(v).toLocaleDateString('ru-RU', { dateStyle: 'medium' });
 
-type Row = {
-  id: string;
-  full_name: string;
-  email: string | null;
-  phone: string | null;
-  telegram_id: number | null;
-  role: string;
-  status: string;
-  created_at: string;
-  organization_name: string | null;
-  org_confirmed: number;
-  objects_count: number;
-  contacts_count: number;
-  requirements_count: number;
-};
 
 export default async function AgentsAdminPage() {
   // Проверка «только админ» — первая строка listAgents(). Раньше её делало
@@ -37,7 +25,7 @@ export default async function AgentsAdminPage() {
   let error: string | null = null;
 
   try {
-    rows = await listAgents() as unknown as Row[];
+    rows = await listAgents();
   } catch (e) {
     error = e instanceof Error ? e.message : 'Список недоступен.';
   }
@@ -61,6 +49,10 @@ export default async function AgentsAdminPage() {
         <p className="empty">
           Список пуст. Если вы вошли не администратором, этот экран ничего не покажет.
         </p>
+        {/* Форма нужна и здесь: пустой список — это ровно тот момент,
+            когда заводят первого агента. Без неё экран предлагал бы
+            ждать заявки, которой некому прийти. */}
+        <InviteForm />
       </>
     );
   }
@@ -72,6 +64,8 @@ export default async function AgentsAdminPage() {
         Одобрение открывает доступ к CRM. Заблокированный агент теряет доступ, но
         остаётся владельцем своих контактов и объектов — ничего не теряется.
       </p>
+
+      <InviteForm />
 
       <h2>Ждут одобрения ({pending.length})</h2>
       {pending.length === 0 ? (
@@ -130,6 +124,8 @@ function AgentCard({ a }: { a: Row }) {
         role={a.role}
         hasOrg={a.organization_name !== null}
         orgConfirmed={a.org_confirmed === 1}
+        certificateNo={a.certificate_no}
+        certificateConfirmed={a.certificate_confirmed === 1}
       />
     </div>
   );

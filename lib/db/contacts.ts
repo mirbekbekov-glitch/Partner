@@ -3,7 +3,7 @@ import { all, batch, flag, jsonArray, newId, now, one, stmt, toJson } from './sq
 import { auditStmt } from './audit';
 import { isAdmin, requireAgent } from './session';
 import { canEditObject, canSeeContact } from './access';
-import { normalizePhone } from './normalize';
+import { normalizePhone, searchText } from './normalize';
 import { Conflict, Forbidden, Invalid, NotFound } from './errors';
 
 /**
@@ -160,11 +160,14 @@ export async function createContact(input: NewContact): Promise<ContactView> {
   const writes = [
     stmt(
       `insert into contacts (id, kind, name, telegram, source, owner_agent_id,
-                             roles, note, created_at, updated_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                             roles, note, search_text, created_at, updated_at)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id, input.kind ?? 'person', name,
       blank(input.telegram), blank(input.source), agent.id,
-      toJson(input.roles ?? []), blank(input.note), at, at,
+      toJson(input.roles ?? []), blank(input.note),
+      // Поиск идёт по этой колонке, а не по name: lower() в SQLite не
+      // приводит кириллицу, и поиск по имени был регистрозависимым.
+      searchText(name), at, at,
     ),
     auditStmt('contacts', id, 'insert', agent.id, { name }),
   ];
@@ -209,6 +212,9 @@ export async function updateContact(
     const name = patch.name.trim();
     if (!name) throw new Invalid('Имя обязательно');
     next.name = name;
+    // Вместе с именем, в том же наборе колонок: иначе поиск нашёл бы
+    // контакт по прежнему имени и не нашёл по новому.
+    next.search_text = searchText(name);
   }
   if (patch.kind !== undefined)     next.kind = patch.kind;
   if (patch.telegram !== undefined) next.telegram = blank(patch.telegram);

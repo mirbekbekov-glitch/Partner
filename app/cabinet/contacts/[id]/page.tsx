@@ -11,8 +11,8 @@ import { TransferForm, type Colleague } from '../../TransferForm';
 import { transferContact } from '../../transfer-actions';
 import { ContactForm, type ContactDraft } from '../ContactForm';
 import { ROLE_RU } from '@/lib/contact-roles';
-import { Phones, type Phone } from '../Phones';
-import { MergeForm, type DuplicateCandidate } from '../MergeForm';
+import { Phones } from '../Phones';
+import { MergeForm } from '../MergeForm';
 import { Ownerships, type OwnershipRow, type LinkableObject } from '../Ownerships';
 import { updateContact } from '../actions';
 
@@ -33,7 +33,10 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
     await Promise.all([
       contactPhoneList(id),
       contactObjects(id),
-      requirementList().then((rows) => rows.filter((r) => r.client_name === contact.name)),
+      // Все потребности этого клиента, а не одна страница: карточка
+      // показывает их целиком.
+      requirementList({ perPage: 200 })
+        .then((p) => p.rows.filter((r) => r.client_name === contact.name)),
       activityFeed('contact', id),
       approvedColleagues(),
       // Кандидаты в дубликаты — только среди своих записей: объединять
@@ -45,11 +48,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
 
 
 
-  const c = contact as unknown as {
-    id: string; kind: string; name: string; telegram: string | null;
-    source: string | null; roles: string[] | null; note: string | null;
-    owner_name: string | null; mine: boolean;
-  };
+  const c = contact;
 
   // Править контакт может тот, кто его привёл, и админ. Признак mine сюда
   // приходит из представления; админ правит и чужие, поэтому форму
@@ -71,7 +70,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
 
       <Phones
         contactId={c.id}
-        phones={phones as unknown as Phone[]}
+        phones={phones}
         canEdit={canEdit}
       />
 
@@ -116,6 +115,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
         entityType="contact"
         entityId={c.id}
         rows={(activities ?? []) as ActivityRow[]}
+        colleagues={(colleagues ?? []) as Colleague[]}
       />
 
       {canEdit ? (
@@ -129,7 +129,7 @@ export default async function ContactCard({ params }: { params: Promise<{ id: st
           <MergeForm
             keepId={c.id}
             keepName={c.name}
-            candidates={duplicates as unknown as DuplicateCandidate[]}
+            candidates={duplicates}
           />
 
           <h2>Передача</h2>

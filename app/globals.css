@@ -869,6 +869,24 @@ main:has(.auth) { max-width: none; padding: 0; }
   padding: 20px; box-shadow: var(--sh-md); }
 .panel-card h2 { font-size: 19px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 6px; }
 .panel-card .note { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0 0 14px; }
+/* Карточка агента на странице объекта. Светлая, как панель заявки, а не
+   тёмная, как блок с телефоном: тёмных пятен в колонке должно остаться одно,
+   иначе глаз не понимает, куда смотреть в первую очередь. */
+.agent-card { background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 16px 20px; box-shadow: var(--sh-md); }
+.agent-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.agent-row b { display: block; font-size: 16px; letter-spacing: -.01em; }
+.agent-row .mini { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+/* Фиксированный размер и overflow: hidden — чтобы вертикальный снимок не
+   растянул строку и не вылез из кружка. */
+.avatar { flex: 0 0 48px; width: 48px; height: 48px; border-radius: var(--r-full);
+  overflow: hidden; background: var(--sunk); display: flex; align-items: center;
+  justify-content: center; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.initials { font-size: 15px; font-weight: 800; color: var(--muted); letter-spacing: .02em; }
+.registry { margin: 12px 0 0; font-size: 13px; font-weight: 700; }
+.registry .key { display: block; font-weight: 400; margin-top: 2px; }
+
 .callout { background: var(--ink); color: var(--on-ink); border-radius: var(--r-lg); padding: 20px; }
 .callout b { display: block; font-size: 15px; margin-bottom: 4px; }
 .callout .mini { color: var(--on-ink-faint); font-size: 13px; }

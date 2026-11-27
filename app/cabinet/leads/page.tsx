@@ -1,22 +1,13 @@
 import Link from 'next/link';
-import { leadFeed } from '@/lib/db/cabinet';
-import { day } from '@/lib/list-params';
+import { leadFeed, type LeadFeedItem } from '@/lib/db/cabinet';
+import { day, parseFilters } from '@/lib/list-params';
+import { Pager } from '../Pager';
 import { LeadActions } from './LeadActions';
 
 export const metadata = { title: 'Заявки' };
 
-type Row = {
-  id: string;
-  object_id: string;
-  name: string;
-  phone: string;
-  message: string | null;
-  status: 'new' | 'in_work' | 'done' | 'spam';
-  created_at: string;
-  agent_id: string | null;
-  address: string | null;
-  agent_name: string | null;
-};
+const BASE = '/cabinet/leads';
+
 
 const STATUS_RU: Record<string, string> = {
   new: 'новая',
@@ -33,16 +24,20 @@ export default async function Leads({
   const sp = await searchParams;
   const raw = Array.isArray(sp.status) ? sp.status[0] : sp.status;
   const status = raw && raw in STATUS_RU ? raw : null;
+  // Разбор общий: постраничные ссылки собираются там же, где у остальных
+  // списков. Статус заявки разбирается отдельно — набор значений свой.
+  const f = parseFilters(sp);
 
   // Видимость стоит в самом запросе: заявки по объектам, за которые
   // отвечает этот агент. Раньше её обеспечивала политика базы, и условия
   // здесь не было вовсе — теперь страховки нет, поэтому предикат общий и
   // живёт в lib/db/visibility.ts.
-  let rows: Row[] = [];
+  let rows: LeadFeedItem[] = [];
+  let total = 0;
   let error: string | null = null;
 
   try {
-    rows = await leadFeed(status) as unknown as Row[];
+    ({ rows, total } = await leadFeed(status, f.page));
   } catch (e) {
     error = e instanceof Error ? e.message : 'Не удалось загрузить заявки.';
   }
@@ -78,37 +73,60 @@ export default async function Leads({
           {status ? 'С таким статусом заявок нет.' : 'Заявок пока нет.'}
         </p>
       ) : (
-        rows.map((l) => (
-          <div className="card" key={l.id}>
-            <div className="row">
-              <strong>{l.name}</strong>
-              {/* Телефон — то, ради чего заявка существует: показываем целиком
-                  и сразу, без «показать номер». Сюда дошли только те, кому он
-                  положен: остальным политика не отдала бы и строки. */}
-              <a href={`tel:${l.phone.replace(/[^\d+]/g, '')}`}>{l.phone}</a>
-              <span className="tag">{STATUS_RU[l.status]}</span>
-              <span className="key">{day(l.created_at)}</span>
-            </div>
-
-            <div className="row" style={{ marginTop: 6 }}>
-              <span className="key">объект</span>
-              <Link href={`/cabinet/objects/${l.object_id}`}>
-                {l.address ?? 'объект удалён'}
-              </Link>
-              {l.agent_name ? (
-                <>
-                  <span className="key">ведёт</span>
-                  <span>{l.agent_name}</span>
-                </>
-              ) : null}
-            </div>
-
-            {l.message ? <p className="act-body">{l.message}</p> : null}
-
-            <LeadActions leadId={l.id} status={l.status} />
-          </div>
-        ))
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Заявитель</th>
+                <th>Объект</th>
+                <th>Сообщение</th>
+                <th>Статус</th>
+                <th>Когда</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((l) => (
+                <tr key={l.id}>
+                  <td>
+                    <span className="tbl-main">{l.name}</span>
+                    {/* Телефон — то, ради чего заявка существует: показываем
+                        целиком и сразу, без «показать номер». Сюда дошли
+                        только те, кому он положен: остальным политика не
+                        отдала бы и строки. */}
+                    <span className="tbl-sub">
+                      <a href={`tel:${l.phone.replace(/[^\d+]/g, '')}`}>{l.phone}</a>
+                    </span>
+                  </td>
+                  <td data-l="Объект">
+                    <Link href={`/cabinet/objects/${l.object_id}`}>
+                      {l.address ?? 'объект удалён'}
+                    </Link>
+                    {l.agent_name ? (
+                      <span className="tbl-sub">ведёт {l.agent_name}</span>
+                    ) : null}
+                  </td>
+                  <td data-l="Сообщение">
+                    {l.message ? <span className="tbl-text">{l.message}</span> : '—'}
+                  </td>
+                  <td data-l="Статус">
+                    <span className="tag">{STATUS_RU[l.status]}</span>
+                  </td>
+                  <td className="nowrap" data-l="Когда">{day(l.created_at)}</td>
+                  <td data-l="Действия">
+                    <LeadActions leadId={l.id} status={l.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
+
+      {/* Статус заявки подставляется в ссылки страниц отдельно: разбор
+          фильтров проверяет status по набору значений потребности, и
+          «в работе» или «спам» он бы отбросил. */}
+      <Pager base={BASE} filters={{ ...f, status }} total={total} />
     </>
   );
 }

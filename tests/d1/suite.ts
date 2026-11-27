@@ -14,6 +14,9 @@ import { resetCookies, setCookie } from './stubs/next-headers';
 
 import { SESSION_COOKIE, currentAgent, endSession, sessionAgent } from '@/lib/db/session';
 import { completeLogin, requestLogin, revokePendingLinks } from '@/lib/db/login';
+import { inviteAgent } from '@/lib/db/invites';
+import { approvedColleagues } from '@/lib/db/agents';
+import { looksLikeSameName, nameKey } from '@/lib/contact-match';
 import { outbox, tokenFromLastLetter } from './stubs/email';
 import {
   confirmActual, createObject, getObject, publishObject,
@@ -21,16 +24,16 @@ import {
 } from '@/lib/db/objects';
 import { createMandate, expireMandates, terminateMandate } from '@/lib/db/mandates';
 import { canSeeContact } from '@/lib/db/access';
-import { createRequirement } from '@/lib/db/requirements';
-import { createActivity, setActivityDone } from '@/lib/db/activities';
+import { createRequirement, updateRequirement } from '@/lib/db/requirements';
+import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import {
-  catalogCities, catalogCount, catalogObject, catalogPage, catalogZoneCounts,
-  catalogZones,
+  catalogAgent, catalogCities, catalogCount, catalogObject, catalogPage,
+  catalogZoneCounts, catalogZones,
 } from '@/lib/db/catalog';
 import {
-  deletePhoto, listPhotos, photoKey, photoUrl, photosMissingThumb, putPhoto,
-  putThumb, readPhoto, sniff,
+  deleteAvatar, deletePhoto, listPhotos, photoKey, photoUrl,
+  photosMissingThumb, putAvatar, putPhoto, putThumb, readPhoto, sniff,
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml } from '@/lib/feed';
@@ -45,12 +48,13 @@ import {
 } from '@/lib/db/telegram';
 import { POST as telegramWebhook } from '@/app/api/telegram/webhook/route';
 import {
-  cabinetCounters, contactList, contactObjects, dealList, objectCard,
-  objectList, requirementList,
+  activeMandateOf, cabinetCounters, contactDuplicates, contactList, contactObjects,
+  dealList, duplicatesOf, myActivities, objectCard, objectList, requirementList,
 } from '@/lib/db/cabinet';
 import {
   approveAgent, blockAgent, clearMyOrganization, confirmAgentOrganization,
-  ensureAgentByEmail, getAgent, setAgentRole, setMyOrganization, updateProfile,
+  confirmAgentCertificate, ensureAgentByEmail, getAgent, setAgentRole,
+  setMyOrganization, updateProfile,
 } from '@/lib/db/agents';
 import {
   claimNotifications, enqueueDueReminders, markNotification,
@@ -63,6 +67,7 @@ import {
 import {
   addPhone, contactPhones, createContact, findContactByPhone,
   mergeContacts, removeObjectOwnership, setObjectOwnership, transferContact,
+  updateContact,
 } from '@/lib/db/contacts';
 import { commissionShares, commissionTotal } from '@/lib/db/commission';
 import { normalizePhone } from '@/lib/db/normalize';
@@ -233,6 +238,98 @@ export default {
       Conflict);
 
     // -----------------------------------------------------------------
+    // Поиск дубликатов: правило имени
+    // -----------------------------------------------------------------
+    // Чистое правило — без базы. Здесь дешевле всего перечислить случаи.
+    const sameName: Array<[string, string]> = [
+      ['Орозов Нурлан', 'орозов нурлан'],
+      // Главный случай: lower() в SQLite кириллицу НЕ приводит, поэтому
+      // прежнее сравнение в запросе этих двоих дубликатами не считало.
+      ['ОРОЗОВ НУРЛАН', 'Орозов Нурлан'],
+      ['Орозов  Нурлан ', 'Орозов Нурлан'],
+      ['Орозов Нурлан', 'Орозов Н.'],
+      ['Орозов Н.', 'Орозов Нурлан Азаматович'],
+      ['Этажи', 'ЭТАЖИ'],
+    ];
+    for (const [a, b] of sameName) {
+      check(`«${a}» и «${b}» — одно лицо`, looksLikeSameName(a, b));
+      check(`и наоборот: «${b}» и «${a}»`, looksLikeSameName(b, a));
+    }
+
+    const otherName: Array<[string, string]> = [
+      ['Орозов Нурлан', 'Орозов Азамат'],
+      ['Орозов Нурлан', 'Асанов Нурлан'],
+      // Однофамильцев больше, чем тёзок, а объединение необратимо:
+      // присоединённая запись удаляется. Лучше не предложить, чем склеить.
+      ['Орозов', 'Орозов Нурлан'],
+      ['Орозов Нурлан Азаматович', 'Орозов Нурлан Асанович'],
+      ['', 'Орозов Нурлан'],
+    ];
+    for (const [a, b] of otherName) {
+      check(`«${a}» и «${b}» — разные`, !looksLikeSameName(a, b));
+      check(`и наоборот тоже разные: «${b}» и «${a}»`, !looksLikeSameName(b, a));
+    }
+
+    // Две пустые строки равны друг другу, и без отдельной проверки на
+    // пустоту правило сочло бы их одним лицом. В базе имя пустым быть не
+    // может (есть ограничение), но правило отвечает и на то, что в базу
+    // ещё не попало — например, на ввод в форме.
+    check('две пустые строки — не одно лицо', !looksLikeSameName('', ''));
+    check('и пробелы с точками тоже', !looksLikeSameName('  ', ' . '));
+
+    check('приведение имени схлопывает регистр, пробелы и точки',
+      nameKey('  ОРОЗОВ   Н. ') === 'орозов н', `получилось «${nameKey('  ОРОЗОВ   Н. ')}»`);
+
+    // А теперь то же через базу: кандидаты для конкретной записи.
+    const capsDupe = await createContact({ name: 'ИВАН', phone: '0555 10 20 31' });
+    const initials = await createContact({ name: 'Иван И.', phone: '0555 10 20 32' });
+    await createContact({ name: 'Пётр Петров', phone: '0555 10 20 33' });
+
+    const candidates = await duplicatesOf(ivan.id);
+    const ids = candidates.map((c) => c.other_id);
+    check('капсом записанный тот же человек попадает в кандидаты',
+      ids.includes(capsDupe.id));
+    check('а однофамилец с другим именем — нет',
+      !candidates.some((c) => c.other_name === 'Пётр Петров'));
+    // «Иван» — одно слово, «Иван И.» — два: по правилу это НЕ совпадение.
+    check('и «Иван» с «Иван И.» не склеиваются',
+      !ids.includes(initials.id));
+
+    // Чужие записи в кандидаты не идут даже при полном совпадении имени.
+    await loginAs(db, boris);
+    const hisIvan = await createContact({ name: 'Иван', phone: '0555 10 20 34' });
+    await loginAs(db, anna);
+    check('чужой контакт с тем же именем в кандидаты не попадает',
+      !(await duplicatesOf(ivan.id)).some((c) => c.other_id === hisIvan.id));
+
+    // Список пар — то же правило, что у подсказки на карточке. Разные
+    // правила означали бы, что в одном месте дубликат есть, в другом нет.
+    const pairs = await contactDuplicates();
+    check('список пар видит «Иван» и «ИВАН»',
+      pairs.some((pr) =>
+        (pr.a_id === ivan.id && pr.b_id === capsDupe.id)
+        || (pr.a_id === capsDupe.id && pr.b_id === ivan.id)));
+    check('и не выдумывает пару с «Пётр Петров»',
+      !pairs.some((pr) => pr.a_name === 'Пётр Петров' || pr.b_name === 'Пётр Петров'));
+
+    // Пара, которую видно ТОЛЬКО по правилу инициалов. Без неё проверка
+    // проходила бы и на простом сравнении строк в нижнем регистре —
+    // toLowerCase() в JS, в отличие от lower() в SQLite, кириллицу
+    // приводит, и капсом записанную пару поймало бы и оно. Проверено
+    // мутацией: подмени правило на такое сравнение — падает эта строка.
+    const full = await createContact({
+      name: 'Токтогулов Азамат', phone: '0555 10 20 36',
+    });
+    const short = await createContact({
+      name: 'Токтогулов А.', phone: '0555 10 20 37',
+    });
+    const withInitials = await contactDuplicates();
+    check('список пар видит «Токтогулов Азамат» и «Токтогулов А.»',
+      withInitials.some((pr) =>
+        (pr.a_id === full.id && pr.b_id === short.id)
+        || (pr.a_id === short.id && pr.b_id === full.id)));
+
+    // -----------------------------------------------------------------
     // Объединение: порядок шагов и потеря данных
     // -----------------------------------------------------------------
     // Главный случай — запись БЕЗ связей с объектами. При неправильном
@@ -267,6 +364,63 @@ export default {
     const his = await createContact({ name: 'Клиент Бориса', phone: '0777 22 22 22' });
     await throws('объединять чужую запись нельзя',
       () => mergeContacts(his.id, hers.id), Forbidden);
+
+    // -----------------------------------------------------------------
+    // Поиск по имени и по тексту: та же ловушка lower()
+    // -----------------------------------------------------------------
+    // Предыдущий блок закончился входом Бориса, а контакты здесь — Анны.
+    await loginAs(db, anna);
+
+    // Ищем строчными то, что записано с большой буквы. На lower() в
+    // запросе это не работало: кириллицу он не приводит.
+    const foundLower = await contactList('пётр');
+    check('поиск контакта строчными находит запись с заглавной',
+      foundLower.rows.some((c) => c.name === 'Пётр Петров'),
+      `нашлось ${foundLower.rows.length}`);
+
+    const foundCaps = await contactList('ПЁТР');
+    check('и заглавными тоже находит',
+      foundCaps.rows.some((c) => c.name === 'Пётр Петров'));
+
+    check('а чужого по имени поиск не выдаёт',
+      !(await contactList('иван')).rows.some((c) => c.id === hisIvan.id));
+
+    // Текст потребности: ищем «Тёплый», записано «ТЁПЛЫЙ балкон».
+    // На отдельном контакте, а не на ivan: его объединяют ниже, и лишняя
+    // потребность сбила бы проверку переноса.
+    const searchClient = await createContact({
+      name: 'Поисковый Клиент', phone: '0555 10 20 35',
+    });
+    const searchNeed = await createRequirement({
+      contact_id: searchClient.id, deal_type: 'sale',
+      requirements_text: 'ТЁПЛЫЙ балкон и Чүй рядом',
+    });
+    const needFound = await requirementList({ q: 'тёплый' });
+    check('поиск по тексту потребности не зависит от регистра',
+      needFound.rows.some((r) => r.id === searchNeed.id),
+      `нашлось ${needFound.rows.length}`);
+
+    // Кыргызская буква сводится к русской — как у адресов объектов.
+    check('и «чуй» находит «Чүй»',
+      (await requirementList({ q: 'чуй' })).rows.some((r) => r.id === searchNeed.id));
+
+    // Правка текста переносит и поисковую колонку: иначе потребность
+    // находилась бы по прежнему тексту и не находилась по новому.
+    await updateRequirement(searchNeed.id, { requirements_text: 'ХОЛОДНАЯ лоджия' });
+    check('после правки находится по новому тексту',
+      (await requirementList({ q: 'холодная' })).rows.some((r) => r.id === searchNeed.id));
+    check('и по прежнему уже не находится',
+      !(await requirementList({ q: 'тёплый' })).rows.some((r) => r.id === searchNeed.id));
+
+    // То же для имени контакта.
+    await updateContact(capsDupe.id, { name: 'СИДОРОВ Пётр' });
+    check('переименованный контакт находится по новому имени',
+      (await contactList('сидоров')).rows.some((c) => c.id === capsDupe.id));
+    check('и по прежнему имени больше нет',
+      !(await contactList('иван')).rows.some((c) => c.id === capsDupe.id));
+
+    // Следующий блок рассчитывает на вход Бориса — возвращаем как было.
+    await loginAs(db, boris);
 
     // -----------------------------------------------------------------
     // Передача записи вместе с доступом к телефону
@@ -758,6 +912,263 @@ export default {
     await loginAs(db, anna);
 
     // -----------------------------------------------------------------
+    // Приглашение агента ссылкой: письмо на бесплатном плане не дойдёт
+    // -----------------------------------------------------------------
+    outbox.length = 0;
+
+    const invite = await inviteAgent({
+      email: '  Nurlan@Example.KG ', full_name: 'Нурлан Орозов',
+      origin: 'https://liberterra.kg/',
+    });
+
+    check('адрес приведён к нижнему регистру и обрезан',
+      invite.email === 'nurlan@example.kg', `получилось ${invite.email}`);
+    check('это новый человек, а не повторная выдача', invite.existed === false);
+    check('имя записано сразу, а не почта вместо имени',
+      invite.full_name === 'Нурлан Орозов', invite.full_name);
+
+    // Письма тут нет и не должно быть: весь смысл в том, что доставку
+    // берёт на себя админ. Если письмо вдруг уйдёт — значит кто-то вернул
+    // отправку, и приглашение станет бессмысленным.
+    check('письма не отправлялось', outbox.length === 0, `ушло ${outbox.length}`);
+
+    check('ссылка абсолютная и без двойного слэша',
+      invite.link.startsWith('https://liberterra.kg/auth/enter?token='),
+      invite.link.replace(/token=.*/, 'token=…'));
+
+    const inviteToken = invite.link.split('token=')[1] ?? '';
+    const inviteStored = await db
+      .prepare('select token_hash, issued_by_agent_id from login_tokens where email = ?')
+      .bind('nurlan@example.kg')
+      .first<{ token_hash: string; issued_by_agent_id: string | null }>();
+    check('в базе лежит не сама ссылка, а хэш токена',
+      Boolean(inviteStored) && inviteStored?.token_hash !== inviteToken);
+    check('в базе записано, кто выдал', inviteStored?.issued_by_agent_id === anna);
+
+    const inviteAudit = await db
+      .prepare(`select actor_agent_id from audit_log
+                 where entity_type = 'agent_invite' order by id desc limit 1`)
+      .first<{ actor_agent_id: string | null }>();
+    check('выдача записана в журнал с именем выдавшего',
+      inviteAudit?.actor_agent_id === anna);
+
+    // Приглашённый уже числится агентом, со статусом «ожидает»: админ
+    // видит его в списке и может одобрить ДО того, как тот войдёт.
+    const invited = await db.prepare('select id, status from agents where email = ?')
+      .bind('nurlan@example.kg').first<{ id: string; status: string }>();
+    check('учётная запись заведена сразу', Boolean(invited));
+    check('и она ждёт одобрения', invited?.status === 'pending');
+
+    // Срок суточный, а не как у обычного входа: ссылку пересылают.
+    const inviteTtl = await db
+      .prepare(`select created_at, expires_at from login_tokens
+                 where email = ? order by created_at desc limit 1`)
+      .bind('nurlan@example.kg').first<{ created_at: string; expires_at: string }>();
+    const inviteHours = inviteTtl
+      ? (Date.parse(inviteTtl.expires_at) - Date.parse(inviteTtl.created_at)) / 3_600_000
+      : 0;
+    // Округление, а не точное равенство: created_at и expires_at ставятся
+    // на соседних миллисекундах, и разница выходит 24.0000003 — проверка
+    // на === проходила случайно и однажды упала бы без причины.
+    check('ссылка живёт сутки, а не пятнадцать минут',
+      Math.round(inviteHours) === 24, `получилось ${inviteHours} ч`);
+
+    // Самое важное: по ссылке действительно входят, и ровно один раз.
+    resetCookies();
+    const byInvite = await completeLogin(inviteToken);
+    check('по приглашению входят', byInvite.agent.email === 'nurlan@example.kg');
+    await throws('и только один раз', () => completeLogin(inviteToken), Forbidden);
+
+    await loginAs(db, anna);
+    const reinvite = await inviteAgent({
+      email: 'nurlan@example.kg', origin: 'https://liberterra.kg',
+    });
+    check('повторная выдача видит, что человек уже есть', reinvite.existed === true);
+    check('и имя не затирается пустым',
+      (await db.prepare('select full_name from agents where email = ?')
+        .bind('nurlan@example.kg').first<{ full_name: string }>())?.full_name
+        === 'Нурлан Орозов');
+
+    // Заблокированному отказ — здесь, а не на входе: иначе админ отправит
+    // ссылку, а человек увидит «доступ закрыт» и решит, что его только что
+    // отключили.
+    await db.prepare(`update agents set status = 'blocked' where email = ?`)
+      .bind('nurlan@example.kg').run();
+    await throws('заблокированному ссылку не выдают',
+      () => inviteAgent({
+        email: 'nurlan@example.kg', full_name: 'Переименованный',
+        origin: 'https://liberterra.kg',
+      }),
+      Forbidden);
+    // Отказ не должен оставлять следа. Заведение агента заодно обновляет
+    // имя, и если проверять блокировку ПОСЛЕ него, отклонённое приглашение
+    // всё равно переименовывало бы человека.
+    check('и отказ не переименовал его по пути',
+      (await db.prepare('select full_name from agents where email = ?')
+        .bind('nurlan@example.kg').first<{ full_name: string }>())?.full_name
+        === 'Нурлан Орозов');
+    check('и лишней ссылки в базе не осталось',
+      ((await db.prepare(`select count(*) as n from login_tokens
+                           where email = ? and used_at is null`)
+        .bind('nurlan@example.kg').first<{ n: number }>())?.n ?? -1) === 1);
+    await db.prepare(`update agents set status = 'approved' where email = ?`)
+      .bind('nurlan@example.kg').run();
+
+    await throws('это не похоже на почту — отказ',
+      () => inviteAgent({ email: 'не почта', origin: 'https://liberterra.kg' }), Invalid);
+
+    // Выдаёт ТОЛЬКО админ: ссылка даёт вход в чужую учётную запись.
+    await loginAs(db, vera);
+    await throws('обычный агент приглашений не выдаёт',
+      () => inviteAgent({ email: 'kto@example.kg', origin: 'https://liberterra.kg' }),
+      Forbidden);
+    resetCookies();
+    await throws('и анонимно тоже',
+      () => inviteAgent({ email: 'kto@example.kg', origin: 'https://liberterra.kg' }),
+      Forbidden);
+
+    // Приглашения НЕ съедают часовой предел самостоятельного входа.
+    // Иначе пять выдач подряд закрывали бы агенту вход на час, то есть
+    // предел бил бы по тому, кого защищает.
+    await loginAs(db, anna);
+    await db.prepare('delete from login_tokens').run();
+    for (let i = 0; i < 6; i++) {
+      await inviteAgent({ email: 'mnogo@example.kg', origin: 'https://liberterra.kg' });
+    }
+    outbox.length = 0;
+    // Через try, а не напрямую: если предел снова начнёт считать выдачи,
+    // requestLogin бросит исключение и оборвёт весь прогон раньше этой
+    // проверки — красный прогон был бы, но сказал бы «что-то упало», а не
+    // «приглашения съедают предел входа».
+    let floodedByInvites: string | null = null;
+    try {
+      await requestLogin({ email: 'mnogo@example.kg', origin: 'https://liberterra.kg' });
+    } catch (e) {
+      floodedByInvites = e instanceof Error ? e.message : String(e);
+    }
+    check('после шести приглашений агент всё равно войдёт сам',
+      floodedByInvites === null && outbox.length === 1,
+      floodedByInvites ?? `писем ушло ${outbox.length}`);
+
+    // А собственный предел при этом остался на месте: иначе проверка выше
+    // прошла бы и на сломанном счётчике.
+    await db.prepare('delete from login_tokens').run();
+    for (let i = 0; i < 5; i++) {
+      await requestLogin({ email: 'mnogo@example.kg', origin: 'https://liberterra.kg' });
+    }
+    await throws('а шестая попытка входа за час по-прежнему отклонена',
+      () => requestLogin({ email: 'mnogo@example.kg', origin: 'https://liberterra.kg' }),
+      Invalid);
+
+    await loginAs(db, anna);
+
+    // -----------------------------------------------------------------
+    // Задачу можно поставить коллеге и передать коллеге
+    // -----------------------------------------------------------------
+    const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const colleagues = await approvedColleagues();
+    check('список коллег отдаёт одобренных', colleagues.some((c) => c.id === vera));
+    check('и не предлагает передать самому себе',
+      !colleagues.some((c) => c.id === anna));
+    // Имя и агентство — и больше ничего. Список видит любой агент, а
+    // телефоны коллег в выпадающем списке не нужны никому.
+    const colleagueKeys = Object.keys(colleagues[0] ?? {}).sort().join(',');
+    check('и только имя, без почты и телефона',
+      colleagueKeys === 'full_name,id', colleagueKeys);
+
+    // Постановка на коллегу: агентство так и работает.
+    const forVera = await createActivity({
+      kind: 'task', entity_type: 'object', entity_id: forSale.id,
+      body: 'показать квартиру вместо меня', due_at: nextWeek,
+      agent_id: vera,
+    });
+    check('задачу можно поставить на коллегу', forVera.agent_id === vera);
+
+    // Ради чего всё: задача должна появиться в списке дел ТОГО, на кого
+    // поставлена, а не того, кто поставил. Иначе коллега о ней не узнает.
+    await loginAs(db, vera);
+    check('и она появилась в списке дел коллеги',
+      (await myActivities()).some((t) => t.id === forVera.id));
+    await loginAs(db, anna);
+    check('а в моём списке её нет',
+      !(await myActivities()).some((t) => t.id === forVera.id));
+
+    const assignAudit = await db
+      .prepare(`select diff from audit_log where entity_type = 'activities'
+                 and entity_id = ? order by id desc limit 1`)
+      .bind(forVera.id).first<{ diff: string }>();
+    check('в журнале видно, что задачу выдал один, а делает другой',
+      String(assignAudit?.diff ?? '').includes(vera));
+
+    // Выдуманный и неодобренный — отказ. Проверка значения живёт в слое
+    // доступа: до сих пор agent_id никто не проверял, потому что из
+    // браузера он был недоступен.
+    await throws('на выдуманного агента задачу не поставить',
+      () => createActivity({
+        kind: 'task', entity_type: 'object', entity_id: forSale.id,
+        due_at: nextWeek, agent_id: 'нет-такого',
+      }), NotFound);
+
+    await db.prepare(`update agents set status = 'blocked' where id = ?`).bind(vera).run();
+    await throws('на заблокированного — тоже отказ',
+      () => createActivity({
+        kind: 'task', entity_type: 'object', entity_id: forSale.id,
+        due_at: nextWeek, agent_id: vera,
+      }), Invalid);
+    check('и заблокированного нет в списке коллег',
+      !(await approvedColleagues()).some((c) => c.id === vera));
+    await db.prepare(`update agents set status = 'approved' where id = ?`).bind(vera).run();
+
+    // Передача: напоминание обязано уехать за задачей.
+    const myTask = await createActivity({
+      kind: 'task', entity_type: 'object', entity_id: forSale.id,
+      body: 'съездить на замеры', due_at: nextWeek,
+    });
+    check('задача по умолчанию на себе', myTask.agent_id === anna);
+
+    await db.prepare(
+      `insert into notifications (id, agent_id, activity_id, kind, status, body, created_at)
+       values (?, ?, ?, 'due_soon', 'pending', 'съездить на замеры', ?)`,
+    ).bind('n-reassign', anna, myTask.id, new Date().toISOString()).run();
+
+    const moved = await reassignActivity(myTask.id, vera);
+    check('задача передана', moved.agent_id === vera);
+
+    // Вот ради чего всё: напоминание хранит агента отдельной колонкой, и
+    // без переписывания очереди «позвоните клиенту» ушло бы прежнему
+    // владельцу по задаче, которой у него уже нет.
+    const movedNote = await db.prepare('select agent_id from notifications where id = ?')
+      .bind('n-reassign').first<{ agent_id: string }>();
+    check('и напоминание уехало за ней',
+      movedNote?.agent_id === vera, `осталось на ${movedNote?.agent_id}`);
+
+    // Уже отправленное напоминание не переписывается: его агент — факт о
+    // прошлом, и правка была бы подделкой истории.
+    await db.prepare(
+      `insert into notifications (id, agent_id, activity_id, kind, status, body, created_at, sent_at)
+       values (?, ?, ?, 'overdue', 'sent', 'просрочено', ?, ?)`,
+    ).bind('n-sent', vera, myTask.id, new Date().toISOString(), new Date().toISOString()).run();
+    await loginAs(db, vera);
+    await reassignActivity(myTask.id, anna);
+    const sentNote = await db.prepare('select agent_id from notifications where id = ?')
+      .bind('n-sent').first<{ agent_id: string }>();
+    check('отправленное напоминание осталось на прежнем агенте',
+      sentNote?.agent_id === vera, `стало ${sentNote?.agent_id}`);
+
+    // Передавать может тот, на ком задача, или админ. Иначе чужую задачу
+    // можно спихнуть любому: пришёл, нашёл запись, переписал владельца.
+    await loginAs(db, vera);
+    await throws('чужую задачу коллега не передаёт',
+      () => reassignActivity(myTask.id, vera), Forbidden);
+
+    await loginAs(db, anna);
+    const noop = await reassignActivity(myTask.id, anna);
+    check('передача себе же ничего не меняет', noop.agent_id === anna);
+
+    await loginAs(db, anna);
+
+    // -----------------------------------------------------------------
     // Публичный каталог: чего в витрине быть не должно
     // -----------------------------------------------------------------
     await loginAs(db, anna);
@@ -799,6 +1210,71 @@ export default {
       (await catalogObject(hidden.id)) === null);
     check('опубликованный по прямой ссылке отдаётся',
       (await catalogObject(shown.id))?.id === shown.id);
+
+    // -----------------------------------------------------------------
+    // Агент на публичной карточке
+    // -----------------------------------------------------------------
+    // Витрина годами не отдавала об агенте ничего. Теперь отдаёт четыре
+    // поля — и ни одним больше. Проверяется прежде всего то, чего в
+    // выдаче быть НЕ должно: утечка отсюда необратима, страницу видит
+    // любой.
+
+    await loginAs(db, anna);
+    await updateProfile({ works_since: 2015, certificate_no: 'КР-777' });
+
+    const shownAgent = await catalogAgent(shown.id);
+    check('витрина называет агента, ведущего объект',
+      shownAgent?.full_name === (await getAgent(anna))?.full_name);
+    check('стаж отдаётся годом начала', shownAgent?.works_since === 2015);
+
+    // Главное: непроверенный сертификат наружу не уходит вовсе.
+    check('незаверенный сертификат витрина не отдаёт',
+      shownAgent?.certificate_no === null,
+      `просочилось: ${shownAgent?.certificate_no}`);
+
+    await confirmAgentCertificate(anna, true);
+    check('подтверждённый — отдаёт',
+      (await catalogAgent(shown.id))?.certificate_no === 'КР-777');
+
+    // Снял админ подтверждение — поле исчезает снова.
+    await confirmAgentCertificate(anna, false);
+    check('снятое подтверждение убирает номер из выдачи',
+      (await catalogAgent(shown.id))?.certificate_no === null);
+
+    // Состав выдачи. Та же проверка, что защищает объекты витрины, и по
+    // той же причине: сюда легко дописать «ещё одно поле».
+    const agentKeys = Object.keys((await catalogAgent(shown.id)) ?? {});
+    const forbiddenAgent = ['phone', 'email', 'id', 'telegram_id', 'role',
+      'status', 'organization_id', 'certificate_confirmed'];
+    check('в выдаче агента нет ни телефона, ни почты, ни идентификатора',
+      forbiddenAgent.every((k) => !agentKeys.includes(k)),
+      `просочилось: ${agentKeys.join(', ')}`);
+
+    // А в самой таблице эти колонки есть — иначе проверка была бы пустой.
+    const agentRow = await db.prepare('select * from agents where id = ?')
+      .bind(anna).first<Record<string, unknown>>();
+    check('а в таблице агентов эти колонки есть',
+      Boolean(agentRow) && 'phone' in (agentRow ?? {}) && 'email' in (agentRow ?? {}));
+
+    // Неопубликованный объект агента не раскрывает.
+    //
+    // Проверять на `hidden` было бы самообманом: у него нет мандата, и
+    // соединение пусто независимо от фильтра по публикации — проверка
+    // проходила бы, даже если фильтр убрать. Поэтому заводим объект
+    // С МАНДАТОМ, но без публикации: только так видно, что дело в
+    // состоянии объекта, а не в отсутствии договора.
+    const draftWithMandate = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Черновиковая 1',
+      price_minor: 1_500_000,
+    });
+    await createMandate({ object_id: draftWithMandate.id, kind: 'non_exclusive' });
+
+    check('у черновика есть активный мандат — значит проверка не пустая',
+      Boolean(await activeMandateOf(draftWithMandate.id)));
+    check('но агента витрина по нему не отдаёт',
+      (await catalogAgent(draftWithMandate.id)) === null);
+
+    await updateProfile({ works_since: null, certificate_no: null });
 
     // -----------------------------------------------------------------
     // Фид для площадок
@@ -1005,6 +1481,82 @@ export default {
       centre(oshZones) === 1);
     check('чужой район в чужом городе не появляется',
       !oshZones.some((z) => z.zone === 'Чүй'));
+
+    // -----------------------------------------------------------------
+    // Карточка агента: стаж, сертификат, аватарка
+    // -----------------------------------------------------------------
+    // Эти поля видит КЛИЕНТ, и потому сертификат устроен как агентство:
+    // агент заявляет, админ сверяет. Непроверенное утверждение от имени
+    // агентства — обман, даже если агент не хотел обманывать.
+
+    await loginAs(db, vera);
+    await updateProfile({ works_since: 2019, certificate_no: 'КР-12345' });
+
+    const veraCard = await getAgent(vera);
+    check('стаж хранится годом начала, а не числом лет',
+      veraCard?.works_since === 2019);
+    check('номер сертификата записан', veraCard?.certificate_no === 'КР-12345');
+    check('но не подтверждён сам собой', veraCard?.certificate_confirmed === 0);
+
+    // Год из будущего — не стаж, а опечатка.
+    await throws('год начала из будущего отвергается',
+      () => updateProfile({ works_since: new Date().getUTCFullYear() + 1 }), Invalid);
+    await throws('год до 1990 отвергается',
+      () => updateProfile({ works_since: 1980 }), Invalid);
+
+    // Подтверждает только админ.
+    await throws('агент не подтверждает свой сертификат сам',
+      () => confirmAgentCertificate(vera, true), Forbidden);
+
+    await loginAs(db, anna);
+    await confirmAgentCertificate(vera, true);
+    check('админ подтверждает сертификат',
+      (await getAgent(vera))?.certificate_confirmed === 1);
+
+    // ГЛАВНОЕ. Порядок обходится в два приёма: вписать настоящий номер,
+    // дождаться отметки, подменить на любой другой — и остаться с
+    // галочкой. Смена номера обязана сбрасывать подтверждение.
+    await loginAs(db, vera);
+    await updateProfile({ certificate_no: 'КР-99999' });
+    const reclaimed = await getAgent(vera);
+    check('смена номера сбрасывает подтверждение',
+      reclaimed?.certificate_no === 'КР-99999'
+      && reclaimed?.certificate_confirmed === 0,
+      `подтверждение осталось ${reclaimed?.certificate_confirmed}`);
+
+    // Пустое поле подтверждать нечего: иначе отметка повиснет на пустоте,
+    // а номер впишут потом.
+    await updateProfile({ certificate_no: null });
+    await loginAs(db, anna);
+    await throws('пустой сертификат не подтверждается',
+      () => confirmAgentCertificate(vera, true), Invalid);
+
+    // Аватарка. Ключ детерминированный: новая затирает старую, а не
+    // копится рядом.
+    await loginAs(db, vera);
+    const avaJpeg = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4])]);
+    const ava = await putAvatar(avaJpeg);
+    check('аватарка лежит по имени агента', ava.key === `avatars/${vera}.jpg`);
+    check('ключ записан в карточку агента',
+      (await getAgent(vera))?.avatar_key === ava.key);
+    check('аватарка отдаётся посетителю',
+      (await readPhoto(ava.key))?.type === 'image/jpeg');
+
+    const avaPng = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10])]);
+    const ava2 = await putAvatar(avaPng);
+    check('другой формат не плодит вторую аватарку',
+      ava2.key === `avatars/${vera}.png`
+      && (await readPhoto(ava.key)) === null);
+
+    await throws('не-картинка аватаркой не становится',
+      () => putAvatar(new Blob(['<?php ?>'])), Invalid);
+
+    await deleteAvatar();
+    check('аватарка убирается и из хранилища, и из карточки',
+      (await readPhoto(ava2.key)) === null
+      && (await getAgent(vera))?.avatar_key === null);
+
+    await loginAs(db, anna);
 
     // -----------------------------------------------------------------
     // Привязка Telegram агентом самостоятельно
@@ -1303,7 +1855,7 @@ export default {
     await loginAs(db, vera);
     const veraContact = await createContact({ name: 'Клиент Веры', phone: '0500 44 55 66' });
 
-    const veraSees = await contactList();
+    const veraSees = (await contactList()).rows;
     check('чужих контактов в списке нет',
       !veraSees.some((c) => c.id === annaContact.id),
       `видно ${veraSees.length} контактов`);
@@ -1312,7 +1864,7 @@ export default {
 
     // Объект виден всем — его ведёт коллега, это нормально, — но имя
     // собственника и право правки нет.
-    const veraObjects = await objectList();
+    const veraObjects = (await objectList()).rows;
     const foreign = veraObjects.find((o) => o.id === annaObject.id);
     check('чужой объект в списке виден', Boolean(foreign));
     check('имя собственника чужого объекта закрыто',
@@ -1320,7 +1872,7 @@ export default {
     check('править чужой объект нельзя', foreign?.can_edit === false);
 
     await loginAs(db, anna);
-    const annaObjects = await objectList();
+    const annaObjects = (await objectList()).rows;
     const own = annaObjects.find((o) => o.id === annaObject.id);
     check('своего собственника видно', own?.owner_name === 'Клиент Анны-2');
     check('свой объект править можно', own?.can_edit === true);
@@ -1345,7 +1897,7 @@ export default {
     await loginAs(db, boris);
     await db.prepare(`update agents set status = 'approved' where id = ?`).bind(boris).run();
     await loginAs(db, boris);
-    const needs = await requirementList();
+    const needs = (await requirementList()).rows;
     const someoneElse = needs.find((r) => r.agent_id !== boris);
     check('чужая потребность видна',
       needs.length > 0 && someoneElse !== undefined);

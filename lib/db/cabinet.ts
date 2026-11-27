@@ -5,6 +5,8 @@ import { fromMinor } from './money';
 import { commissionShares, commissionTotal, parseRule } from './commission';
 import { contactVisible, dealParty, objectEditable } from './visibility';
 import { searchText } from './normalize';
+import { PAGE_SIZE } from '../list-params';
+import { looksLikeSameName, nameKey } from '../contact-match';
 
 /**
  * Запросы кабинета: списки и карточки.
@@ -25,6 +27,29 @@ import { searchText } from './normalize';
 
 type Params = (string | number)[];
 
+
+
+/**
+ * Окно страницы.
+ *
+ * Числа подставляются в текст запроса, а не параметрами: индексы ?n в этих
+ * запросах считаются вручную, и ещё два сдвинули бы всю нумерацию. Оба
+ * значения целые и обрезаны по границам, подставить через них нечего.
+ *
+ * Верхняя граница размера страницы — 5000. Столько берёт выгрузка в CSV:
+ * файл должен содержать весь список, а не его первую страницу. Страницы
+ * кабинета просят двадцать, и граница защищает не от злого умысла, а от
+ * случайного большого числа в адресе: размер приходит из кода, а не из
+ * строки запроса.
+ */
+function limitOffset(page?: number | null, perPage?: number | null) {
+  const size = Math.min(Math.max(Math.trunc(perPage ?? PAGE_SIZE) || PAGE_SIZE, 1), 5000);
+  const p = Math.min(Math.max(Math.trunc(page ?? 1) || 1, 1), 100_000);
+  return `limit ${size} offset ${(p - 1) * size}`;
+}
+
+/** Страница списка: сами строки и сколько их всего под фильтром. */
+export type Page<T> = { rows: T[]; total: number };
 
 /**
  * Порядок строк списка.
@@ -82,7 +107,10 @@ export async function contactList(
   search?: string | null,
   sort?: string | null,
   dir?: 'asc' | 'desc',
-): Promise<ContactListItem[]> {
+  page?: number | null,
+  role?: string | null,
+  perPage?: number | null,
+): Promise<Page<ContactListItem>> {
   const me = await asker();
   const visible = contactVisible('c', me.id, me.admin);
 
@@ -90,18 +118,37 @@ export async function contactList(
   let filter = '';
 
   if (search?.trim()) {
-    filter = 'and (lower(c.name) like ?2 or exists (select 1 from contact_phones cp'
-           + ' where cp.contact_id = c.id and cp.phone_normalized like ?3))';
-    const text = search.trim().toLowerCase();
-    params.push(`%${text}%`, `%${text.replace(/\D/g, '')}%`);
+    // По нормализованной колонке, а не по lower(c.name): lower() в SQLite
+    // не приводит кириллицу, и поиск «орозов» не находил «Орозов».
+    const text = search.trim();
+    const digits = text.replace(/\D/g, '');
+
+    // Условие по телефону добавляется ТОЛЬКО когда в запросе есть цифры.
+    // Иначе `digits` пусто, шаблон превращается в `%%`, и он совпадает с
+    // любым номером — поиск по имени отдавал всех, у кого есть телефон.
+    filter = digits
+      ? 'and (c.search_text like ?2 or exists (select 1 from contact_phones cp'
+        + ' where cp.contact_id = c.id and cp.phone_normalized like ?3))'
+      : 'and c.search_text like ?2';
+
+    params.push(`%${searchText(text)}%`);
+    if (digits) params.push(`%${digits}%`);
+  }
+
+  // Роль — внутри JSON-массива ролей. Отбор здесь, а не на странице: иначе
+  // фильтровалась бы только текущая страница, и счётчик врал бы.
+  if (role?.trim()) {
+    filter += ` and c.roles like ?${params.length + 1}`;
+    params.push(`%"${role.trim()}"%`);
   }
 
   const rows = await all<Omit<ContactListItem, 'roles' | 'mine'> & {
-    roles: string; mine: number;
+    roles: string; mine: number; total_count: number;
   }>(
     `select c.id, c.kind, c.name, c.telegram, c.source, c.roles, c.note,
             c.created_at, c.owner_agent_id,
             ag.full_name as owner_name,
+            count(*) over () as total_count,
             (c.owner_agent_id = ?1) as mine,
             (select group_concat(cp.phone, ', ') from contact_phones cp
               where cp.contact_id = c.id) as phones,
@@ -119,15 +166,18 @@ export async function contactList(
         objects: 'objects_count',
         requirements: 'requirements_count',
         source: 'c.source',
-      }, 'c.created_at desc', sort, dir)} limit 200`,
+      }, 'c.created_at desc', sort, dir)} ${limitOffset(page, perPage)}`,
     ...params,
   );
 
-  return rows.map((r) => ({
-    ...r,
-    roles: jsonArray<string>(r.roles),
-    mine: r.mine === 1,
-  }));
+  return {
+    total: rows[0]?.total_count ?? 0,
+    rows: rows.map((r) => ({
+      ...r,
+      roles: jsonArray<string>(r.roles),
+      mine: r.mine === 1,
+    })),
+  };
 }
 
 /** Объекты контакта: что он продаёт или сдаёт. */
@@ -162,14 +212,38 @@ export async function contactDuplicates(): Promise<Array<{
 }>> {
   const me = await asker();
 
-  return all(
-    `select a.id as a_id, a.name as a_name, b.id as b_id, b.name as b_name
-       from contacts a join contacts b
-         on lower(trim(a.name)) = lower(trim(b.name)) and a.id < b.id
-      where a.owner_agent_id = ?1 and b.owner_agent_id = ?1
-      order by a.name limit 50`,
+  // Сравнение общее с duplicatesOf — `looksLikeSameName`. Отдельное
+  // правило здесь означало бы, что список пар и подсказка на карточке
+  // расходятся: в одном месте дубликат есть, в другом нет.
+  const mine = await all<{ id: string; name: string }>(
+    `select id, name from contacts where owner_agent_id = ?1
+      order by name limit ${DUPLICATE_SCAN_LIMIT}`,
     me.id,
   );
+
+  // Перебор только внутри групп по фамилии: без этого на тысяче контактов
+  // вышло бы полмиллиона сравнений ради пятидесяти строк.
+  const bySurname = new Map<string, Array<{ id: string; name: string }>>();
+  for (const c of mine) {
+    const key = nameKey(c.name).split(' ')[0] ?? '';
+    if (!key) continue;
+    const group = bySurname.get(key);
+    if (group) group.push(c); else bySurname.set(key, [c]);
+  }
+
+  const pairs: Array<{ a_id: string; a_name: string; b_id: string; b_name: string }> = [];
+  for (const group of bySurname.values()) {
+    for (let i = 0; i < group.length && pairs.length < 50; i++) {
+      for (let j = i + 1; j < group.length && pairs.length < 50; j++) {
+        const a = group[i]!;
+        const b = group[j]!;
+        if (looksLikeSameName(a.name, b.name)) {
+          pairs.push({ a_id: a.id, a_name: a.name, b_id: b.id, b_name: b.name });
+        }
+      }
+    }
+  }
+  return pairs;
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +293,9 @@ export async function objectList(query: {
   agentId?: string | null;
   sort?: string | null;
   dir?: 'asc' | 'desc';
-} = {}): Promise<ObjectListItem[]> {
+  page?: number | null;
+  perPage?: number | null;
+} = {}): Promise<Page<ObjectListItem>> {
   const me = await asker();
   const editable = objectEditable('o', me.id, me.admin);
   const visible = contactVisible('oc', me.id, me.admin);
@@ -267,7 +343,7 @@ export async function objectList(query: {
   const rows = await all<
     Omit<ObjectListItem, 'can_edit' | 'contract_confirmed' | 'commission_total'> & {
       can_edit: number; contract_confirmed: number | null;
-      price_minor: number; commission_rule: string | null;
+      price_minor: number; commission_rule: string | null; total_count: number;
     }
   >(
     `select o.id, o.kind, o.deal_type, o.address, o.city, o.zone, o.rooms, o.area,
@@ -291,7 +367,10 @@ export async function objectList(query: {
               limit 1) as owner_name,
             (${editable.sql}) as can_edit,
             (select count(*) from leads l
-              where l.object_id = o.id and l.status = 'new') as leads_new
+              where l.object_id = o.id and l.status = 'new') as leads_new,
+            -- Сколько объектов под этим фильтром всего. Окно считается до
+            -- limit, поэтому второй запрос за числом не нужен.
+            count(*) over () as total_count
        from objects o
        left join mandates m on m.object_id = o.id and m.status = 'active'
        left join agents la on la.id = m.listing_agent_id
@@ -306,11 +385,14 @@ export async function objectList(query: {
         matches: 'matches_count',
         agent: 'responsible_name',
         actual: 'o.actual_at',
-      }, 'o.actual_at desc', query.sort, query.dir)} limit 200`,
+      }, 'o.actual_at desc', query.sort, query.dir)}
+      ${limitOffset(query.page, query.perPage)}`,
     ...params,
   );
 
-  return rows.map((r) => ({
+  return {
+    total: rows[0]?.total_count ?? 0,
+    rows: rows.map((r) => ({
     ...r,
     can_edit: r.can_edit === 1,
     contract_confirmed: r.contract_confirmed === 1,
@@ -321,7 +403,8 @@ export async function objectList(query: {
     commission_total: fromMinor(
       commissionTotal(r.deal_type, r.price_minor, parseRule(r.commission_rule)),
     ),
-  }));
+    })),
+  };
 }
 
 /** Одна карточка контакта — с той же видимостью, что и список. */
@@ -367,19 +450,63 @@ export async function contactPhoneList(contactId: string) {
   const me = await asker();
   const visible = contactVisible('c', me.id, me.admin);
 
-  return all<{ id: string; phone: string; label: string | null; is_primary: number }>(
+  const rows = await all<{
+    id: string; phone: string; label: string | null; is_primary: number;
+  }>(
     `select cp.id, cp.phone, cp.label, cp.is_primary
        from contact_phones cp join contacts c on c.id = cp.contact_id
       where cp.contact_id = ?2 and ${visible.sql}
       order by cp.is_primary desc, cp.created_at`,
     me.id, contactId,
   );
+
+  // 0 и 1 превращаются в признак здесь, как и в остальных запросах: в
+  // браузер должно приходить то, что страница объявляет типом.
+  return rows.map((r) => ({ ...r, is_primary: r.is_primary === 1 }));
 }
 
-/** Пара дубликатов для конкретной записи. */
+/**
+ * Кандидаты в дубликаты для конкретной записи.
+ *
+ * Сравнение живёт в `looksLikeSameName`, а не в запросе, и это не вопрос
+ * удобства. `lower()` в SQLite не трогает кириллицу — проверено запросом
+ * к боевой базе, `lower('ОРОЗОВ Нурлан')` возвращает строку как есть, —
+ * поэтому прежнее `lower(a.name) = lower(b.name)` для русских имён
+ * сравнивало С УЧЁТОМ регистра и одного человека, записанного капсом,
+ * дубликатом не считало. Плюс «Орозов Н.» на SQL не выразить вовсе.
+ *
+ * Цена решения: имена своих контактов читаются целиком. Предел в тысячу
+ * назван прямо, а не подразумевается: на масштабе агентства этого с
+ * запасом хватает, а молчаливое усечение означало бы, что дубликат
+ * иногда не находится и никто не знает почему.
+ */
+const DUPLICATE_SCAN_LIMIT = 1000;
+
 export async function duplicatesOf(contactId: string) {
   const me = await asker();
 
+  const self = await one<{ name: string }>(
+    'select name from contacts where id = ? and owner_agent_id = ?',
+    contactId, me.id,
+  );
+  if (!self) return [];
+
+  const mine = await all<{ id: string; name: string }>(
+    `select id, name from contacts
+      where owner_agent_id = ?1 and id <> ?2
+      order by created_at limit ${DUPLICATE_SCAN_LIMIT}`,
+    me.id, contactId,
+  );
+
+  const hits = mine.filter((c) => looksLikeSameName(self.name, c.name)).slice(0, 20);
+  if (hits.length === 0) return [];
+
+  // Владелец проверяется и в выборке имён выше, и в запросе ниже. Это
+  // намеренный дубль: снятие одной из двух проверок прогон не валит — и
+  // это проверено мутацией, — но каждая из них стоит на пути к чужому
+  // телефону, который подтягивается следующим запросом. Одна проверка
+  // здесь была бы ровно одной опечаткой до утечки.
+  const marks = hits.map(() => '?').join(', ');
   return all<{
     other_id: string; other_name: string;
     other_phones: string | null; other_requirements: number;
@@ -389,11 +516,10 @@ export async function duplicatesOf(contactId: string) {
               where cp.contact_id = b.id) as other_phones,
             (select count(*) from requirements r where r.contact_id = b.id)
               as other_requirements
-       from contacts a join contacts b
-         on lower(trim(a.name)) = lower(trim(b.name)) and a.id <> b.id
-      where a.id = ?2 and a.owner_agent_id = ?1 and b.owner_agent_id = ?1
-      limit 20`,
-    me.id, contactId,
+       from contacts b
+      where b.id in (${marks}) and b.owner_agent_id = ?
+      order by b.created_at`,
+    ...hits.map((c) => c.id), me.id,
   );
 }
 
@@ -588,7 +714,9 @@ export async function requirementList(query: {
   mine?: boolean;
   sort?: string | null;
   dir?: 'asc' | 'desc';
-} = {}): Promise<RequirementListItem[]> {
+  page?: number | null;
+  perPage?: number | null;
+} = {}): Promise<Page<RequirementListItem>> {
   const me = await asker();
   const visible = contactVisible('c', me.id, me.admin);
 
@@ -604,14 +732,15 @@ export async function requirementList(query: {
   if (query.zone)   { where.push(`r.zones like ?${++n}`); params.push(`%"${query.zone}"%`); }
 
   if (query.q?.trim()) {
-    where.push(`lower(coalesce(r.requirements_text, '')) like ?${++n}`);
-    params.push(`%${query.q.trim().toLowerCase()}%`);
+    // По нормализованной колонке — та же причина, что и у контактов.
+    where.push(`r.search_text like ?${++n}`);
+    params.push(`%${searchText(query.q)}%`);
   }
 
   if (query.mine) where.push('r.agent_id = ?1');
 
   const rows = await all<Omit<RequirementListItem, 'zones' | 'rooms' | 'mine'> & {
-    zones: string; rooms: string; mine: number;
+    zones: string; rooms: string; mine: number; total_count: number;
   }>(
     `select r.id, r.deal_type,
             r.budget_min_minor / 100.0 as budget_min,
@@ -628,7 +757,8 @@ export async function requirementList(query: {
             (select count(*) from matches mt where mt.requirement_id = r.id
                and mt.status = 'showing_done') as showings_count,
             (select count(*) from deals dl where dl.requirement_id = r.id)
-              as deals_count
+              as deals_count,
+            count(*) over () as total_count
        from requirements r
        left join agents ag on ag.id = r.agent_id
       where ${where.join(' and ')}
@@ -640,16 +770,20 @@ export async function requirementList(query: {
         matches: 'matches_count',
         showings: 'showings_count',
         deadline: 'r.deadline',
-      }, 'r.updated_at desc', query.sort, query.dir)} limit 200`,
+      }, 'r.updated_at desc', query.sort, query.dir)}
+      ${limitOffset(query.page, query.perPage)}`,
     ...params,
   );
 
-  return rows.map((r) => ({
-    ...r,
-    zones: jsonArray<string>(r.zones),
-    rooms: jsonArray<number>(r.rooms),
-    mine: r.mine === 1,
-  }));
+  return {
+    total: rows[0]?.total_count ?? 0,
+    rows: rows.map((r) => ({
+      ...r,
+      zones: jsonArray<string>(r.zones),
+      rooms: jsonArray<number>(r.rooms),
+      mine: r.mine === 1,
+    })),
+  };
 }
 
 /** Карточка потребности: бюджет в основных единицах, клиент по инварианту 4. */
@@ -1144,11 +1278,16 @@ export async function cabinetCounters() {
  * снять объект с публикации агент может, а читать телефоны его заявителей
  * нет.
  */
-export async function leadFeed(status?: string | null): Promise<Array<{
+export type LeadFeedItem = {
   id: string; object_id: string; name: string; phone: string;
   message: string | null; status: string; created_at: string;
   agent_id: string | null; address: string | null; agent_name: string | null;
-}>> {
+};
+
+export async function leadFeed(
+  status?: string | null,
+  page?: number | null,
+): Promise<Page<LeadFeedItem>> {
   const me = await asker();
   const editable = objectEditable('o', me.id, me.admin);
 
@@ -1156,17 +1295,20 @@ export async function leadFeed(status?: string | null): Promise<Array<{
   let filter = '';
   if (status) { filter = 'and l.status = ?2'; params.push(status); }
 
-  return all(
+  const rows = await all<LeadFeedItem & { total_count: number }>(
     `select l.id, l.object_id, l.name, l.phone, l.message, l.status,
             l.created_at, l.agent_id,
-            o.address, ag.full_name as agent_name
+            o.address, ag.full_name as agent_name,
+            count(*) over () as total_count
        from leads l
        join objects o on o.id = l.object_id
        left join agents ag on ag.id = l.agent_id
       where ${editable.sql} ${filter}
-      order by l.created_at desc limit 100`,
+      order by l.created_at desc ${limitOffset(page)}`,
     ...params,
   );
+
+  return { total: rows[0]?.total_count ?? 0, rows };
 }
 
 /** Напоминания агента — для страницы задач. */

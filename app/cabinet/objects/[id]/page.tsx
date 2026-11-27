@@ -6,7 +6,6 @@ import {
 import { approvedColleagues } from '@/lib/db/agents';
 import { canEditObject } from '@/lib/db/access';
 import { Activities, type ActivityRow } from '../../Activities';
-import type { ObjectMatch } from '@/lib/types';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
 import { ObjectActions } from '../ObjectActions';
@@ -51,7 +50,7 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
 
   if (!object) notFound();
 
-  const rows = matches as unknown as ObjectMatch[];
+  const rows = matches;
   const alreadyMatched = new Set(rows.map((r) => r.requirement_id));
 
   const options = requirements
@@ -196,6 +195,7 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
         entityType="object"
         entityId={object.id}
         rows={(activities ?? []) as ActivityRow[]}
+        colleagues={(colleagues ?? []) as Colleague[]}
       />
 
       <h2>Создать подбор</h2>

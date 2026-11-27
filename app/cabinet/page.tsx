@@ -32,7 +32,8 @@ export default async function CabinetHome() {
   const [n, tasks, leads, recent] = await Promise.all([
     cabinetCounters(),
     myActivities(),
-    leadFeed('new'),
+    // Со страницей: leadFeed теперь отдаёт срез со счётчиком, а не массив.
+    leadFeed('new', 1),
     recentActivity(),
   ]);
 
@@ -166,14 +167,14 @@ export default async function CabinetHome() {
             <h2>Новые заявки</h2>
             <Link className="key" href="/cabinet/leads">все заявки →</Link>
           </div>
-          {leads.length === 0 ? (
+          {leads.rows.length === 0 ? (
             <p className="key">
               Неразобранных заявок нет. Заявка приходит с карточки объекта на
               сайте — отвечать на неё норматив обещает в течение часа.
             </p>
           ) : (
             <ul className="digest">
-              {leads.slice(0, 5).map((l) => (
+              {leads.rows.slice(0, 5).map((l) => (
                 <li key={l.id}>
                   <div className="row">
                     <span className="tag">{LEAD_STATUS_RU[l.status] ?? l.status}</span>
@@ -195,8 +196,8 @@ export default async function CabinetHome() {
               ))}
             </ul>
           )}
-          {leads.length > 5 ? (
-            <p className="key">и ещё {leads.length - 5}</p>
+          {leads.total > 5 ? (
+            <p className="key">и ещё {leads.total - 5}</p>
           ) : null}
         </section>
       </div>

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { objectList, type ObjectListItem } from '@/lib/db/cabinet';
 import { approvedColleagues } from '@/lib/db/agents';
 import { currentAgent } from '@/lib/db/session';
-import { PAGE_SIZE, parseFilters, money, day } from '@/lib/list-params';
+import { PAGE_SIZE, parseFilters, exportHref, money, day } from '@/lib/list-params';
 import { Pager } from '../Pager';
 import { SortTh } from '../SortTh';
 
@@ -43,24 +43,30 @@ export default async function ObjectsList({
   const agentId = f.src && f.src.includes('-') ? f.src : null;
 
   let rows: ObjectListItem[] = [];
+  let total = 0;
   let error: string | null = null;
 
   try {
-    rows = await objectList({
+    ({ rows, total } = await objectList({
       state: f.state, deal: f.deal, zone: f.zone, q: f.q,
-      source, agentId, sort: f.sort, dir: f.dir,
-    });
+      source, agentId, sort: f.sort, dir: f.dir, page: f.page,
+    }));
   } catch (e) {
     error = e instanceof Error ? e.message : 'Не удалось загрузить объекты.';
   }
 
-  const count = rows.length;
+  const count = total;
 
   return (
     <>
       <div className="head">
         <h1>Объекты</h1>
-        <Link className="btn" href="/cabinet/objects/new">Новый объект</Link>
+        <span className="actions">
+          {/* Обычная ссылка, а не Link: ответ — файл, и клиентская
+              навигация ему только мешает. */}
+          <a className="btn ghostlink" href={exportHref(BASE, f)}>CSV</a>
+          <Link className="btn" href="/cabinet/objects/new">Новый объект</Link>
+        </span>
       </div>
       <p className="sub">Всего {count ?? 0}. Собственник виден тем, кому он положен.</p>
 
@@ -110,6 +116,14 @@ export default async function ObjectsList({
               ))}
           </select>
         </label>
+        {/* Сортировка переживает фильтрацию: форма отправляется методом
+            get, и всё, чего в ней нет, из адреса пропадает. */}
+        {f.sort ? (
+          <>
+            <input type="hidden" name="sort" value={f.sort} />
+            <input type="hidden" name="dir" value={f.dir} />
+          </>
+        ) : null}
         <button type="submit">Фильтр</button>
         {f.deal || f.state || f.zone || f.q || f.src ? (
           <Link href="/cabinet/objects" className="key reset">сбросить</Link>
@@ -118,7 +132,7 @@ export default async function ObjectsList({
 
       {rows.length === 0 ? (
         <p className="empty">
-          {count === 0 && !f.deal && !f.state && !f.zone && !f.q
+          {total === 0 && !f.deal && !f.state && !f.zone && !f.q
             ? 'Объектов пока нет.'
             : 'Под эти условия ничего не подошло. Попробуйте ослабить фильтр.'}
         </p>
@@ -196,7 +210,7 @@ export default async function ObjectsList({
         </div>
       )}
 
-      <Pager base="/cabinet/objects" filters={f} total={count ?? 0} />
+      <Pager base={BASE} filters={f} total={total} />
     </>
   );
 }

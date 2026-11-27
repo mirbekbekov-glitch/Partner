@@ -201,7 +201,7 @@ export default async function Catalog({
       page: f.page,
       pageSize: CATALOG_PAGE_SIZE,
     });
-    rows = page.items as unknown as Row[];
+    rows = page.items;
     total = page.total;
   } catch {
     // Каталог должен сказать «не открылся», а не упасть белой страницей:

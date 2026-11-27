@@ -296,6 +296,9 @@ form.stack.card { max-width: 760px; }
   .tbl td[data-l='Цена'] { font-size: 16px; font-weight: 700; padding-top: 4px; }
   .tbl td[data-l='Цена']::before { font-weight: 400; }
   .tbl td:first-child { min-width: 0; }
+  /* Пустая ячейка на телефоне исчезает вместе с подписью: «Действия:» без
+     кнопок — это строка ни о чём. */
+  .tbl td:empty { display: none; }
   /* В ячейке с подписью пояснение дописывается в ту же строку, а в первой —
      остаётся отдельной строкой: там оно идёт сразу за названием, и без
      переноса слиплось бы с ним. */
@@ -347,3 +350,104 @@ form.stack.card { max-width: 760px; }
 .th-arrow { min-width: 10px; font-size: 11px; }
 .tbl th[aria-sort] { color: var(--fg); }
 .tbl th.num .th-sort { justify-content: flex-end; }
+
+/* Свободный текст в ячейке — заметка, сообщение с сайта, пожелания.
+   Ограничен по ширине: одна длинная запись иначе растянет колонку и
+   сожмёт все остальные. Переносы строк сохраняются, их автор ставил. */
+.tbl-text {
+  display: block;
+  max-width: 36ch;
+  white-space: pre-wrap;
+}
+@media (max-width: 760px) {
+  .tbl-text { max-width: none; }
+}
+
+/* Кнопки действий внутри ячейки: сверху отступа не нужно, его даёт сама
+   ячейка. На узкой колонке встают в столбик. */
+.tbl .actions { margin-top: 0; gap: 6px; }
+
+/* ── Доска сделок ────────────────────────────────────────── */
+/*
+ * Колонки одной ширины и своей высоты: сделка переезжает по этапам, и
+ * столбик, растянутый по самому длинному соседу, скрывал бы, что в нём
+ * пусто. На узком экране доска прокручивается вбок — это единственное
+ * место, где горизонтальная прокрутка уместна: она и есть доска.
+ */
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(240px, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  align-items: start;
+}
+
+.board-col {
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 10px;
+  min-height: 120px;
+}
+/* Колонка под курсором с карточкой: видно, куда она ляжет. */
+.board-col[data-over='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--sunk));
+}
+
+.board-head {
+  margin: 0 0 10px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.board-head .key { font-weight: 400; }
+.board-empty { margin: 0; color: var(--muted); font-size: 13px; }
+
+.board-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px;
+  margin-bottom: 8px;
+  box-shadow: var(--sh-sm);
+}
+.board-card[draggable='true'] { cursor: grab; }
+.board-card[data-busy='true'] { opacity: .5; }
+.board-card:last-child { margin-bottom: 0; }
+
+.board-title { display: block; font-weight: 700; margin-bottom: 4px; }
+.board-line { margin: 2px 0 0; font-size: 13px; }
+.board-money { margin: 6px 0 0; font-family: var(--mono); font-size: 14px; }
+
+/* Кнопки перехода: мышь не единственный способ двигать сделку. */
+.board-move { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.board-move button { padding: 3px 8px; font-size: 12px; }
+/* Аватарка агента: круг с ровным обрезом, чтобы вертикальные и
+   горизонтальные снимки выглядели одинаково. Без этого один агент
+   вытягивается, другой сплющивается. */
+.avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--line, #e8e8e8);
+  flex: none;
+}
+
+.avatar.none {
+  display: inline-block;
+}
+
+/* Выданная ссылка-приглашение. Поле во всю ширину: ссылка длинная, и
+   обрезанная по середине читается как сломанная. */
+.invite-out { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.invite-out input { width: 100%; font-size: 13px; }
+.invite-out .tag { margin-left: 8px; }
+
+/* Передача задачи коллеге: список и кнопка рядом, в одну строку с
+   остальными действиями. Форма своя, потому что действие своё. */
+.hand-over { display: inline-flex; align-items: center; gap: 6px; }
+.hand-over select { font-size: 13px; padding: 4px 6px; }
