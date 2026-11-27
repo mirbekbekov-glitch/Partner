@@ -2,6 +2,7 @@ import { listAgents } from '@/lib/db/agents';
 
 type Row = Awaited<ReturnType<typeof listAgents>>[number];
 import { AgentActions } from './AgentActions';
+import { InviteForm } from './InviteForm';
 
 export const metadata = { title: 'Агенты' };
 
@@ -48,6 +49,10 @@ export default async function AgentsAdminPage() {
         <p className="empty">
           Список пуст. Если вы вошли не администратором, этот экран ничего не покажет.
         </p>
+        {/* Форма нужна и здесь: пустой список — это ровно тот момент,
+            когда заводят первого агента. Без неё экран предлагал бы
+            ждать заявки, которой некому прийти. */}
+        <InviteForm />
       </>
     );
   }
@@ -59,6 +64,8 @@ export default async function AgentsAdminPage() {
         Одобрение открывает доступ к CRM. Заблокированный агент теряет доступ, но
         остаётся владельцем своих контактов и объектов — ничего не теряется.
       </p>
+
+      <InviteForm />
 
       <h2>Ждут одобрения ({pending.length})</h2>
       {pending.length === 0 ? (

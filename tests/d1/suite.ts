@@ -14,6 +14,7 @@ import { resetCookies, setCookie } from './stubs/next-headers';
 
 import { SESSION_COOKIE, currentAgent, endSession, sessionAgent } from '@/lib/db/session';
 import { completeLogin, requestLogin, revokePendingLinks } from '@/lib/db/login';
+import { inviteAgent } from '@/lib/db/invites';
 import { outbox, tokenFromLastLetter } from './stubs/email';
 import {
   confirmActual, createObject, getObject, publishObject,
@@ -755,6 +756,154 @@ export default {
       `было ${before2?.n}, стало ${after2?.n}`);
     check('прочие сессии агента остались', (after2?.n ?? 0) > 0);
     check('после выхода агента нет', (await sessionAgent()) === null);
+
+    await loginAs(db, anna);
+
+    // -----------------------------------------------------------------
+    // Приглашение агента ссылкой: письмо на бесплатном плане не дойдёт
+    // -----------------------------------------------------------------
+    outbox.length = 0;
+
+    const invite = await inviteAgent({
+      email: '  Nurlan@Example.KG ', full_name: 'Нурлан Орозов',
+      origin: 'https://liberterra.kg/',
+    });
+
+    check('адрес приведён к нижнему регистру и обрезан',
+      invite.email === 'nurlan@example.kg', `получилось ${invite.email}`);
+    check('это новый человек, а не повторная выдача', invite.existed === false);
+    check('имя записано сразу, а не почта вместо имени',
+      invite.full_name === 'Нурлан Орозов', invite.full_name);
+
+    // Письма тут нет и не должно быть: весь смысл в том, что доставку
+    // берёт на себя админ. Если письмо вдруг уйдёт — значит кто-то вернул
+    // отправку, и приглашение станет бессмысленным.
+    check('письма не отправлялось', outbox.length === 0, `ушло ${outbox.length}`);
+
+    check('ссылка абсолютная и без двойного слэша',
+      invite.link.startsWith('https://liberterra.kg/auth/enter?token='),
+      invite.link.replace(/token=.*/, 'token=…'));
+
+    const inviteToken = invite.link.split('token=')[1] ?? '';
+    const inviteStored = await db
+      .prepare('select token_hash, issued_by_agent_id from login_tokens where email = ?')
+      .bind('nurlan@example.kg')
+      .first<{ token_hash: string; issued_by_agent_id: string | null }>();
+    check('в базе лежит не сама ссылка, а хэш токена',
+      Boolean(inviteStored) && inviteStored?.token_hash !== inviteToken);
+    check('в базе записано, кто выдал', inviteStored?.issued_by_agent_id === anna);
+
+    const inviteAudit = await db
+      .prepare(`select actor_agent_id from audit_log
+                 where entity_type = 'agent_invite' order by id desc limit 1`)
+      .first<{ actor_agent_id: string | null }>();
+    check('выдача записана в журнал с именем выдавшего',
+      inviteAudit?.actor_agent_id === anna);
+
+    // Приглашённый уже числится агентом, со статусом «ожидает»: админ
+    // видит его в списке и может одобрить ДО того, как тот войдёт.
+    const invited = await db.prepare('select id, status from agents where email = ?')
+      .bind('nurlan@example.kg').first<{ id: string; status: string }>();
+    check('учётная запись заведена сразу', Boolean(invited));
+    check('и она ждёт одобрения', invited?.status === 'pending');
+
+    // Срок суточный, а не как у обычного входа: ссылку пересылают.
+    const inviteTtl = await db
+      .prepare(`select created_at, expires_at from login_tokens
+                 where email = ? order by created_at desc limit 1`)
+      .bind('nurlan@example.kg').first<{ created_at: string; expires_at: string }>();
+    const inviteHours = inviteTtl
+      ? (Date.parse(inviteTtl.expires_at) - Date.parse(inviteTtl.created_at)) / 3_600_000
+      : 0;
+    check('ссылка живёт сутки, а не пятнадцать минут',
+      inviteHours === 24, `получилось ${inviteHours} ч`);
+
+    // Самое важное: по ссылке действительно входят, и ровно один раз.
+    resetCookies();
+    const byInvite = await completeLogin(inviteToken);
+    check('по приглашению входят', byInvite.agent.email === 'nurlan@example.kg');
+    await throws('и только один раз', () => completeLogin(inviteToken), Forbidden);
+
+    await loginAs(db, anna);
+    const reinvite = await inviteAgent({
+      email: 'nurlan@example.kg', origin: 'https://liberterra.kg',
+    });
+    check('повторная выдача видит, что человек уже есть', reinvite.existed === true);
+    check('и имя не затирается пустым',
+      (await db.prepare('select full_name from agents where email = ?')
+        .bind('nurlan@example.kg').first<{ full_name: string }>())?.full_name
+        === 'Нурлан Орозов');
+
+    // Заблокированному отказ — здесь, а не на входе: иначе админ отправит
+    // ссылку, а человек увидит «доступ закрыт» и решит, что его только что
+    // отключили.
+    await db.prepare(`update agents set status = 'blocked' where email = ?`)
+      .bind('nurlan@example.kg').run();
+    await throws('заблокированному ссылку не выдают',
+      () => inviteAgent({
+        email: 'nurlan@example.kg', full_name: 'Переименованный',
+        origin: 'https://liberterra.kg',
+      }),
+      Forbidden);
+    // Отказ не должен оставлять следа. Заведение агента заодно обновляет
+    // имя, и если проверять блокировку ПОСЛЕ него, отклонённое приглашение
+    // всё равно переименовывало бы человека.
+    check('и отказ не переименовал его по пути',
+      (await db.prepare('select full_name from agents where email = ?')
+        .bind('nurlan@example.kg').first<{ full_name: string }>())?.full_name
+        === 'Нурлан Орозов');
+    check('и лишней ссылки в базе не осталось',
+      ((await db.prepare(`select count(*) as n from login_tokens
+                           where email = ? and used_at is null`)
+        .bind('nurlan@example.kg').first<{ n: number }>())?.n ?? -1) === 1);
+    await db.prepare(`update agents set status = 'approved' where email = ?`)
+      .bind('nurlan@example.kg').run();
+
+    await throws('это не похоже на почту — отказ',
+      () => inviteAgent({ email: 'не почта', origin: 'https://liberterra.kg' }), Invalid);
+
+    // Выдаёт ТОЛЬКО админ: ссылка даёт вход в чужую учётную запись.
+    await loginAs(db, vera);
+    await throws('обычный агент приглашений не выдаёт',
+      () => inviteAgent({ email: 'kto@example.kg', origin: 'https://liberterra.kg' }),
+      Forbidden);
+    resetCookies();
+    await throws('и анонимно тоже',
+      () => inviteAgent({ email: 'kto@example.kg', origin: 'https://liberterra.kg' }),
+      Forbidden);
+
+    // Приглашения НЕ съедают часовой предел самостоятельного входа.
+    // Иначе пять выдач подряд закрывали бы агенту вход на час, то есть
+    // предел бил бы по тому, кого защищает.
+    await loginAs(db, anna);
+    await db.prepare('delete from login_tokens').run();
+    for (let i = 0; i < 6; i++) {
+      await inviteAgent({ email: 'mnogo@example.kg', origin: 'https://liberterra.kg' });
+    }
+    outbox.length = 0;
+    // Через try, а не напрямую: если предел снова начнёт считать выдачи,
+    // requestLogin бросит исключение и оборвёт весь прогон раньше этой
+    // проверки — красный прогон был бы, но сказал бы «что-то упало», а не
+    // «приглашения съедают предел входа».
+    let floodedByInvites: string | null = null;
+    try {
+      await requestLogin({ email: 'mnogo@example.kg', origin: 'https://liberterra.kg' });
+    } catch (e) {
+      floodedByInvites = e instanceof Error ? e.message : String(e);
+    }
+    check('после шести приглашений агент всё равно войдёт сам',
+      floodedByInvites === null && outbox.length === 1,
+      floodedByInvites ?? `писем ушло ${outbox.length}`);
+
+    // А собственный предел при этом остался на месте: иначе проверка выше
+    // прошла бы и на сломанном счётчике.
+    await db.prepare('delete from login_tokens').run();
+    for (let i = 0; i < 5; i++) {
+      await requestLogin({ email: 'mnogo@example.kg', origin: 'https://liberterra.kg' });
+    }
+    await throws('а шестая попытка входа за час по-прежнему отклонена',
+      () => requestLogin({ email: 'mnogo@example.kg', origin: 'https://liberterra.kg' }),
+      Invalid);
 
     await loginAs(db, anna);
 
