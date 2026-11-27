@@ -255,16 +255,24 @@ export function ObjectForm({
         </div>
       </div>
 
-      {/* Район и микрорайон площадка принимает только для Бишкека. */}
+      {/* Административный район — не тот, что выше. Выше «Район» в
+          смысле «Асанбай», по нему ищут люди; здесь четыре района
+          городской администрации, и спрашивает их площадка. Разные
+          вопросы — разные поля, и разные слова на подписях.
+
+          Микрорайона здесь нет: площадка называет микрорайоном то же
+          самое, что мы называем районом, и в выгрузку уходит наш.
+          Пока поле было, агент заполнял одно и то же дважды, а
+          расходились они в первый же раз, когда он поправил одно. */}
       <div className="grid2">
-        <Pick name="district" label="Район Бишкека" values={DISTRICT}
-              value={draft?.district} />
-        <div className="field">
-          <label className="key" htmlFor="micro_district">Микрорайон</label>
-          <input id="micro_district" name="micro_district" type="text"
-                 defaultValue={draft?.micro_district ?? ''} placeholder="Асанбай" />
-        </div>
+        <Pick name="district" label="Административный район" values={DISTRICT}
+              value={draft?.district}
+              hint="Район городской администрации. Площадка спрашивает его только для Бишкека." />
       </div>
+      {/* Поля в форме нет, но правка формы не должна стирать то, что в
+          него успели вписать руками: в сохранение уходит весь набор
+          полей площадки целиком. */}
+      <input type="hidden" name="micro_district" value={draft?.micro_district ?? ''} />
 
       <div className="grid2">
         {kind === 'flat' ? (

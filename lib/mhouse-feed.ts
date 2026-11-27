@@ -201,7 +201,13 @@ function offer(item: CatalogItem, agent: string, origin: string): string {
     + tag('region', region, 6)
     + tag('town', item.city, 6)
     + tag('district', fromList(DISTRICT, item.district), 6)
-    + tag('micro-district', item.micro_district, 6)
+    // Микрорайон площадки — это наш район: «Асанбай», «6 микрорайон».
+    // Отдельного поля в карточке нет намеренно. Пока оно было, агент
+    // заполнял одно и то же дважды, а расходились эти два поля в первый
+    // же раз, когда он поправил только одно: в поиске по сайту объект
+    // стоял в Асанбае, а на площадке — в Джале. Колонка осталась ради
+    // тех объектов, где её успели заполнить руками.
+    + tag('micro-district', item.micro_district ?? item.zone, 6)
     + tag('address', item.address, 6)
     + tag('house-number', item.house_number, 6)
     + tag('latitude', item.latitude, 6)
