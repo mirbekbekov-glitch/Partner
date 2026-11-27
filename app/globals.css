@@ -699,10 +699,18 @@ main:has(.auth) { max-width: none; padding: 0; }
 .more summary::after { content: ' ▾'; }
 .more[open] summary::after { content: ' ▴'; }
 .more[open] summary { margin-bottom: 10px; }
-.console .row.sub { padding: 0; grid-template-columns: 1fr 1fr 2fr; }
+.console .row.sub { padding: 0; }
 
-.console .row { display: grid; gap: 10px; padding: 14px;
-  grid-template-columns: 1.5fr 1fr .8fr 1fr auto; }
+/* Поля пульта — потоком, а не жёсткой сеткой из пяти колонок. Состав
+   пульта меняется: город показывается только когда городов несколько,
+   район — только когда он где-то есть. При жёсткой сетке шестое поле
+   сбрасывало кнопку «Найти» на вторую строку, и пульт разъезжался.
+   Поток расставляет то, что пришло: каждое поле просит 150 px, адрес —
+   вдвое больше, кнопка занимает ровно себя. */
+.console .row { display: flex; flex-wrap: wrap; align-items: flex-end;
+  gap: 10px; padding: 14px; }
+.console .row > .cell { flex: 1 1 150px; }
+.console .row > .cell.wide { flex: 2 1 240px; }
 .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cell label { font-size: 0.75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
@@ -1017,10 +1025,8 @@ main:has(.auth) { max-width: none; padding: 0; }
 
 /* --- Узкие экраны ------------------------------------------------------- */
 @media (max-width: 1040px) {
-  .console .row { grid-template-columns: 1fr 1fr 1fr; }
-  .console .row.sub { grid-template-columns: 1fr 1fr; }
   .hero-art svg { width: 56%; opacity: .8; }
-  .go { grid-column: 1 / -1; padding: 13px; }
+  .go { flex: 1 1 100%; padding: 13px; }
   .grid { grid-template-columns: repeat(2, 1fr); }
   .detail { grid-template-columns: 1fr; }
   .aside { position: static; }
@@ -1034,7 +1040,6 @@ main:has(.auth) { max-width: none; padding: 0; }
   .stat b { font-size: 24px; }
   .stat span { font-size: 10px; letter-spacing: .06em; }
   .stat + .stat::before { display: none; }
-  .console .row, .console .row.sub { grid-template-columns: 1fr 1fr; }
   .reqconsole { padding: 16px; }
   .reqform .go { align-self: stretch; }
   .tab { padding: 11px 13px; font-size: 0.875rem; }
@@ -1092,56 +1097,6 @@ main:has(.auth) { max-width: none; padding: 0; }
   .item:hover .pic img { transform: none; }
 }
 
-/* === Схема районов ======================================================= */
-.citymap { padding-bottom: 56px; }
-.map-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
-  margin-bottom: 14px; }
-.map-head h2 { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; margin: 0; }
-
-/* План города: север сверху, горы на юге, Чүй поперёк центра. Сетка, а не
-   SVG, потому что это ссылки: их надо открывать в новой вкладке, видеть
-   фокус с клавиатуры и читать экранным диктором. */
-.plan { position: relative; display: grid; gap: 8px;
-  grid-template-columns: repeat(5, 1fr); grid-auto-rows: minmax(76px, auto);
-  background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r-lg);
-  padding: 14px 14px 30px; }
-.zone-cell { display: flex; flex-direction: column; justify-content: flex-end; gap: 2px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md);
-  padding: 10px 12px; text-decoration: none; color: var(--fg); min-width: 0;
-  transition: border-color .18s, transform .18s, box-shadow .18s; }
-.zone-cell b { font-size: 0.875rem; font-weight: 700; letter-spacing: -.01em;
-  overflow: hidden; text-overflow: ellipsis; }
-.zone-cell small { font-size: 0.9375rem; font-weight: 800; color: var(--accent);
-  letter-spacing: -.02em; }
-.zone-cell:hover { border-color: var(--accent); transform: translateY(-2px);
-  box-shadow: var(--sh-md); }
-.zone-cell[aria-current='true'] { background: var(--accent); border-color: var(--accent); }
-.zone-cell[aria-current='true'] b,
-.zone-cell[aria-current='true'] small { color: var(--accent-fg); }
-/* Район без объектов не кликается и приглушён: нажатие, после которого
-   ничего нет, — обман. */
-.zone-cell.off { background: transparent; border-color: transparent; color: var(--muted);
-  opacity: .55; cursor: default; }
-.zone-cell.off b { font-weight: 500; font-size: 0.8125rem; }
-
-.avenue { position: absolute; left: 14px; right: 14px; top: 50%; height: 1px;
-  background: var(--accent); opacity: .35; pointer-events: none; z-index: 1; }
-.avenue i { position: absolute; left: 50%; top: -9px; transform: translateX(-50%);
-  background: var(--sunk); padding: 0 8px; font-style: normal; font-size: 0.625rem;
-  font-weight: 700; letter-spacing: .14em; color: var(--muted); }
-/* Горы на юге: без них схема — просто сетка прямоугольников. */
-.ridge { position: absolute; left: 0; right: 0; bottom: 0; height: 26px;
-  pointer-events: none; }
-.ridge svg { width: 100%; height: 100%; display: block; }
-.ridge path { fill: var(--steel); opacity: .4; }
-/* Стрелка севера: без неё схема — сетка прямоугольников, с ней сразу
-   видно, что это план города и что горы внизу действительно юг. */
-.compass { position: absolute; right: 16px; top: 14px; z-index: 2; display: flex;
-  align-items: center; gap: 5px; font-size: 0.625rem; font-weight: 800;
-  letter-spacing: .14em; color: var(--muted); pointer-events: none; }
-.compass::before { content: ""; width: 0; height: 0; border-left: 4px solid transparent;
-  border-right: 4px solid transparent; border-bottom: 9px solid var(--accent); }
-
 /* === Полоса «оставьте заявку» ============================================ */
 .pitch { background: var(--ink); color: var(--on-ink); position: relative; overflow: hidden; }
 .pitch-in { display: grid; grid-template-columns: 1.05fr 1fr; gap: 44px;
@@ -1187,11 +1142,6 @@ main:has(.auth) { max-width: none; padding: 0; }
   .grid2 > .s1 { grid-column: span 1; }
   .grid2 > .s4 { grid-column: span 2; }
 
-  /* Схема на телефоне: три колонки вместо пяти, иначе подписи не влезают
-     и район перестаёт узнаваться. Порядок остаётся с севера на юг. */
-  .plan { grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(64px, auto); }
-  .zone-cell { grid-column: auto !important; grid-row: auto !important; }
-  .avenue { display: none; }
 }
 
 /* Переключатель темы: такой же тихий, как выбор языка, и рядом с ним. */
