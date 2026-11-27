@@ -758,6 +758,11 @@ main:has(.auth) { max-width: none; padding: 0; }
 .go-head { display: flex; align-items: center; gap: 9px; margin: 0;
   font-size: 0.9375rem; font-weight: 800; letter-spacing: .01em; color: var(--fg); }
 .go-row { display: flex; flex-wrap: wrap; gap: 12px; }
+/* Тише кнопок и тише строки над ними: это не призыв, а ответ на
+   невысказанный вопрос «что со мной будет, если нажму». Такие вещи
+   читают после того, как решение уже почти принято. */
+.hero-note { color: var(--muted); font-size: 0.9375rem; line-height: 1.5;
+  max-width: 46ch; margin: 2px 0 0; }
 .go-main, .go-side { display: inline-flex; align-items: center; justify-content: center;
   gap: 9px; border-radius: var(--r-full); padding: 14px 24px; font-size: 1rem;
   font-weight: 700; text-decoration: none; white-space: nowrap;

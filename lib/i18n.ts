@@ -113,7 +113,7 @@ type Dict = {
   reqOwnWhy1: string; reqOwnWhy2: string; reqOwnWhy3: string;
   reqOwnSentNote: string;
   // Первый экран: что человек может сделать и чем мы это подтверждаем
-  heroCall: string; heroAsk: string; heroOwn: string;
+  heroCall: string; heroAsk: string; heroOwn: string; heroNote: string;
   // Типы недвижимости
   kinds: Record<string, string>;
 };
@@ -246,8 +246,9 @@ const ru: Dict = {
   reqOwnWhy2: 'Объявление и фотографии сделает агент',
   reqOwnWhy3: 'Телефон увидит один агент, а не весь рынок',
   reqOwnSentNote: 'Агент перезвонит в течение часа, уточнит детали и договорится о съёмке.',
-  heroCall: 'Не нашли нужное или сами хотите сдать? Дальше работает агент.',
+  heroCall: 'Не нашли нужное или сами хотите сдать?',
   heroAsk: 'Снять или купить', heroOwn: 'Сдать или продать',
+  heroNote: 'Бесплатно — нужно только оставить заявку. Варианты подберут проверенные агенты.',
   pitchEyebrow: 'Не нашли подходящее?',
   pitchTitle: 'Опишите, что ищете — искать будут агенты',
   pitchLede: 'В каталоге только то, что уже подтверждено и свободно. Остальное агенты знают, но не публикуют: хозяин просил не выкладывать, объект ещё готовится, цена обсуждается. Заявка открывает вам этот слой.',
@@ -370,8 +371,9 @@ const ky: Dict = {
   reqOwnWhy2: 'Жарнаманы жана сүрөттөрдү агент жасайт',
   reqOwnWhy3: 'Телефонуңузду бир агент гана көрөт',
   reqOwnSentNote: 'Агент бир сааттын ичинде чалып, деталдарды тактайт жана сүрөткө тартууга макулдашат.',
-  heroCall: 'Керектүүсүн таппадыңызбы же өзүңүз ижарага бергиңиз келеби? Андан ары агент иштейт.',
+  heroCall: 'Керектүүсүн таппадыңызбы же өзүңүз ижарага бергиңиз келеби?',
   heroAsk: 'Ижарага алуу же сатып алуу', heroOwn: 'Ижарага берүү же сатуу',
+  heroNote: 'Акысыз — арыз калтырсаңыз эле болду. Варианттарды текшерилген агенттер тандайт.',
   pitchEyebrow: 'Ылайыктуусун таппадыңызбы?',
   pitchTitle: 'Эмне издеп жатканыңызды жазыңыз — агенттер издеп беришет',
   pitchLede: 'Каталогдо ырасталган жана бош объекттер гана бар. Калганын агенттер билет, бирок жарыялабайт: ээси сураган, объект даярдалып жатат, баа талкууланууда. Арыз ошол катмарды ачат.',
@@ -494,8 +496,9 @@ const en: Dict = {
   reqOwnWhy2: 'The agent writes the listing and takes the photos',
   reqOwnWhy3: 'One agent sees your number, not the whole market',
   reqOwnSentNote: 'An agent will call within an hour to check the details and arrange the photos.',
-  heroCall: 'Not finding it, or letting a place of your own? An agent takes it from there.',
+  heroCall: 'Not finding it, or letting a place of your own?',
   heroAsk: 'Rent or buy', heroOwn: 'Let or sell',
+  heroNote: 'Free — all it takes is a request. Verified agents do the searching.',
   pitchEyebrow: 'Nothing fits?',
   pitchTitle: 'Describe what you need — agents do the searching',
   pitchLede: 'The catalogue holds only what is confirmed and available. Agents know the rest but do not publish it: the owner asked them not to, the place is still being prepared, the price is under discussion. A request opens that layer to you.',
@@ -617,8 +620,9 @@ const zh: Dict = {
   reqOwnWhy2: '房源信息和照片由经纪人完成',
   reqOwnWhy3: '只有一位经纪人能看到您的号码',
   reqOwnSentNote: '经纪人将在一小时内回电，核实细节并约定拍照时间。',
-  heroCall: '没找到合适的，或者您想出租出售？后续由经纪人来办。',
+  heroCall: '没找到合适的，或者您想出租出售？',
   heroAsk: '租房或买房', heroOwn: '出租或出售',
+  heroNote: '免费——只需提交需求。由平台核验过的经纪人为您挑选。',
   pitchEyebrow: '没有合适的？',
   pitchTitle: '写下您的需求 — 由经纪人去找',
   pitchLede: '目录里只有已确认且可售的房源。其余的经纪人知道，但不公开：业主要求不发布、房子仍在准备、价格尚在商议。提交需求即可进入这一层。',
