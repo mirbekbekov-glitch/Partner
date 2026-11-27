@@ -1,14 +1,18 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { catalogCities, catalogPage, catalogZoneCounts } from '@/lib/db/catalog';
+import {
+  catalogAgentCount, catalogCities, catalogCount, catalogCurrencies, catalogPage,
+  catalogRate, catalogZoneCounts,
+} from '@/lib/db/catalog';
 import { GEO, citiesOf, regionOf, zonesOf } from '@/lib/geo';
 import {
   CATALOG_PAGE_SIZE, parseCatalogFilters, catalogHref, sortHref, hasAnyFilter,
-  firstPhoto, daysSince,
+  firstPhoto, daysSince, moneySign, priceView,
   SORTS, publicMoney, type CatalogFilters,
 } from '@/lib/catalog-params';
 import { thumbOf } from '@/lib/photo-url';
-import { t, kindName, freshWordIn, LANGS, isLang, type Lang, placeName } from '@/lib/i18n';
+import type { Money } from '@/lib/fx';
+import { t, spaceName, freshWordIn, LANGS, isLang, type Lang, placeName } from '@/lib/i18n';
 import { CatalogHeader } from '../CatalogHeader';
 import { HeroArt } from '../HeroArt';
 import { FindButton } from '../FindButton';
@@ -41,6 +45,8 @@ type Row = {
   id: string;
   kind: string;
   panoramas: { url: string; room: string; w: number; h: number }[];
+  /** Нужен для подписи вида: склад вместо «коммерческой». */
+  commercial_type: string | null;
   deal_type: 'rent' | 'sale';
   address: string;
   city: string;
@@ -55,8 +61,12 @@ type Row = {
   actual_at: string;
 };
 
-function Search({ lang, f, deal, geo }: {
+function Search({ lang, f, deal, geo, currencies, money }: {
   lang: Lang; f: CatalogFilters; deal: 'sale' | 'rent'; geo: GeoData;
+  /** Валюты каталога: одна — подписываем ею поле цены, несколько — нечем. */
+  currencies: string[];
+  /** Выбранная валюта показа, если курс известен. */
+  money: Money | null;
 }) {
   const d = t(lang);
   const up = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
@@ -89,22 +99,18 @@ function Search({ lang, f, deal, geo }: {
         {f.sort !== 'fresh' ? <input type="hidden" name="sort" value={f.sort} /> : null}
         {f.deal ? <input type="hidden" name="deal" value={f.deal} /> : null}
         <div className="row">
-          {/* Город показывается, только когда их больше одного.
-              Выбор из одного пункта — деталь, которая ничего не решает, а
-              место на пульте занимает; при этом спрятать город в складку
-              «ещё» нельзя: когда городов несколько, это первое, что
-              человек выбирает, а не уточнение к поиску. */}
-          <div className="cell wide">
-            <label htmlFor="q">{d.address}</label>
-            <input id="q" name="q" type="search" placeholder={d.addressHint}
-                   defaultValue={f.q ?? ''} autoComplete="off" />
-          </div>
-          {/* Где искать: регион, город, район — три связанных поля.
-              Район списком с поиском, а не строкой ввода: строкой
-              человек пишет «джал», «Джал-23» и «Jal», а в карточке
-              стоит «Джал», и три написания из четырёх не находили
-              ничего. Районов у города четыре десятка, и набрать «ас»
-              быстрее, чем искать «Асанбай» глазами. */}
+          {/* Где искать: регион, город, район — три связанных поля, и
+              все три списками, без строки ввода. Строкой человек пишет
+              «джал», «Джал-23» и «Jal», а в карточке стоит «Джал», и три
+              написания из четырёх не находили ничего. Районов у города
+              четыре десятка, и набрать «ас» быстрее, чем искать
+              «Асанбай» глазами.
+
+              Город показывается, только когда их больше одного: выбор из
+              одного пункта ничего не решает, а место на пульте занимает.
+              При этом спрятать город в складку «ещё» нельзя — когда
+              городов несколько, это первое, что человек выбирает, а не
+              уточнение к поиску. */}
           <GeoPick value={{ region: f.region, city: f.city, zone: f.zone }}
                    regions={geo.regions} citiesOf={geo.cities} zonesOf={geo.zones}
                    counts={geo.counts}
@@ -128,7 +134,17 @@ function Search({ lang, f, deal, geo }: {
             </select>
           </div>
           <div className="cell">
-            <label htmlFor="to">{d.priceTo}</label>
+            {/* Валюта в подписи, а не в подсказке: подсказка исчезает,
+                как только человек начинает набирать, и ровно тогда
+                вопрос «это доллары или сомы» и возникает. */}
+            {/* Валюта поля — выбранная человеком, если выбор возможен;
+                иначе единственная валюта каталога. Поле без валюты
+                оставляет гадать, вводить 800 или 70 000. */}
+            <label htmlFor="to">
+              {d.priceTo}
+              {money ? `, ${moneySign(lang, money)}`
+                : currencies.length === 1 ? `, ${moneySign(lang, currencies[0]!)}` : ''}
+            </label>
             <input id="to" name="to" type="number" min={0} step={1000} placeholder={d.priceHint}
                    inputMode="numeric" defaultValue={f.priceMax ?? ''} />
           </div>
@@ -191,6 +207,13 @@ export default async function Catalog({
   let rows: Row[] = [];
   let failed = false;
 
+  // Курс — до выборки: от него зависят и отбор по цене, и порядок.
+  // Нет курса — валюта показа не выбирается вовсе, и всё остаётся как
+  // было: цены в своей валюте, сравнение по сырым числам.
+  const fx = await catalogRate().catch(() => null);
+  const rate = fx?.som_per_unit ?? null;
+  const money: Money | null = rate ? (f.money ?? 'USD') : null;
+
   try {
     const page = await catalogPage({
       deal,
@@ -201,7 +224,8 @@ export default async function Catalog({
       rooms: f.rooms,
       priceMin: f.priceMin,
       priceMax: f.priceMax,
-      q: f.q,
+      money,
+      rate,
       sort: f.sort,
       page: f.page,
       pageSize: CATALOG_PAGE_SIZE,
@@ -220,6 +244,31 @@ export default async function Catalog({
   // пустой район — обманывать нажатие. Те же числа идут на карту города.
   // Города нужны даже когда выдача не открылась: пульт должен выглядеть
   // одинаково, иначе при сбое каталога у человека молча пропадёт фильтр.
+  // Сколько объектов в ДРУГОЙ вкладке — с теми же фильтрами.
+  //
+  // Зачем. Человек приходит на «Купить», видит ноль и уходит, хотя в
+  // аренде объект есть. Переключать вкладку за него нельзя: он мог прийти
+  // по ссылке, и подмена вкладки сделала бы ссылку неповторимой. Поэтому
+  // не подмена, а строка «а в другой вкладке сейчас N» с переходом —
+  // решает по-прежнему человек, но теперь зная.
+  const other: 'sale' | 'rent' = deal === 'sale' ? 'rent' : 'sale';
+  const otherCount = failed || rows.length > 0 ? 0 : await catalogCount({
+    deal: other, kind: f.kind, city: f.city, zone: f.zone, rooms: f.rooms,
+    priceMin: f.priceMin, priceMax: f.priceMax, money, rate,
+  }).catch(() => 0);
+
+  // Числа для первого экрана: весь каталог и все агенты, без фильтров.
+  // Фильтрованное число живёт над выдачей и меняется от нажатий; на
+  // первом экране нужно состояние дела, а не след чужого поиска.
+  const [catalogTotal, agentsTotal] = failed ? [0, 0] : await Promise.all([
+    catalogCount({}).catch(() => 0),
+    catalogAgentCount().catch(() => 0),
+  ]);
+
+  // Валюта для подписи поля «цена до». Одна на весь каталог — подписываем
+  // ею; несколько — подписывать нечем, и выбирать за человека нельзя.
+  const currencies = failed ? [] : await catalogCurrencies();
+
   const cities = failed ? [] : await catalogCities();
   const manyCities = cities.length > 1;
 
@@ -268,18 +317,62 @@ export default async function Catalog({
 
   return (
     <>
-      <CatalogHeader lang={lang} />
+      <CatalogHeader lang={lang} money={money} />
 
       <section className="hero">
         <HeroArt />
         <div className="hero-in wrap">
           <span className="eyebrow">Liberterra · {placeName(cities, d)}</span>
           <h1>{d.heroTitle} <em>{d.heroEm}</em></h1>
+          <p className="lede">{d.heroLede}</p>
+
+          {/* Два действия на первом экране, и оба — не поиск: искать можно
+              пультом, который стоит сразу ниже. Здесь то, чего пультом не
+              сделать: попросить найти то, чего в каталоге нет, и отдать
+              свой объект агенту.
+
+              Залита одна кнопка. Заявка на поиск нужна большинству тех,
+              кто дошёл до сайта, а объект приносит меньшинство — и когда
+              залиты обе, человек выбирает между ними вместо того, чтобы
+              делать своё. */}
+          <div className="hero-go">
+            <Link href={`/${lang}/request`} className="go-main">
+              {d.heroAsk}
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M3 9h12M10 4l5 5-5 5" stroke="currentColor" strokeWidth="2"
+                      strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </Link>
+            <Link href={`/${lang}/request?side=own`} className="go-side">{d.heroOwn}</Link>
+          </div>
+
+          {/* Числа показываются, только когда они есть. Пустой каталог,
+              объявивший «0 объектов», отговаривает лучше любого
+              конкурента — а молчание о числе не обманывает никого. */}
+          {catalogTotal > 0 ? (
+            <ul className="facts">
+              <li>
+                <b className="num">{catalogTotal}</b>
+                <span>{d.heroFactObjects(catalogTotal)}</span>
+              </li>
+              {agentsTotal > 0 ? (
+                <li>
+                  <b className="num">{agentsTotal}</b>
+                  <span>{d.heroFactAgents(agentsTotal)}</span>
+                </li>
+              ) : null}
+              <li>
+                <b>{d.heroFactSlaValue}</b>
+                <span>{d.heroFactSla}</span>
+              </li>
+            </ul>
+          ) : null}
         </div>
       </section>
 
       <div className="wrap">
-        <Search lang={lang} f={f} deal={deal} geo={geo} />
+        <Search lang={lang} f={f} deal={deal} geo={geo} currencies={currencies}
+                money={money} />
 
         {/* Районы строкой: самый частый первый шаг — «покажите, что есть
             в Асанбае». Это ссылки, а не украшение. */}
@@ -319,7 +412,31 @@ export default async function Catalog({
           {failed ? (
             <p className="none error">{d.catalogDown}</p>
           ) : rows.length === 0 ? (
-            <p className="none">{hasAnyFilter(f) ? d.nothingFound : d.nothingYet}</p>
+            /* Пустая выдача — развилка, а не тупик. Голая строка «ничего
+               нет» читается как неработающий сервис; здесь же сказано,
+               что делать дальше, и есть куда нажать. */
+            <div className="none-card">
+              {/* «Пока нет опубликованных объектов» рядом со строкой «а в
+                  другой вкладке сейчас 1» — прямое противоречие: значит
+                  объекты есть. Когда дело во вкладке, так и говорим. */}
+              <p className="none">
+                {hasAnyFilter(f) ? d.nothingFound
+                  : otherCount > 0 ? d.emptyTab
+                    : d.nothingYet}
+              </p>
+              {otherCount > 0 ? (
+                <p className="other-deal">
+                  {d.otherDeal(otherCount)}{' '}
+                  <Link href={catalogHref(lang, { ...f, deal: other }, 1)}>
+                    {d.otherDealGo} →
+                  </Link>
+                </p>
+              ) : null}
+              <p className="ask">{d.emptyAsk}</p>
+              <Link href={`/${lang}/request`} className="pitch-go">
+                {d.emptyAskGo}
+              </Link>
+            </div>
           ) : (
             rows.map((o, i) => {
               // В списке — миниатюра. Карточка показывает снимок размером
@@ -330,7 +447,7 @@ export default async function Catalog({
               const days = daysSince(o.actual_at);
               const fresh = freshWordIn(lang, days);
               const facade = <Facade o={o} alt={d.drawingAlt} />;
-              const kind = kindName(lang, o.kind);
+              const kind = spaceName(lang, o);
               return (
                 <Link className="item" key={o.id} href={`/${lang}/objects/${o.id}`}
                       style={{ '--i': i } as React.CSSProperties}>
@@ -355,9 +472,17 @@ export default async function Catalog({
                   <div className="info">
                     <span className="price-row">
                       <span className="price num">
-                        {publicMoney(lang, o.price, o.currency)}
+                        {priceView(lang, o.price, o.currency, money, rate).main}
                         {o.deal_type === 'rent' ? <small>{d.perMonth}</small> : null}
                       </span>
+                      {/* Цена из объявления — рядом, мелко, и только
+                          когда крупное число получено пересчётом. */}
+                      {priceView(lang, o.price, o.currency, money, rate).note ? (
+                        <span className="price-orig">
+                          {priceView(lang, o.price, o.currency, money, rate).note}
+                          {' '}{d.priceFromAd}
+                        </span>
+                      ) : null}
                       {/* Отметка подтверждения — единственная, за которой есть
                           данные: её держит инвариант 5, а не маркетинг.
                           Галочка, а не точка: «сегодня» рядом с точкой не

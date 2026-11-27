@@ -21,7 +21,7 @@ import { catalogPage, type CatalogItem } from './db/catalog';
 import { normalizePhone } from './db/normalize';
 import {
   BUILDING_TYPE, CATEGORY, COMMERCIAL_TYPE, DEAL, DISTRICT, PARKING_TYPE,
-  REGION, RENTAL_TERM, ROOM_LOCATION, SERIE, fromList, regionOf,
+  REGION, RENTAL_TERM, ROOM_LOCATION, SERIE, fromList, mhouseCommercial, regionOf,
 } from './mhouse';
 
 /** Больше этого за один запрос не собираем: Worker не резиновый. */
@@ -100,6 +100,8 @@ function roomsValue(rooms: number | null): string | null {
  */
 export type FeedCandidate = {
   kind: string;
+  /** Наш точный вид. Значение для справочника площадки выводится из него. */
+  subkind?: string | null;
   deal_type: 'rent' | 'sale';
   city: string;
   description: string | null;
@@ -128,6 +130,20 @@ export type FeedCandidate = {
  * объекта: агент должен видеть пробел в кабинете, а не узнавать о нём из
  * отчёта площадки через сутки.
  */
+/**
+ * Вид коммерции для площадки: выведенный из нашего кода или прежний.
+ *
+ * Наш код — главный. Прежнее значение остаётся запасным путём для
+ * объектов, заведённых до subkind: их никто не переписывал, и терять
+ * их выгрузку из-за нашей перестройки словаря нельзя.
+ *
+ * fromList оставлен снаружи — он сверяет результат со справочником
+ * площадки, и выдуманное значение до файла не доходит.
+ */
+function commercialFor(item: FeedCandidate): string | null {
+  return mhouseCommercial(item.subkind) ?? item.commercial_type;
+}
+
 export function missingFields(item: FeedCandidate): string[] {
   const miss: string[] = [];
   const category = CATEGORY[item.kind];
@@ -159,7 +175,7 @@ export function missingFields(item: FeedCandidate): string[] {
   if (category === 'участок' && !item.land_area) miss.push('площадь участка');
 
   if (category === 'коммерческая недвижимость') {
-    if (!fromList(COMMERCIAL_TYPE, item.commercial_type)) miss.push('вид коммерции');
+    if (!fromList(COMMERCIAL_TYPE, commercialFor(item))) miss.push('вид коммерции');
     if (!item.area) miss.push('площадь');
   }
 
@@ -227,7 +243,7 @@ function offer(item: CatalogItem, agent: string, origin: string): string {
     + tag('year', item.build_year)
     + tag('building-type', fromList(BUILDING_TYPE, item.building_type))
     + tag('serie', fromList(SERIE, item.serie))
-    + tag('commercial-type', fromList(COMMERCIAL_TYPE, item.commercial_type))
+    + tag('commercial-type', fromList(COMMERCIAL_TYPE, commercialFor(item)))
     + tag('room-location', fromList(ROOM_LOCATION, item.room_location))
     + tag('parking-type', fromList(PARKING_TYPE, item.parking_type))
     + tag('description', item.description)
@@ -236,9 +252,21 @@ function offer(item: CatalogItem, agent: string, origin: string): string {
 }
 
 /** Весь фид строкой. */
-export async function mhouseXml(origin: string): Promise<string> {
+/**
+ * Фид и СПИСОК объектов, которые в него попали.
+ *
+ * Список нужен маршруту, чтобы отметить выгруженное в кабинете: до этого
+ * кабинет не знал, что именно уходит на площадку, и ответить «наше
+ * объявление уже там?» можно было только сходив на house.kg руками.
+ *
+ * Отдельной функцией, а не сменой подписи mhouseXml: тот отдаёт строку, и
+ * его зовёт прогон. Менять подпись ради одного нового потребителя значит
+ * править все старые вызовы без нужды.
+ */
+export async function mhouseOffers(origin: string): Promise<{ xml: string; ids: string[] }> {
   const agent = salesAgent();
   const offers: string[] = [];
+  const ids: string[] = [];
 
   // Контакта нет — выгружать нечего: площадка не примет ни одного
   // объявления без телефона и имени.
@@ -247,15 +275,26 @@ export async function mhouseXml(origin: string): Promise<string> {
       const { items, total } = await catalogPage({ page, pageSize: PAGE, sort: 'fresh' });
       for (const item of items) {
         const xml = offer(item, agent, origin);
-        if (xml) offers.push(xml);
+        if (xml) {
+          offers.push(xml);
+          ids.push(item.id);
+        }
       }
       if (items.length === 0 || page * PAGE >= total) break;
     }
   }
 
-  return '<?xml version="1.0" encoding="UTF-8"?>\n'
-    + '<realty-feed>\n'
-    + `  <generation-date>${new Date().toISOString()}</generation-date>\n`
-    + offers.join('')
-    + '</realty-feed>\n';
+  return {
+    xml: '<?xml version="1.0" encoding="UTF-8"?>\n'
+      + '<realty-feed>\n'
+      + `  <generation-date>${new Date().toISOString()}</generation-date>\n`
+      + offers.join('')
+      + '</realty-feed>\n',
+    ids,
+  };
+}
+
+/** Только файл — для прогона и для всех, кому список не нужен. */
+export async function mhouseXml(origin: string): Promise<string> {
+  return (await mhouseOffers(origin)).xml;
 }

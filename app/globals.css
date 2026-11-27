@@ -32,12 +32,19 @@
   --on-ink-faint: #8B929C;
   --steel: #8A95A3;
   --art-ink: #12161C;
+  /* Рисунок первого экрана: ступени графитовые, фигура того же тона.
+     Красная — только одна, та, на которую человек шагает. */
+  --step-top: #2E323A;
+  --step-nose: #15181D;
+  --step-side: #0C0E11;
+  --figure: #15181C;
   --chip-fg: #4B4B46;
   /* Свет за курсором: на светлом фоне он осветляет заметно, на тёмном
      почти неразличим — там яркое пятно читается как клякса. */
   --glow: rgba(255,255,255,.85);
-  /* Красный ярче фирменного — для текста на тёмных полосах (заголовок
-     героя, надзаголовок призыва, ссылки в подвале). */
+  /* Красный ярче фирменного — для текста на ТЁМНЫХ полосах: надзаголовок
+     призыва, ссылки в подвале. Заголовку героя он больше не достаётся:
+     герой светлый, и там этот красный спорил с фирменным. */
   --accent-2: #E0453F;
   /* Наведение на кнопке с фирменной заливкой. ТЕМНЕЕ фирменного, а не
      светлее: кнопка подписана белым, и на прежнем светлом #E0453F он давал
@@ -97,6 +104,12 @@
     --on-ink-faint: #8B929C;
     --steel: #6B7684;
     --art-ink: #343C46;
+    /* На тёмном графит сливается с фоном: ступени и фигура становятся
+       светлыми. Красная ступень остаётся красной в обеих темах. */
+    --step-top: #DAD9D4;
+    --step-nose: #A9A8A3;
+    --step-side: #8C8B86;
+    --figure: #E4E3DE;
     --chip-fg: #ADADA8;
     --glow: rgba(255,255,255,.055);
     --accent-2: #F06A64;
@@ -143,6 +156,12 @@
   --on-ink-faint: #8B929C;
   --steel: #6B7684;
   --art-ink: #343C46;
+  /* На тёмном графит сливается с фоном: ступени и фигура становятся
+     светлыми. Красная ступень остаётся красной в обеих темах. */
+  --step-top: #DAD9D4;
+  --step-nose: #A9A8A3;
+  --step-side: #8C8B86;
+  --figure: #E4E3DE;
   --chip-fg: #ADADA8;
   --glow: rgba(255,255,255,.055);
   --accent-2: #F06A64;
@@ -465,7 +484,9 @@ div.tile { background: var(--sunk); }
 textarea {
   font: inherit;
   padding: 7px 10px;
-  border-radius: 8px;
+  /* Токен, а не 8px числом: скругления полей и кнопок задаются в одном
+     месте, и вручную вписанное значение однажды разойдётся с ним. */
+  border-radius: var(--r-md);
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--fg);
@@ -553,11 +574,20 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* Отступ строки уменьшен с 13 до 9: кнопки в ней выросли с 34 до 40 px
    ради пальца, и без этого липкая шапка стала бы выше на семь пикселей
    на каждом экране. Так она осталась прежней высоты. */
-.nav-in { display: flex; align-items: center; gap: 20px; padding-block: 9px; }
-/* Отступ сверху и снизу — ради пальца: сам знак 20–25 px высотой, и без
-   него ссылка на главную была вдвое ниже соседних кнопок. */
-.brand { display: flex; align-items: center; margin-right: 4px; padding-block: 10px; }
-.brand img { height: 25px; width: auto; display: block; }
+.nav-in { display: flex; align-items: center; gap: 16px; padding-block: 9px; }
+/* Разделы стоят своей группой у знака, а кнопки — у правого края.
+   Распирает промежуток сама группа, а не отдельная пустая распорка:
+   распорка и авто-отступ, стоявшие рядом, делили свободное место пополам
+   и уводили ссылки к середине. */
+.nav-sections { display: flex; align-items: center; gap: 18px; margin-right: auto; }
+/* Отступ сверху и снизу — ради пальца: сам знак 26–34 px высотой, и без
+   него ссылка на главную была бы ниже соседних кнопок.
+
+   Высота поднята с 25 до 34. На 25 знак читался как сноска рядом с
+   кнопками в 40 px, хотя это имя агентства и единственная ссылка на
+   главную; лесенка в нём мелкая, и её ступени сливались. */
+.brand { display: flex; align-items: center; margin-right: 4px; padding-block: 8px; }
+.brand img { height: 34px; width: auto; display: block; }
 /* Знак для тёмного фона прячется в светлой теме и наоборот. Условия
    повторяют те, по которым переключаются сами цвета: системная тёмная,
    если человек не выбрал иного, и явный выбор в любую сторону. */
@@ -568,17 +598,30 @@ main:has(.auth) { max-width: none; padding: 0; }
 }
 :root[data-theme='dark'] .brand .on-light { display: none; }
 :root[data-theme='dark'] .brand .on-dark { display: block; }
-.nav .spacer { margin-left: auto; }
 /* Отступ сверху и снизу — ради пальца, а не ради вида: без него ссылка
    была 20 px высотой при соседях в 40. Ширину он не меняет. */
 .nav-link { color: var(--muted); text-decoration: none; font-size: 0.875rem; font-weight: 600;
   white-space: nowrap; padding-block: 10px; transition: color .18s; }
 .nav-link:hover { color: var(--accent); }
-.enter { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: var(--r-full);
-  padding: 11px 18px; font-weight: 700; font-size: 0.875rem; text-decoration: none; white-space: nowrap;
-  transition: background .18s, transform .18s; }
-.enter:hover { background: var(--accent-hover); transform: translateY(-1px); }
+/* Вход для агентов — КОНТУРНАЯ кнопка, не залитая.
+   Залитый красный на сайте означает одно: действие, ради которого сюда
+   пришёл клиент («Найти», «Оставить заявку»). Вход для агентов нужен
+   пяти процентам посетителей, а тянул на себя взгляд сильнее всего
+   остального на первом экране — проверено снимком на 1366. Цвет остаётся
+   фирменным, но заливка уходит конверсии клиента. */
+.enter { background: transparent; color: var(--fg); border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  padding: 10px 17px; font-weight: 600; font-size: 0.875rem; text-decoration: none;
+  white-space: nowrap; transition: border-color .18s, color .18s, background .18s; }
+.enter:hover { border-color: var(--accent); color: var(--accent); background: var(--sunk); }
 .enter .narrow { display: none; }
+/* Вход собственника: контур фирменным цветом. Громче серого контура
+   «входа для агентов» — к нему идёт клиент, а не сотрудник, — и тише
+   залитой кнопки, которая на сайте значит «главное действие страницы». */
+.nav-cta { color: var(--accent); border: 1px solid var(--accent); border-radius: var(--r-full);
+  padding: 10px 17px; font-weight: 700; font-size: 0.875rem; text-decoration: none;
+  white-space: nowrap; transition: background .18s, color .18s; }
+.nav-cta:hover { background: var(--accent); color: #fff; }
 
 /* --- Герой -------------------------------------------------------------- */
 .hero { position: relative; background: var(--sunk); color: var(--fg); overflow: hidden; }
@@ -603,18 +646,53 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* Линии построения: тонкие, серые и заметно тише объёма. На чертеже
    конструкция читается, но не спорит с деталью. */
 .hero-art .frame { stroke: var(--steel); opacity: .62; fill: none; }
-.hero-art svg { position: absolute; right: 0; top: 0; width: 48%; min-width: 320px;
+
+/* Рисунок первого экрана — готовый файл, а не вектор, собранный кодом.
+
+   Полотно у него почти белое, страница — тёплая кремовая. Умножение
+   уводит белое в цвет фона: рисунок оказывается НА странице, а не
+   вклеенным в неё прямоугольником со своим оттенком.
+
+   Появляется один раз, мягко. Повторяющаяся анимация на первом экране
+   тянула бы взгляд всё время, пока человек читает заголовок и выбирает
+   фильтр, — а сказать ей нечего. */
+.hero-art img { position: absolute; right: 0; top: 0; width: 48%; min-width: 320px;
   /* Не на всю высоту героя: нижние сто пикселей закрыты пультом поиска,
      и основание лестницы пряталось бы за ним. */
   height: calc(100% - 96px);
-  /* Смещение за курсором ставит HeroArt. Переход мягкий, чтобы предмет
-     догонял руку, а не дёргался следом. */
-  /* Сдвиг вправо задан прямо в смещении, вместе с параллаксом: менять
-     поле рисунка было нельзя — оно заодно меняло масштаб. Правый край
-     при этом уходит за кромку экрана, и это нормально: чертёж
-     продолжается за рамкой. */
-  transform: translate3d(calc(var(--px, 0px) + 9%), var(--py, 0px), 0);
+  /* Пропорции рисунка держатся сами, а поле подрезается по краям: при
+     растяжении изометрия перекосилась бы, а это чертёж. */
+  object-fit: contain; object-position: right top;
+  mix-blend-mode: multiply;
+  /* Края растворяются в странице: слева — кромка полотна, снизу — срез
+     о пульт поиска. Без этого рисунок и после выравнивания белой точки
+     кончается заметной чертой. Два слоя маски пересекаются; у Safari
+     своё имя у этого свойства. */
+  mask-image: linear-gradient(to right, transparent 0, #000 13%),
+              linear-gradient(to bottom, #000 76%, transparent 100%);
+  mask-composite: intersect;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 13%),
+                      linear-gradient(to bottom, #000 76%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  animation: art-in .8s ease-out both;
+  /* Сдвиг вправо задан прямо в смещении, вместе с параллаксом. Правый
+     край уходит за кромку экрана, и это нормально: чертёж продолжается
+     за рамкой. */
+  transform: translate3d(calc(var(--px, 0px) + 3%), var(--py, 0px), 0);
   transition: transform .4s cubic-bezier(.2,.7,.3,1); }
+@keyframes art-in { from { opacity: 0; } to { opacity: 1; } }
+/* В тёмной теме рисунка нет: он сделан на белой бумаге, и умножение на
+   тёмном фоне съело бы его целиком, а светлый прямоугольник посреди
+   тёмной страницы выглядел бы вклейкой. Условия те же, по которым
+   переключается знак в шапке. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .hero-art img { display: none; }
+}
+:root[data-theme='dark'] .hero-art img { display: none; }
+/* «Меньше движения» — значит меньше движения: рисунок сразу на месте. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-art img { animation: none; }
+}
 /* Свет идёт за курсором. Координаты ставит HeroArt; пока их нет —
    пятно стоит там же, где раньше стояло статичное свечение. */
 /* Свет за курсором — БЕЗ цвета. Разбавленный красный на тёплом белом
@@ -643,7 +721,13 @@ main:has(.auth) { max-width: none; padding: 0; }
      которого глаз теряет начало следующей строки. Доля 46vw держит
      заголовок левее чертежа лестницы, который занимает правую половину. */
   max-width: min(800px, 46vw); }
-.hero h1 em { font-style: normal; color: var(--accent-2); }
+/* Фирменный красный, а не яркий. --accent-2 заведён «для текста на
+   тёмных полосах» и достался заголовку с тех времён, когда герой был
+   тёмным. Герой давно светлый, и на нём рядом оказались два разных
+   красных: заголовок ярче, кнопка «Оставить заявку» — фирменный. В
+   тёмной теме --accent сам становится светлым (#E8716C), поэтому
+   заголовок там остаётся читаемым. */
+.hero h1 em { font-style: normal; color: var(--accent); }
 .hero .lede { color: var(--muted); font-size: 1.0625rem; line-height: 1.5; max-width: 56ch; margin: 0; }
 .props { display: flex; flex-wrap: wrap; gap: 10px 26px; margin: 6px 0 0; padding: 0; list-style: none; }
 .prop { display: flex; align-items: center; gap: 9px; font-size: 0.875rem; font-weight: 600;
@@ -654,6 +738,48 @@ main:has(.auth) { max-width: none; padding: 0; }
   background: linear-gradient(var(--accent) 0 0) 0 6px / 4px 4px no-repeat,
               linear-gradient(var(--accent) 0 0) 5px 3px / 4px 7px no-repeat,
               linear-gradient(var(--accent) 0 0) 10px 0 / 4px 10px no-repeat; }
+
+/* Действия первого экрана.
+
+   Залита одна — та, ради которой человек пришёл. Вторая контурная: она
+   для меньшинства (у кого объект на руках), и две залитых кнопки рядом
+   превращают первый экран в выбор между ними. Ряд переносится, а кнопки
+   не сжимаются: обрезанная подпись действия хуже переноса. */
+.hero-go { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.go-main, .go-side { display: inline-flex; align-items: center; justify-content: center;
+  gap: 9px; border-radius: var(--r-full); padding: 14px 24px; font-size: 1rem;
+  font-weight: 700; text-decoration: none; white-space: nowrap;
+  transition: background .18s, color .18s, border-color .18s, transform .18s; }
+.go-main { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+/* Темнее, а не светлее: кнопка подписана белым, и на светлом #E0453F
+   он давал 4.12 : 1 — ниже порога для обычного текста. Тот же приём, что
+   у остальных залитых кнопок сайта. */
+.go-main:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.go-side { background: var(--panel); color: var(--fg); border: 1px solid var(--line); }
+.go-side:hover { border-color: var(--accent); color: var(--accent); }
+/* Нажатие видно без скриптов: кнопка проседает на пиксель. Единственное
+   движение на первом экране — у того, что человек трогает пальцем. */
+.go-main:active, .go-side:active { transform: translateY(1px); }
+
+/* Числа под действиями: сколько объектов, сколько агентов, за сколько
+   отвечаем. Крупные цифры моноширинным — состояние дела, а не обещание;
+   их показывает страница только когда они не нули. */
+.facts { display: flex; flex-wrap: wrap; gap: 18px 0; margin: 22px 0 0; padding: 18px 0 0;
+  list-style: none; border-top: 1px solid var(--line); align-self: stretch;
+  max-width: min(800px, 46vw); }
+/* Число над подписью, а не перед ней: в строку «5 объектов в каталоге 2
+   агента в работе» читалось как одно предложение, и числа переставали
+   быть числами. Столбиком глаз берёт три величины, а не фразу. */
+.facts li { display: flex; flex-direction: column; gap: 3px; }
+.facts b { font-size: 1.75rem; font-weight: 800; letter-spacing: -.035em; line-height: 1;
+  color: var(--fg); }
+.facts span { font-size: 0.8125rem; font-weight: 600; color: var(--muted); max-width: 18ch; }
+/* Волосяная черта между величинами. Без неё подписи соседних чисел
+   смыкаются в одну фразу: расстояния в 44 px мало, когда сама подпись
+   втрое длиннее. */
+.facts li + li { padding-left: 34px; margin-left: 34px; position: relative; }
+.facts li + li::before { content: ""; position: absolute; left: -1px; top: 2px; bottom: 2px;
+  width: 1px; background: var(--line); }
 
 /* Герой страницы заявки ниже: там под ним форма, а не выдача, и высокий
    герой отодвинул бы первое поле за сгиб. */
@@ -705,12 +831,11 @@ main:has(.auth) { max-width: none; padding: 0; }
    пульта меняется: город показывается только когда городов несколько,
    район — только когда он где-то есть. При жёсткой сетке шестое поле
    сбрасывало кнопку «Найти» на вторую строку, и пульт разъезжался.
-   Поток расставляет то, что пришло: каждое поле просит 150 px, адрес —
-   вдвое больше, кнопка занимает ровно себя. */
+   Поток расставляет то, что пришло: каждое поле просит 150 px, кнопка
+   занимает ровно себя. */
 .console .row { display: flex; flex-wrap: wrap; align-items: flex-end;
   gap: 10px; padding: 14px; }
 .console .row > .cell { flex: 1 1 150px; }
-.console .row > .cell.wide { flex: 2 1 240px; }
 .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cell label { font-size: 0.75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
@@ -718,6 +843,19 @@ main:has(.auth) { max-width: none; padding: 0; }
   border-radius: var(--r-md); padding: 11px 12px; font-size: 0.9375rem; font-weight: 500;
   width: 100%; min-width: 0; font-family: inherit;
   transition: border-color .18s, box-shadow .18s; }
+/* Своя стрелка вместо системной. В одном ряду стоят обычные select'ы и
+   кнопка выбора района, которая лишь притворяется полем: системная
+   стрелка у одних и нарисованная у другой выдавали, что это разные
+   вещи. Стрелка — фон, а не псевдоэлемент: у select'а псевдоэлементов
+   нет. currentColor подставляется через mask, иначе картинку пришлось бы
+   держать в двух цветах под две темы. */
+.cell select { appearance: none; -webkit-appearance: none;
+  padding-right: 32px; cursor: pointer;
+  background-image: none; }
+.cell { position: relative; }
+.cell:has(select)::after { content: ''; position: absolute; right: 12px; bottom: 17px;
+  width: 10px; height: 6px; background: var(--muted); pointer-events: none;
+  clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .cell input:focus, .cell select:focus { border-color: var(--accent); }
 /* --- Выбор района ------------------------------------------------------- */
 /* Кнопка притворяется полем ввода: в ряду пульта она стоит рядом с
@@ -779,7 +917,12 @@ main:has(.auth) { max-width: none; padding: 0; }
 .go:active { transform: translateY(0); }
 
 /* --- Форма заявки ------------------------------------------------------- */
-.reqconsole { padding: 22px; margin-bottom: 56px; }
+/* Карточка формы держится в колонке, а не разъезжается на всю полосу в
+   1680 px. Поле ввода во всю ширину экрана нечитаемо: глаз теряет начало
+   строки, а телефон и адрес короче его в десять раз. Ограничена сама
+   карточка, а не форма внутри: иначе справа оставалась бы пустая белая
+   половина, и это читалось бы как незагрузившийся блок. */
+.reqconsole { padding: 22px; margin-bottom: 56px; max-width: 940px; }
 .reqform { display: flex; flex-direction: column; gap: 18px; }
 .reqgrid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 .reqform textarea { border: 1px solid var(--line); background: var(--bg); color: var(--fg);
@@ -800,6 +943,12 @@ main:has(.auth) { max-width: none; padding: 0; }
 .seg label:has(input:checked) { border-color: var(--accent); background: var(--accent);
   color: var(--accent-fg); }
 .seg input { accent-color: var(--accent); }
+
+/* Сторона заявки — первая развилка формы: ищу жильё или отдаю своё. От
+   неё зависят подписи полей ниже, поэтому она отделена чертой: без неё
+   человек проскакивал развилку и заполнял форму не про себя. */
+.seg-side { padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.seg-side label { padding: 12px 20px; font-size: 1rem; }
 
 /* Согласие на показ телефона — крупной строкой с объяснением, а не мелким
    текстом под кнопкой: решение принимает человек, и он должен видеть,
@@ -1099,7 +1248,7 @@ main:has(.auth) { max-width: none; padding: 0; }
 
 /* --- Узкие экраны ------------------------------------------------------- */
 @media (max-width: 1040px) {
-  .hero-art svg { width: 56%; opacity: .8; }
+  .hero-art img { width: 56%; opacity: .8; }
   .go { flex: 1 1 100%; padding: 13px; }
   .grid { grid-template-columns: repeat(2, 1fr); }
   .detail { grid-template-columns: 1fr; }
@@ -1117,23 +1266,43 @@ main:has(.auth) { max-width: none; padding: 0; }
   .reqconsole { padding: 16px; }
   .reqform .go { align-self: stretch; }
   .tab { padding: 11px 13px; font-size: 0.875rem; }
-  .hero-art svg { display: none; }
+  .hero-art img { display: none; }
   /* Чертежа нет — заголовок берёт всю ширину. */
   .hero h1, .hero-slim h1 { max-width: none; }
+  /* На телефоне величины переносятся, и черта оказалась бы в начале
+     строки — убираем её вместе с отступом. */
+  .facts { max-width: none; gap: 14px 28px; }
+  .facts li + li { padding-left: 0; margin-left: 0; }
+  .facts li + li::before { display: none; }
+  /* Кнопки во всю ширину: на телефоне ряд из двух всё равно переносится,
+     и кнопка в полстроки читалась бы как менее важная, чем она есть. */
+  .hero-go { width: 100%; }
+  .go-main, .go-side { flex: 1 1 100%; }
   .grid { grid-template-columns: 1fr; }
   .gal { grid-template-columns: 1fr; }
   .gal .side { grid-template-columns: 1fr 1fr; }
-  /* Шапка на телефоне должна остаться в ОДНУ строку. Перенос здесь уже
-     был: знак, «Заявки», тема и язык вставали первой строкой, а «Вход»
-     падал на вторую — и не под них, а в противоположный угол, потому что
-     растянутый .spacer оставался на первой. Выглядело ошибкой вёрстки.
-     flex-wrap оставлен: если на совсем узком экране строка всё же не
-     сойдётся, пусть переносится, а не вылезает за край. */
+  /* Шапка на телефоне держалась в ОДНУ строку, пока раздел был один.
+     С появлением «Агентов» элементов стало шесть, строка перестала
+     сходиться, и «Вход» падал на вторую строку ОДИН, прижатый влево —
+     это читалось как ошибка вёрстки, а не как замысел.
+     
+     Ответ не «ужать ещё», а признать две строки и сделать их осмысленными:
+     сверху знак и управление (тема, язык, вход), снизу разделы. Две
+     ссылки подряд читаются как строка навигации; одна кнопка в углу — нет.
+     И это выдерживает третий раздел, когда он появится. */
   .nav-in { flex-wrap: wrap; row-gap: 10px; gap: 8px; }
   .nav-link { font-size: 0.8125rem; }
-  .nav .spacer { display: none; }
+  .nav-cta { padding: 9px 13px; font-size: 0.8125rem; }
+  /* Разделы — отдельной строкой целиком. order сам по себе не помог:
+     первая строка доедала один из разделов, и одинокой внизу оставалась
+     вторая ссылка. flex-basis: 100% заставляет обёртку занять всю
+     ширину, то есть начать новую строку. */
+  .nav-sections { display: flex; gap: 14px; align-items: center;
+    order: 5; flex-basis: 100%; }
+  /* Язык растягивает первую строку вправо, «Вход» встаёт за ним, а
+     ссылки с order: 5 уходят под них. */
   .lang { margin-left: auto; }
-  .brand img { height: 20px; }
+  .brand img { height: 26px; }
   .enter { padding: 11px 12px; font-size: 0.8125rem; }
   .enter .wide { display: none; }
   .enter .narrow { display: inline; }
@@ -1156,7 +1325,7 @@ main:has(.auth) { max-width: none; padding: 0; }
   .lang-btn { padding: 11px; }
   /* 20, а не 19: со своими отступами знак добирает ровно до 40 px по
      высоте — как соседние кнопки. */
-  .brand img { height: 20px; }
+  .brand img { height: 26px; }
   /* Прижимает «Вход» к правому краю — и в одну строку, и если она всё же
      перенесётся: тогда кнопка встанет справа второй строкой, как будто
      так и задумано, а не в левый угол. */
@@ -1347,7 +1516,7 @@ a.agent-row { text-decoration: none; color: inherit; border-radius: var(--r-md);
   transition: background .18s; }
 a.agent-row:hover { background: var(--sunk); }
 
-/* === Виртуальный тур ===================================================== */
+/* === Виртуальный тур ============================================= */
 /* Высота в пикселях с потолком по доле экрана: панораму разглядывают,
    а не просматривают мельком, и окно в двести точек бессмысленно. Но и
    на весь экран нельзя — со страницы объявления тогда исчезает цена. */
@@ -1377,3 +1546,51 @@ a.agent-row:hover { background: var(--sunk); }
 @media (max-width: 680px) {
   .tour .tour-box { height: 56vh; }
 }
+=======
+/* Пустая выдача: карточка с выходом, а не строка в пустоте. */
+.none-card { grid-column: 1 / -1; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 32px 28px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 12px; }
+/* Внутри карточки .none теряет собственную рамку и отступы: рамка в
+   рамке читается как недоделанная вёрстка. Стиль .none остаётся для тех
+   мест, где он стоит сам по себе. */
+.none-card .none { margin: 0; font-size: 1.05rem; font-weight: 600; color: var(--fg);
+  border: 0; padding: 0; }
+.none-card .ask { margin: 0; max-width: 56ch; color: var(--muted); line-height: 1.6;
+  font-size: 0.9375rem; }
+.none-card .pitch-go { margin-top: 4px; }
+.other-deal { margin: 0; font-size: 0.9375rem; }
+.other-deal a { color: var(--accent); font-weight: 700; text-decoration: none; }
+.other-deal a:hover { text-decoration: underline; }
+
+/* Переключатель валюты: две кнопки в одной пилюле, как у языка. */
+.money-switch { display: inline-flex; border: 1px solid var(--line);
+  border-radius: var(--r-full); overflow: hidden; }
+.money-switch button { border: 0; background: transparent; color: var(--muted);
+  font: inherit; font-size: 0.8125rem; font-weight: 700; cursor: pointer;
+  padding: 7px 12px; transition: background .18s, color .18s; }
+.money-switch button:hover { color: var(--fg); }
+.money-switch button.on { background: var(--sunk); color: var(--fg); }
+/* Цена из объявления рядом с пересчитанной. Мелко и приглушённо: это
+   сноска к числу выше, а не второе число. */
+.price-orig { display: block; font-size: 0.8125rem; color: var(--muted);
+  margin: 2px 0 0; font-weight: 500; }
+.price-orig .key { display: block; font-size: 0.75rem; margin-top: 2px; }
+
+/* Бюджет ниже рынка: не ошибка в красной рамке, а разговор по существу.
+   Жёлтый, а не красный: человек ничего не сломал, ему объясняют рынок. */
+.low-budget { background: var(--sunk); border: 1px solid var(--line);
+  border-left: 3px solid var(--accent); border-radius: var(--r-md);
+  padding: 14px 16px; margin-top: 12px; }
+.low-budget p { margin: 0 0 10px; font-size: 0.9375rem; line-height: 1.55; }
+
+/* Срок аренды: пресеты и диапазон. */
+.cell-wide { grid-column: 1 / -1; }
+.term-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.term-presets .chip { border: 1px solid var(--line); background: var(--bg);
+  color: var(--fg); border-radius: var(--r-full); padding: 7px 14px;
+  font: inherit; font-size: 0.8125rem; font-weight: 600; cursor: pointer;
+  transition: border-color .18s, color .18s; }
+.term-presets .chip:hover { border-color: var(--accent); color: var(--accent); }
+.term-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.term-range input { width: 92px; }

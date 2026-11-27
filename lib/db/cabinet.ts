@@ -601,7 +601,8 @@ export async function linkableObjects() {
 export async function objectCard(id: string) {
   await asker();
   const row = await one<{
-    id: string; kind: string; deal_type: 'rent' | 'sale'; address: string;
+    id: string; kind: string; subkind: string | null;
+    deal_type: 'rent' | 'sale'; address: string;
     city: string; zone: string | null; rooms: number | null; area: number | null;
     floor: number | null; floors_total: number | null; price: number;
     currency: string; photos: string; description: string | null;
@@ -616,7 +617,8 @@ export async function objectCard(id: string) {
     parking_type: string | null; build_year: number | null;
     panoramas: string | null;
   }>(
-    `select o.id, o.kind, o.deal_type, o.address, o.city, o.zone, o.rooms, o.area,
+    `select o.id, o.kind, o.subkind, o.deal_type, o.address, o.city, o.zone,
+            o.rooms, o.area,
             o.floor, o.floors_total, o.price_minor / 100.0 as price, o.currency,
             o.photos, o.description, o.publication_state, o.published_at,
             o.actual_at, o.created_by_agent_id,

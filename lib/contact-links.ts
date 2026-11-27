@@ -50,16 +50,41 @@ export function phoneText(phone: string | null | undefined): string | null {
   return `+${digits}`;
 }
 
+/**
+ * Ссылки на связь.
+ *
+ * `message` — готовый текст для WhatsApp. Зачем он нужен: человек
+ * нажимает кнопку на странице объекта и попадает в переписку с пустым
+ * полем. Адрес он уже не помнит, цену тем более, и как объяснить, откуда
+ * пишет, — не знает. Пишет «здравствуйте» или закрывает. Агент получает
+ * «здравствуйте» без единого признака, о каком объекте речь, и
+ * переспрашивает. Готовый текст убирает оба шага.
+ *
+ * Текст обязан быть ЗАКОДИРОВАН: в нём пробелы, запятые, перенос строки
+ * и ссылка, а незакодированный амперсанд или решётка обрежут сообщение по
+ * себе — молча, без ошибки.
+ *
+ * Telegram готового текста не принимает: t.me/<ник> открывает переписку и
+ * параметра с текстом у неё нет. Поэтому текст уходит только в WhatsApp, и
+ * это не упущение, а свойство самого Telegram.
+ */
 export function contactLinks(contact: Contact, labels: {
   call: string; whatsapp: string; telegram: string;
-}): ContactLink[] {
+}, message?: string): ContactLink[] {
   const digits = phoneDigits(contact.phone);
   const links: ContactLink[] = [];
 
   if (digits) {
     links.push({ kind: 'call', href: `tel:+${digits}`, text: labels.call });
     if (contact.whatsapp === 1) {
-      links.push({ kind: 'whatsapp', href: `https://wa.me/${digits}`, text: labels.whatsapp });
+      const text = (message ?? '').trim();
+      links.push({
+        kind: 'whatsapp',
+        href: text
+          ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
+          : `https://wa.me/${digits}`,
+        text: labels.whatsapp,
+      });
     }
   }
 

@@ -60,6 +60,14 @@ const photos = (v: FormDataEntryValue | null) =>
  * списки, а окончательную проверку делает фид — он просто не возьмёт
  * значение, которого нет в справочнике площадки.
  */
+/*
+ * commercial_type здесь больше нет нарочно. Значение для площадки
+ * ВЫВОДИТСЯ из нашего subkind при выгрузке; спрашивать его отдельно
+ * значило бы держать две правды об одном объекте. У объектов, заведённых
+ * раньше, прежнее значение остаётся в записи запасным путём — поэтому
+ * форма его и не трёт: поля в форме нет, в patch оно не попадает, колонка
+ * не меняется.
+ */
 const platformFields = (formData: FormData) => ({
   latitude: num(formData.get('latitude')),
   longitude: num(formData.get('longitude')),
@@ -71,7 +79,6 @@ const platformFields = (formData: FormData) => ({
   serie: str(formData.get('serie')),
   land_area: num(formData.get('land_area')),
   rental_term: str(formData.get('rental_term')),
-  commercial_type: str(formData.get('commercial_type')),
   room_location: str(formData.get('room_location')),
   parking_type: str(formData.get('parking_type')),
   build_year: num(formData.get('build_year')),
@@ -155,6 +162,7 @@ export async function createObject(formData: FormData): Promise<FormResult> {
   try {
     const created = await addObject({
       kind: str(formData.get('kind')) ?? 'flat',
+      subkind: str(formData.get('subkind')),
       deal_type: (str(formData.get('deal_type')) ?? 'sale') as 'sale',
       address: str(formData.get('address')) ?? '',
       price_minor: price,
@@ -200,6 +208,7 @@ export async function updateObject(formData: FormData): Promise<FormResult> {
 
   const error = await attempt(() => editObject(id, {
     kind: str(formData.get('kind')) ?? undefined,
+    subkind: str(formData.get('subkind')),
     deal_type: (str(formData.get('deal_type')) ?? undefined) as 'sale' | undefined,
     address: str(formData.get('address')) ?? undefined,
     price_minor: price,

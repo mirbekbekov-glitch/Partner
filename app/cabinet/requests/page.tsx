@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { requestCounts, requestFeed } from '@/lib/db/requests';
+import { requestCounts, requestFeed, type RequestTab } from '@/lib/db/requests';
 import { parseFilters } from '@/lib/list-params';
 import { Pager } from '../Pager';
-import { KIND_LABEL } from '@/lib/request-labels';
+import { KIND_LABEL, SPACE_LABEL, termLabel } from '@/lib/request-labels';
 import { RequestActions } from './RequestActions';
 
 export const metadata = { title: 'Заявки клиентов' };
@@ -12,8 +12,14 @@ const BASE = '/cabinet/requests';
 type Row = {
   id: string;
   deal: 'buy' | 'rent' | null;
+  /** Заполнено — заявку оставил собственник, а не ищущий. */
+  offer_deal: 'sale' | 'rent' | null;
+  address: string | null;
   housing_type: string | null;
+  space_type: string | null;
   rooms: number | null;
+  term_days_min: number | null;
+  term_days_max: number | null;
   district: string | null;
   district_other: string | null;
   budget: number | null;
@@ -33,14 +39,17 @@ type Row = {
   response_minutes: number;
 };
 
-const TABS: [string, string][] = [
+const TABS: [RequestTab, string][] = [
   ['open', 'Свободные'],
+  ['offers', 'От собственников'],
   ['mine', 'Мои'],
   ['all', 'Все открытые'],
   ['closed', 'Закрытые'],
 ];
 
 const DEAL: Record<string, string> = { buy: 'Купить', rent: 'Снять' };
+/* Собственник предлагает, а не ищет: «Продаёт», а не «Купить». */
+const OFFER: Record<string, string> = { sale: 'Продаёт', rent: 'Сдаёт' };
 const REASON: Record<string, string> = {
   deal: 'довели до сделки', found_self: 'нашёл сам', changed_mind: 'передумал',
   no_answer: 'не дозвонились', spam: 'спам', other: 'другое',
@@ -60,7 +69,7 @@ export default async function Requests({
 }) {
   const sp = await searchParams;
   const one = (k: string) => (Array.isArray(sp[k]) ? sp[k][0] : sp[k]);
-  const tab = TABS.some(([v]) => v === one('tab')) ? one('tab')! : 'open';
+  const tab = (TABS.find(([v]) => v === one('tab'))?.[0] ?? 'open') as RequestTab;
 
   // Что показывать, решает лента: чужие контакты она уже закрыла. Здесь
   // только срез по вкладке.
@@ -70,19 +79,21 @@ export default async function Requests({
   let total = 0;
   let overdue = 0;
   let free = 0;
+  let offers = 0;
   let error: string | null = null;
 
   try {
     // Счётчики — главные числа этой страницы, и считает их база: страница
     // показывает двадцать строк, а норматив нарушают все.
     const [listed, counts] = await Promise.all([
-      requestFeed(tab as 'open', f.page),
+      requestFeed(tab, f.page),
       requestCounts(),
     ]);
     rows = listed.rows;
     total = listed.total;
     overdue = counts.overdue;
     free = counts.free;
+    offers = counts.offers;
   } catch (e) {
     error = e instanceof Error ? e.message : 'Не удалось загрузить заявки.';
   }
@@ -91,8 +102,8 @@ export default async function Requests({
     <>
       <h1>Заявки клиентов</h1>
       <p className="sub">
-        Что ищут люди, не нашедшие объект в каталоге. Норматив первого
-        ответа — час.
+        Что ищут люди, не нашедшие объект в каталоге, — и что предлагают
+        собственники. Норматив первого ответа — час на обе стороны.
       </p>
 
       <div className="counters">
@@ -100,6 +111,9 @@ export default async function Requests({
           Просрочено: <b>{overdue}</b>
         </span>
         <span className="counter">Свободных: <b>{free}</b></span>
+        {/* Заявки собственников считаются отдельно: это товар, а не спрос,
+            и теряются они дороже. */}
+        <span className="counter">От собственников: <b>{offers}</b></span>
       </div>
 
       <div className="tabs-row">
@@ -115,14 +129,16 @@ export default async function Requests({
 
       {rows.length === 0 ? (
         <p className="empty">
-          {tab === 'open' ? 'Свободных заявок нет.' : 'Здесь пока пусто.'}
+          {tab === 'open' ? 'Свободных заявок нет.'
+            : tab === 'offers' ? 'Собственники пока не оставляли заявок.'
+            : 'Здесь пока пусто.'}
         </p>
       ) : (
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
               <tr>
-                <th>Что ищут</th>
+                <th>Что нужно</th>
                 <th>Условия</th>
                 <th>Контакт</th>
                 <th>Пожелания</th>
@@ -136,12 +152,27 @@ export default async function Requests({
                 <tr key={r.id}>
                   <td>
                     <span className="tbl-main">
-                      {r.deal ? DEAL[r.deal] : 'Направление не указано'}
-                      {r.housing_type
-                        ? ` · ${KIND_LABEL[r.housing_type] ?? r.housing_type}`
-                        : ''}
+                      {r.offer_deal
+                        ? OFFER[r.offer_deal]
+                        : r.deal ? DEAL[r.deal] : 'Направление не указано'}
+                      {/* Подробный вид, если он есть: «коммерческая» не
+                          отвечает на вопрос, звонить по офисам или по
+                          складам. Огрублённый — только для старых заявок,
+                          заведённых до появления словаря. */}
+                      {r.space_type
+                        ? ` · ${SPACE_LABEL[r.space_type] ?? r.space_type}`
+                        : r.housing_type
+                          ? ` · ${KIND_LABEL[r.housing_type] ?? r.housing_type}`
+                          : ''}
                       {r.rooms ? ` · ${r.rooms} комн.` : ''}
+                      {termLabel(r.term_days_min, r.term_days_max)
+                        ? ` · ${termLabel(r.term_days_min, r.term_days_max)}`
+                        : ''}
                     </span>
+                    {/* Сторона — первое, что должен увидеть агент: заявка
+                        с объектом это будущий мандат, а не подбор. */}
+                    {r.offer_deal ? <span className="tag">собственник</span> : null}
+                    {r.address ? <span className="tbl-sub">{r.address}</span> : null}
                     {r.contact_id ? (
                       <span className="tbl-sub">
                         <Link href={`/cabinet/contacts/${r.contact_id}`}>
@@ -153,8 +184,10 @@ export default async function Requests({
                   <td data-l="Условия">
                     {[
                       r.district ?? r.district_other,
+                      // У собственника это цена, а не потолок бюджета:
+                      // «до 80 000» о цене продажи читалось бы наоборот.
                       r.budget
-                        ? `до ${Math.round(r.budget).toLocaleString('ru-RU')} ${r.budget_currency === 'KGS' ? 'сом' : '$'}`
+                        ? `${r.offer_deal ? '' : 'до '}${Math.round(r.budget).toLocaleString('ru-RU')} ${r.budget_currency === 'KGS' ? 'сом' : '$'}`
                         : null,
                     ].filter(Boolean).join(' · ') || 'Без условий'}
                   </td>

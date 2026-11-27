@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import type { Money } from '@/lib/fx';
+import { MoneySwitch } from './MoneySwitch';
 import Image from 'next/image';
 import { AGENCY_NAME } from '@/lib/agency';
 import { t, type Lang } from '@/lib/i18n';
@@ -8,7 +10,14 @@ import logo from '../public/liberterra.png';
 import logoDark from '../public/liberterra-dark.png';
 
 /**
- * Шапка публичной части: знак, заявки, язык, дверь для агентов.
+ * Шапка публичной части: знак, разделы, язык, две двери.
+ *
+ * Дверей две, и они разной громкости. «Сдать или продать» — контурная
+ * фирменным цветом: это вход для человека с квартирой на руках, и до сих
+ * пор его на сайте не было вовсе. «Вход для агентов» — контурная серым:
+ * он нужен пяти процентам посетителей. Залитого красного здесь нет
+ * намеренно: он означает на сайте одно — действие, ради которого пришёл
+ * клиент, и живёт на первом экране и на кнопке «Найти».
  *
  * Светлая в светлой теме и тёмная в тёмной — вместе со страницей.
  * Знак при этом меняется на версию для тёмного фона: исходный красный
@@ -22,7 +31,11 @@ import logoDark from '../public/liberterra-dark.png';
  * белое. Исходный блок красный целиком и на чёрном даёт 3.6 : 1 — для
  * имени агентства мало.
  */
-export function CatalogHeader({ lang }: { lang: Lang }) {
+export function CatalogHeader({ lang, money }: {
+  lang: Lang;
+  /** Валюта показа. Пусто — курс неизвестен, и переключателя нет. */
+  money?: Money | null;
+}) {
   const d = t(lang);
   return (
     <header className="nav">
@@ -36,9 +49,22 @@ export function CatalogHeader({ lang }: { lang: Lang }) {
         </Link>
         {/* Единственный раздел рядом со знаком: человек, не нашедший
             объект в каталоге, не должен искать, куда написать. */}
-        <Link href={`/${lang}/agents`} className="nav-link">{d.agentsNav}</Link>
-        <Link href={`/${lang}/request`} className="nav-link">{d.reqNav}</Link>
-        <span className="spacer" />
+        {/* Разделы в своей обёртке. На широком экране она прозрачна
+            (display: contents) и ничего не меняет; на телефоне становится
+            отдельной строкой целиком — иначе один из разделов остаётся
+            наверху, а второй висит внизу один. */}
+        <nav className="nav-sections">
+          <Link href={`/${lang}/agents`} className="nav-link">{d.agentsNav}</Link>
+          <Link href={`/${lang}/request`} className="nav-link">{d.reqNav}</Link>
+          {/* Путь собственника. Раньше его не было: человек с квартирой
+              видел каталог чужих объявлений и уходил звонить — или не
+              звонил. Ссылка ведёт в ту же форму заявки, открытую на
+              стороне «сдаю или продаю». */}
+          <Link href={`/${lang}/request?side=own`} className="nav-cta">{d.navSell}</Link>
+        </nav>
+        {/* Переключатель валюты стоит рядом с языком: оба про то, КАК
+            показывать, а не про то, что искать. */}
+        {money ? <MoneySwitch value={money} label={d.moneySwitch} /> : null}
         <ThemeSwitch label={d.themeSwitch} />
         <LangSwitcher lang={lang} />
         <Link href="/login" className="enter">

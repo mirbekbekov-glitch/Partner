@@ -7,6 +7,9 @@ import {
 import { approvedColleagues } from '@/lib/db/agents';
 import { canEditObject } from '@/lib/db/access';
 import { inFeed } from '@/lib/feed';
+import { estimate, marketLookalikes } from '@/lib/db/market';
+import { exportState } from '@/lib/db/feed-log';
+import { awayFromMarket } from '@/lib/market/valuation';
 import { missingFields } from '@/lib/mhouse-feed';
 import { Activities, type ActivityRow } from '../../Activities';
 import { CreateMatchForm } from '../../CreateMatchForm';
@@ -68,6 +71,36 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
 
   const feedGaps = missingFields(object);
 
+  // Проверка по площадкам. Два разных вопроса, и оба про один объект:
+  // не висит ли он уже где-то ещё, и не выбивается ли цена из рынка.
+  //
+  // Считается ПОСЛЕ загрузки объекта, а не вместе с ней: обоим нужен сам
+  // объект. Отказ индекса не должен ронять карточку — объект существует
+  // независимо от того, успел ли обход собрать рынок.
+  // Что известно о выгрузке на площадку. Три разных утверждения, и
+  // путать их нельзя: «попал в выгрузку» и «площадка забрала фид» —
+  // наши факты, а «объявление опубликовано» знает только площадка.
+  const exported = await exportState(object.id).catch(() => null);
+
+  const KINDS_WITH_MARKET = ['flat', 'room', 'house', 'land'];
+  const lookalikes = await marketLookalikes(object).catch(() => null);
+  const priced = object.area && KINDS_WITH_MARKET.includes(object.kind)
+    ? await estimate({
+      deal: object.deal_type,
+      kind: object.kind as 'flat' | 'room' | 'house' | 'land',
+      city: object.city,
+      zone: object.zone,
+      rooms: object.rooms,
+      area: object.area,
+      currency: object.currency === 'KGS' ? 'KGS' : 'USD',
+      period: object.deal_type === 'rent' ? 'month' : null,
+    }).catch(() => null)
+    : null;
+
+  const away = priced?.valuation
+    ? awayFromMarket(Math.round(object.price * 100), priced.valuation)
+    : null;
+
   return (
     <>
       <h1>{object.address}</h1>
@@ -104,6 +137,41 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
             <span className="warn">не хватает: {feedGaps.join(', ')}</span>
           )}
         </div>
+        {/* Что произошло с выгрузкой на самом деле. Строка выше говорит,
+            ГОДИТСЯ ли объект; эта — УХОДИЛ ли он и забирала ли площадка
+            файл. До этого кабинет не знал ни того ни другого, и ответить
+            «наше объявление уже на house.kg?» можно было только сходив
+            туда руками. */}
+        {exported ? (
+          <div className="row" style={{ marginTop: 8 }}>
+            <span className="key">MHouse</span>
+            {exported.exportedAt && exported.status === 'exported' ? (
+              <span>
+                в выгрузке с{' '}
+                {new Date(exported.exportedAt).toLocaleDateString('ru-RU')}
+                {exported.lastPullAt
+                  ? ` · площадка забирала фид ${when(exported.lastPullAt)}`
+                  : ' · но фид площадка ещё ни разу не забирала'}
+              </span>
+            ) : exported.lastPullAt ? (
+              <span className="tbl-note">
+                в выгрузку не уходил; фид площадка забирала {when(exported.lastPullAt)}
+              </span>
+            ) : (
+              <span className="tbl-note">
+                фид площадка ещё ни разу не забирала — ссылку ей, возможно,
+                не передавали
+              </span>
+            )}
+          </div>
+        ) : null}
+        {exported?.exportedAt && exported.status === 'exported' ? (
+          <p className="tbl-note" style={{ marginTop: 4 }}>
+            Это значит «объект ушёл в файл и площадка файл забрала», а не
+            «объявление опубликовано»: публикацию подтверждает только сама
+            площадка, а она нам ничего не сообщает.
+          </p>
+        ) : null}
         {object.publication_state === 'published' && !inFeed(object.kind) ? (
           <p className="warn" style={{ marginTop: 8 }}>
             В выгрузку на Яндекс этот объект не попадает: формат для
@@ -193,6 +261,86 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
           </div>
         </>
       ) : null}
+
+
+      {/* ПРОВЕРКА ПО ПЛОЩАДКАМ.
+          Ради неё и собирался индекс рынка. «Проверен» — обещание, и
+          проверяемо оно ровно здесь: объект, который уже висит на
+          площадке под другой ценой или от другого продавца, виден
+          агенту до того, как карточка уйдёт в работу.
+
+          Утверждения «это тот же объект» тут нет и не будет: доказать
+          его нечем, а ошибка обвиняет агента в перепосте чужого. Поэтому
+          «похоже» и список совпавших признаков — решает человек. */}
+      <div className="card">
+        <h2>Проверка по площадкам</h2>
+
+        {away !== null && priced?.valuation ? (
+          <p>
+            Цена{' '}
+            {away === 0 ? <strong>в рынке</strong>
+              : <strong>{away > 0 ? `на ${away}% выше рынка` : `на ${-away}% ниже рынка`}</strong>}
+            {' '}— по {priced.valuation.basis.count} похожим объявлениям house.kg,
+            середина {money(priced.valuation.midMinor / 100, object.currency)} —{' '}
+            <Link className="crm-link" href={`/cabinet/assistant?deal=${object.deal_type}&kind=${object.kind}&city=${encodeURIComponent(object.city)}&rooms=${object.rooms ?? ''}&area=${object.area ?? ''}&cur=${object.currency}${object.zone ? `&zone=${encodeURIComponent(object.zone)}` : ''}`}>
+              смотреть весь расчёт
+            </Link>.
+          </p>
+        ) : priced && priced.valuation === null ? (
+          <p className="tbl-note">
+            Цену сравнить не с чем:{' '}
+            {priced.reason === 'мало похожих'
+              ? `похожих объявлений нашлось ${priced.pool}, а считать можно от пяти`
+              : 'в индексе нет объявлений этого вида в этом городе'}.
+          </p>
+        ) : null}
+
+        {lookalikes === null ? (
+          <p className="tbl-note">Индекс рынка сейчас недоступен — проверка не выполнялась.</p>
+        ) : !lookalikes.comparable ? (
+          <p className="tbl-note">
+            Объекты этого вида обход площадки не собирает — сравнивать не с чем.
+          </p>
+        ) : lookalikes.found.length === 0 ? (
+          <p className="ok">Похожих объявлений на house.kg не нашлось.</p>
+        ) : (
+          <>
+            {lookalikes.found.some((r) => r.ours) ? (
+              <p className="ok">
+                Это объявление на house.kg подано нами же. Расхождения ниже —
+                наша собственная несогласованность: в кабинете одно, в нашем
+                объявлении другое.
+              </p>
+            ) : null}
+            {lookalikes.found.some((r) => !r.ours) ? (
+              <p className="warn">
+                Похоже, этот объект висит на house.kg и у кого-то ещё —{' '}
+                {lookalikes.found.filter((r) => !r.ours).length === 1
+                  ? 'одно объявление'
+                  : `объявлений: ${lookalikes.found.filter((r) => !r.ours).length}`}.
+                Это не доказательство: совпасть могут и две разные квартиры в
+                одном доме. Смотрите признаки и решайте сами.
+              </p>
+            ) : null}
+            {lookalikes.found.slice(0, 3).map((r) => (
+              <div key={r.candidate.id} className="row" style={{ marginTop: 8, display: 'block' }}>
+                <p>
+                  {r.ours ? <span className="tag">наше</span> : null}{' '}
+                  <Link className="crm-link-out" href={r.candidate.url} target="_blank"
+                    rel="noopener noreferrer nofollow">
+                    {r.candidate.address ?? 'объявление на house.kg'}
+                  </Link>
+                </p>
+                <p className="tbl-note">Совпало: {r.signals.join(' · ')}</p>
+                <p className="tbl-note">
+                  Расходится:{' '}
+                  {r.differences.map((d) => `${d.what} — у нас ${d.ours}, там ${d.theirs}`).join('; ')}
+                </p>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
 
       <h2>Подборы ({rows.length})</h2>
 

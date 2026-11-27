@@ -22,7 +22,7 @@ import { panoramasFrom, type Panorama } from './panoramas';
 
 /** Единственный разрешённый состав публичной выдачи. */
 const COLUMNS = [
-  'id', 'kind', 'deal_type', 'address', 'city', 'zone',
+  'id', 'kind', 'subkind', 'deal_type', 'address', 'city', 'zone',
   'rooms', 'area', 'floor', 'floors_total',
   'price_minor', 'currency', 'photos', 'description',
   'published_at', 'actual_at',
@@ -43,6 +43,8 @@ const SELECT = COLUMNS.map((c) => `o.${c}`).join(', ');
 export type CatalogRow = {
   id: string;
   kind: string;
+  /** Точный вид внутри kind: кабинет, склад, рабочее место. */
+  subkind: string | null;
   deal_type: 'rent' | 'sale';
   address: string;
   city: string;
@@ -110,19 +112,53 @@ export type CatalogQuery = {
   q?: string | null;
   /** Объекты одного агента — для его публичной страницы. */
   agent?: string | null;
+  /**
+   * Валюта, в которой человек смотрит цены, и курс к сому.
+   *
+   * Нужны отбору и порядку: без них «цена до» и «сначала дешёвые»
+   * сравнивают числа разных валют. Пусто означает «курса нет» — тогда
+   * сравниваются сырые числа, как было.
+   */
+  money?: 'USD' | 'KGS' | null;
+  rate?: number | null;
   sort?: 'fresh' | 'cheap' | 'big';
   page?: number;
   pageSize?: number;
 };
 
+/**
+ * Цена объекта, приведённая к сомам, — для отбора и порядка.
+ *
+ * Зачем приведение. Цены хранятся в своей валюте, и сравнивать их числом
+ * нельзя: 80 000 сомов дешевле 2 000 долларов, но как числа — наоборот.
+ * Пока весь каталог был в долларах, это не было видно; с первым объектом
+ * в сомах «до 100 000» смешало бы несмешиваемое, а «сначала дешёвые»
+ * поставило бы дорогое вперёд.
+ *
+ * К сомам, а не к долларам, потому что сом — валюта страны: объект без
+ * курса (а курс бывает неизвестен) остаётся на своём месте, если он уже
+ * в сомах, и это чаще верно, чем наоборот.
+ *
+ * Курс приходит параметром. Нет курса — приведения нет, и сравниваются
+ * сырые числа: ровно то, что было до этого. Хуже не станет, а выдуманный
+ * курс был бы хуже.
+ */
+function priceInSom(rate: number | null): string {
+  if (!rate || rate <= 0) return 'o.price_minor';
+  return `(case when o.currency = 'USD' then o.price_minor * ${Number(rate)}
+                else o.price_minor end)`;
+}
+
 /** Поля сортировки. Имя колонки берётся отсюда, а не из строки запроса. */
-const SORTS: Record<string, string> = {
-  // «Свежие» — по дате подтверждения, а не публикации: объявление, которое
-  // агент подтвердил вчера, полезнее того, что висит с лета.
-  fresh: 'o.actual_at desc',
-  cheap: 'o.price_minor asc',
-  big: 'o.area desc',
-};
+function sorts(rate: number | null): Record<string, string> {
+  return {
+    // «Свежие» — по дате подтверждения, а не публикации: объявление, которое
+    // агент подтвердил вчера, полезнее того, что висит с лета.
+    fresh: 'o.actual_at desc',
+    cheap: `${priceInSom(rate)} asc`,
+    big: 'o.area desc',
+  };
+}
 
 /**
  * Разбор поискового запроса.
@@ -170,12 +206,20 @@ function conditions(query: CatalogQuery): { clause: string; params: (string | nu
   if (query.zone) { where.push('o.zone = ?'); params.push(query.zone); }
   if (query.rooms) { where.push('o.rooms = ?'); params.push(query.rooms); }
 
-  // Цена приходит в основных единицах — так её вводит человек в фильтре.
+  // Цена приходит в основных единицах — так её вводит человек в фильтре,
+  // и В ТОЙ ВАЛЮТЕ, которую он выбрал. Обе стороны сравнения приводятся к
+  // сомам: иначе «до 100 000» у человека в сомах отрезало бы долларовые
+  // объекты по их долларовому числу.
+  const rate = query.rate && query.rate > 0 ? query.rate : null;
+  const column = priceInSom(rate);
+  const toSom = (v: number) =>
+    rate && query.money === 'USD' ? v * 100 * rate : v * 100;
+
   if (query.priceMin != null) {
-    where.push('o.price_minor >= ?'); params.push(query.priceMin * 100);
+    where.push(`${column} >= ?`); params.push(toSom(query.priceMin));
   }
   if (query.priceMax != null) {
-    where.push('o.price_minor <= ?'); params.push(query.priceMax * 100);
+    where.push(`${column} <= ?`); params.push(toSom(query.priceMax));
   }
 
   // Объекты агента — через АКТИВНЫЙ мандат, как и везде в витрине: ведёт
@@ -200,7 +244,8 @@ function conditions(query: CatalogQuery): { clause: string; params: (string | nu
 /** Список объектов витрины. */
 export async function catalogPage(query: CatalogQuery = {}): Promise<CatalogPage> {
   const { clause, params } = conditions(query);
-  const order = SORTS[query.sort ?? 'fresh'] ?? SORTS.fresh;
+  const table = sorts(query.rate ?? null);
+  const order = table[query.sort ?? 'fresh'] ?? table.fresh!;
 
   const size = Math.min(Math.max(query.pageSize ?? 12, 1), 60);
   const page = Math.max(query.page ?? 1, 1);
@@ -430,6 +475,19 @@ export async function catalogAgents(): Promise<CatalogAgentCard[]> {
   return rows.sort((a, b) => a.full_name.localeCompare(b.full_name, 'ru'));
 }
 
+/**
+ * Сколько агентов видно клиенту — число для первого экрана.
+ *
+ * Отдельным запросом, а не длиной списка карточек: на первом экране нужно
+ * одно число, а карточка тянет фотографию, стаж и организацию.
+ */
+export async function catalogAgentCount(): Promise<number> {
+  const row = await one<{ n: number }>(
+    `select count(*) as n from agents ag where ${AGENT_VISIBLE}`,
+  );
+  return row?.n ?? 0;
+}
+
 /** Один агент. Пусто означает «такого на сайте нет», и страница даёт 404. */
 export async function catalogAgentById(id: string): Promise<CatalogAgentCard | null> {
   return one<CatalogAgentCard>(
@@ -439,6 +497,107 @@ export async function catalogAgentById(id: string): Promise<CatalogAgentCard | n
       where ag.id = ? and ${AGENT_VISIBLE}`,
     id,
   );
+}
+
+/**
+ * Курс доллара для показа цен — через витрину, а не напрямую.
+ *
+ * Казалось бы, курс не тайна и читать его можно откуда угодно. Но правило
+ * «публичная часть ходит только в витрину» держится проверкой, и дыра в
+ * нём ради безобидного курса — это дыра. Завтра кто-то тем же приёмом
+ * прочитает из публичной страницы кабинетный модуль, и проверка промолчит,
+ * потому что однажды её уже обошли.
+ *
+ * Поэтому курс отдаётся отсюда. Состав тот же: сколько сомов за доллар и
+ * на какую дату — дата обязана дойти до человека вместе с числом.
+ */
+export type CatalogRate = { som_per_unit: number; as_of: string };
+
+export async function catalogRate(): Promise<CatalogRate | null> {
+  return one<CatalogRate>(
+    `select som_per_unit, as_of from fx_rates where code = 'USD'`,
+  );
+}
+
+/**
+ * Нижняя граница рынка для заявки клиента.
+ *
+ * Зачем. Человек пишет бюджет наугад: «сниму двушку в Асанбае за 20 000»,
+ * когда дешевле 35 000 там нет ни одного варианта. Заявка уходит, агент
+ * тратит день, клиент ждёт и злится — а разговор про деньги всё равно
+ * состоится, только через день и уже на раздражении.
+ *
+ * ЧТО СЧИТАЕТСЯ ПОРОГОМ. Минимальная цена среди сопоставимых объявлений,
+ * а не процентиль и не средняя со скидкой. Это единственная величина,
+ * которую можно произнести вслух без вранья: «дешевле этого у нас нет ни
+ * одного варианта». Процентиль отрезал бы людей, которым настоящее
+ * объявление по карману, — а порог здесь ЗАПРЕЩАЕТ отправку, и запрещать
+ * можно только то, что заведомо не существует.
+ *
+ * КОГДА ПОРОГА НЕТ. Когда сопоставимых объявлений меньше MIN_SAMPLE.
+ * Запретить человеку заявку, опираясь на два объявления, — это запрет по
+ * незнанию: рынок мы в этом срезе не знаем, и молчать честнее.
+ *
+ * Сравнимость: то же направление сделки, тот же вид жилья, тот же район.
+ * Комнаты НЕ учитываются намеренно: разбиение ещё и по ним дробит выборку
+ * до единиц, и порог исчезает там, где он нужнее всего.
+ */
+const MIN_SAMPLE = 5;
+
+export type PriceFloor = {
+  /** Минорные единицы, как в базе. */
+  floor_minor: number;
+  currency: string;
+  /** По скольким объявлениям посчитано — это идёт человеку в подсказку. */
+  based_on: number;
+};
+
+export async function priceFloor(query: {
+  deal: 'rent' | 'sale';
+  kind?: string | null;
+  city?: string | null;
+  zone?: string | null;
+}): Promise<PriceFloor | null> {
+  const where = [`o.publication_state = 'published'`, 'o.deal_type = ?'];
+  const params: (string | number)[] = [query.deal];
+
+  if (query.kind) { where.push('o.kind = ?'); params.push(query.kind); }
+  if (query.city) { where.push('o.city = ?'); params.push(query.city); }
+  if (query.zone) { where.push('o.zone = ?'); params.push(query.zone); }
+
+  // Валюта берётся та, в которой выставлено большинство: смешивать цены
+  // разных валют в одном минимуме нельзя, а пересчитывать здесь нечем —
+  // курс в витрину приходит отдельно и может быть неизвестен.
+  const row = await one<{ floor_minor: number; currency: string; based_on: number }>(
+    `select min(o.price_minor) as floor_minor, o.currency as currency,
+            count(*) as based_on
+       from objects o
+      where ${where.join(' and ')}
+      group by o.currency
+      order by count(*) desc
+      limit 1`,
+    ...params,
+  );
+
+  if (!row || row.based_on < MIN_SAMPLE || !row.floor_minor) return null;
+  return row;
+}
+
+/**
+ * Валюты, в которых выставлены опубликованные объекты.
+ *
+ * Нужны полю «цена до»: число без валюты непонятно — вводить 800 или
+ * 70 000. Список, а не одно значение, потому что ответ бывает разный:
+ * одна валюта — её и подписываем; несколько — подписать нечем, и это
+ * честнее показать, чем выбрать за человека.
+ */
+export async function catalogCurrencies(): Promise<string[]> {
+  const rows = await all<{ currency: string }>(
+    `select distinct o.currency as currency from objects o
+      where o.publication_state = 'published'
+      order by o.currency`,
+  );
+  return rows.map((r) => r.currency);
 }
 
 /**

@@ -1,17 +1,31 @@
 'use server';
 
 import { submitRequest as acceptRequest } from '@/lib/db/requests';
-import { Invalid } from '@/lib/db/errors';
+import { BudgetTooLow, Invalid } from '@/lib/db/errors';
 import { toMinor } from '@/lib/db/money';
 
 /**
  * Код причины, а не готовая фраза: язык страницы знает форма, а не сервер.
  */
-export type RequestError = 'BAD_PHONE' | 'BAD_INPUT' | 'TOO_MANY' | 'OTHER';
-export type RequestResult = { ok: boolean; code: RequestError | null };
+export type RequestError = 'BAD_PHONE' | 'BAD_INPUT' | 'TOO_MANY' | 'LOW_BUDGET' | 'OTHER';
 
 /**
- * Приём заявки «что я ищу» с публичной страницы.
+ * Ответ формы.
+ *
+ * `floor` заполняется только у LOW_BUDGET: форме нужны ЧИСЛА — порог,
+ * валюта и число объявлений, — чтобы сказать человеку, сколько стоит
+ * искомое, и предложить подставить. Разбирать их из фразы значило бы
+ * писать разборщик собственных сообщений, который сломается на первом же
+ * переводе.
+ */
+export type RequestResult = {
+  ok: boolean;
+  code: RequestError | null;
+  floor?: { amount: number; currency: string; basedOn: number };
+};
+
+/**
+ * Приём заявки с публичной страницы — и «что я ищу», и «что я отдаю».
  *
  * Здесь ничего не решается: все проверки живут в слое доступа
  * (lib/db/requests.ts) — границы полей, нормализация телефона, склейка
@@ -41,7 +55,16 @@ export async function submitRequest(
       phone: String(formData.get('phone') ?? ''),
       name: str('name'),
       deal: str('deal'),
-      housing_type: str('housing_type'),
+      // Сторона заявки. Отдельного поля «сторона» в базе нет: заполненный
+      // offer_deal и означает, что заявку оставил собственник.
+      offer_deal: str('offer_deal'),
+      address: str('address'),
+      // Подробный тип. housing_type слой доступа выводит из него сам —
+      // два поля из формы разошлись бы, и заявка на кабинет приехала бы
+      // заявкой на квартиру.
+      space_type: str('space_type'),
+      term_days_min: num('term_days_min'),
+      term_days_max: num('term_days_max'),
       rooms: num('rooms'),
       district: str('district'),
       // Человек вводит бюджет в долларах или сомах, а в базе деньги целые
@@ -58,6 +81,17 @@ export async function submitRequest(
     });
     return { ok: true, code: null };
   } catch (e) {
+    // По ТИПУ ошибки, а не по тексту: тип переживает перевод, текст нет.
+    // Остальные ветки ниже всё ещё опознаются по фразе — это наследство,
+    // и трогать его заодно значило бы менять то, о чём не просили.
+    if (e instanceof BudgetTooLow) {
+      return {
+        ok: false,
+        code: 'LOW_BUDGET',
+        floor: { amount: e.floor, currency: e.currency, basedOn: e.basedOn },
+      };
+    }
+
     if (e instanceof Invalid) {
       const text = e.message;
       if (text.includes('номер телефона')) return { ok: false, code: 'BAD_PHONE' };

@@ -1,4 +1,5 @@
 import 'server-only';
+import { coarseOf } from '../space-types';
 import { all, batch, flag, jsonArray, newId, now, one, stmt, toJson } from './sql';
 import { auditStmt, diffOf } from './audit';
 import { requireAgent } from './session';
@@ -22,6 +23,8 @@ import { Conflict, Forbidden, Invalid, NotFound } from './errors';
 export type ObjectRow = {
   id: string;
   kind: string;
+  /** Точный вид внутри kind. Пусто — агент его не указал. */
+  subkind: string | null;
   deal_type: 'rent' | 'sale';
   address: string;
   city: string;
@@ -130,8 +133,32 @@ export function stampTimestamps(
 // Создание
 // ---------------------------------------------------------------------------
 
+/**
+ * Точный вид, но только если он СОГЛАСОВАН с огрублённым.
+ *
+ * «Склад» при kind «flat» — не уточнение, а противоречие, и хранить его
+ * значило бы завести две правды об одном объекте: каталог фильтрует по
+ * kind, а карточка показывала бы subkind. Несогласованное отбрасываем:
+ * объект без уточнения честнее объекта, который сам себе противоречит.
+ *
+ * Подменять kind по subkind тоже нельзя: на kind держатся публикация,
+ * выгрузка в фид и порог рынка, и менять его молча из-за поля,
+ * заполненного мимоходом, — худший из вариантов.
+ */
+function agreeingSubkind(kind: string, subkind: string | null | undefined): string | null {
+  if (!subkind) return null;
+  return coarseOf(subkind) === kind ? subkind : null;
+}
+
 export type NewObject = {
   kind: string;
+  /**
+   * Точный вид: кабинет, склад, рабочее место в коворкинге.
+   *
+   * Необязателен и всегда согласован с kind. Из него же выводится
+   * значение для справочника площадки — отдельно его не спрашиваем.
+   */
+  subkind?: string | null;
   deal_type: 'rent' | 'sale';
   address: string;
   price_minor: number;
@@ -202,17 +229,18 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
 
   writes.push(stmt(
     `insert into objects (
-       id, kind, deal_type, address, city, zone, rooms, area, floor, floors_total,
+       id, kind, subkind, deal_type, address, city, zone, rooms, area, floor, floors_total,
        price_minor, currency, photos, description, source, search_text,
        latitude, longitude, region, district, micro_district, house_number,
        building_type, serie, land_area, rental_term, commercial_type,
        room_location, parking_type, build_year,
        publication_state, published_at, actual_at,
        created_by_agent_id, created_at, updated_at)
-     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
              'draft', null, ?, ?, ?, ?)`,
-    id, input.kind, input.deal_type, address, city,
+    id, input.kind, agreeingSubkind(input.kind, input.subkind),
+    input.deal_type, address, city,
     blank(input.zone), input.rooms ?? null, input.area ?? null,
     input.floor ?? null, input.floors_total ?? null,
     input.price_minor, (input.currency || 'USD').trim().toUpperCase(),
@@ -298,7 +326,7 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
 // ---------------------------------------------------------------------------
 
 export type ObjectPatch = Partial<Pick<NewObject,
-  'kind' | 'deal_type' | 'address' | 'city' | 'price_minor' | 'zone' | 'rooms'
+  'kind' | 'subkind' | 'deal_type' | 'address' | 'city' | 'price_minor' | 'zone' | 'rooms'
   | 'area' | 'floor' | 'floors_total' | 'currency' | 'description' | 'photos'
   | 'latitude' | 'longitude' | 'region' | 'district' | 'micro_district'
   | 'house_number' | 'building_type' | 'serie' | 'land_area' | 'rental_term'
@@ -306,7 +334,7 @@ export type ObjectPatch = Partial<Pick<NewObject,
 
 /** Поля, которые агент вправе править. Остальные — только через свои действия. */
 const EDITABLE = [
-  'kind', 'deal_type', 'address', 'city', 'price_minor', 'zone', 'rooms', 'area',
+  'kind', 'subkind', 'deal_type', 'address', 'city', 'price_minor', 'zone', 'rooms', 'area',
   'floor', 'floors_total', 'currency', 'description', 'photos',
   'latitude', 'longitude', 'region', 'district', 'micro_district',
   'house_number', 'building_type', 'serie', 'land_area', 'rental_term',
@@ -346,6 +374,23 @@ export async function updateObject(id: string, patch: ObjectPatch): Promise<Obje
   if (next.city !== undefined) {
     next.city = String(next.city ?? '').trim() || 'Бишкек';
   }
+
+  // kind и subkind правятся по отдельности, а согласованными быть
+  // обязаны. Агент сменил «коммерческую» на «квартиру» — «склад» рядом с
+  // ней стал ложью, и уточнение снимается само. Проверять надо и правку
+  // одного kind: subkind остался бы прежним и начал противоречить.
+  if (next.kind !== undefined || next.subkind !== undefined) {
+    const kind = (next.kind as string | null) ?? before.kind;
+    const subkind = next.subkind !== undefined
+      ? (next.subkind as string | null)
+      : before.subkind;
+    const agreed = agreeingSubkind(kind, subkind);
+    // Записывать только настоящую перемену: иначе правка одного адреса
+    // тянула бы за собой subkind и попадала в журнал как его правка.
+    if (agreed === before.subkind) delete next.subkind;
+    else next.subkind = agreed;
+  }
+
   if (Object.keys(next).length === 0) return view(before);
 
   // Текст поиска пересобирается при каждой правке адреса или района:
