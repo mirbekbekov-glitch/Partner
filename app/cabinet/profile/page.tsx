@@ -53,6 +53,8 @@ export default async function ProfilePage() {
         <ProfileForm
           fullName={agent.full_name}
           phone={agent.phone}
+          whatsapp={agent.whatsapp === 1}
+          telegramUser={agent.telegram_user}
           email={agent.email}
           organization={organization?.name ?? null}
           orgConfirmed={agent.org_confirmed === 1}

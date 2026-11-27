@@ -989,6 +989,27 @@ main:has(.auth) { max-width: none; padding: 0; }
   justify-content: center; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .initials { font-size: 15px; font-weight: 800; color: var(--muted); letter-spacing: .02em; }
+/* Связь с агентом. Номер — текстом и моноширинным: его переписывают
+   глазами на телефон, и в пропорциональном шрифте цифры сбиваются. */
+.contact-row { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.contact-num { font-size: 1.0625rem; font-weight: 700; color: var(--fg);
+  text-decoration: none; letter-spacing: .01em; }
+.contact-num:hover { color: var(--accent); }
+.contact-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.contact-btn { display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 14px; border-radius: var(--r-md); font-size: 0.9375rem;
+  font-weight: 700; text-decoration: none; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg); }
+.contact-btn:hover { border-color: var(--accent); }
+/* Цвета мессенджеров — их собственные: кнопку узнают по цвету раньше,
+   чем прочитают подпись. Белый текст на обоих даёт больше 4.5 : 1. */
+.contact-btn.is-call { background: var(--accent); border-color: var(--accent);
+  color: var(--accent-fg); }
+.contact-btn.is-whatsapp { background: #128C7E; border-color: #128C7E; color: #FFFFFF; }
+.contact-btn.is-telegram { background: #2481CC; border-color: #2481CC; color: #FFFFFF; }
+.contact-btn.is-whatsapp:hover { background: #0F7A6D; border-color: #0F7A6D; }
+.contact-btn.is-telegram:hover { background: #1F6FB0; border-color: #1F6FB0; }
+
 .registry { margin: 12px 0 0; font-size: 0.8125rem; font-weight: 700; }
 .registry .key { display: block; font-weight: 400; margin-top: 2px; }
 

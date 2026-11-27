@@ -279,6 +279,10 @@ export type ObjectListItem = {
   listing_agent_id: string | null;
   listing_agent_name: string | null;
   owner_name: string | null;
+  /** Телефон собственника — по тому же правилу видимости, что и имя. */
+  owner_phone: string | null;
+  /** Снимки объекта: в списке нужен только первый. */
+  photos: string[];
   organization_name: string | null;
   /** Кто ведёт объект: listing-агент активного мандата, иначе — автор. */
   responsible_name: string | null;
@@ -350,9 +354,10 @@ export async function objectList(query: {
   if (query.agentId) { where.push(`${responsible} = ${next()}`); params.push(query.agentId); }
 
   const rows = await all<
-    Omit<ObjectListItem, 'can_edit' | 'contract_confirmed' | 'commission_total'> & {
+    Omit<ObjectListItem, 'can_edit' | 'contract_confirmed' | 'commission_total' | 'photos'> & {
       can_edit: number; contract_confirmed: number | null;
       price_minor: number; commission_rule: string | null; total_count: number;
+      photos: string;
     }
   >(
     `select o.id, o.kind, o.deal_type, o.address, o.city, o.zone, o.rooms, o.area,
@@ -377,6 +382,18 @@ export async function objectList(query: {
                join contacts oc on oc.id = oo.contact_id
               where oo.object_id = o.id and oo.role = 'owner'
               limit 1) as owner_name,
+            -- Телефон собственника — за тем же условием, что и имя:
+            -- инвариант 4 не делает различий между ними, а звонить из
+            -- списка нужно чаще, чем открывать карточку.
+            (select case when ${visible.sql} then
+                      (select cp.phone from contact_phones cp
+                        where cp.contact_id = oc.id
+                        order by cp.is_primary desc limit 1) end
+               from object_ownerships oo
+               join contacts oc on oc.id = oo.contact_id
+              where oo.object_id = o.id and oo.role = 'owner'
+              limit 1) as owner_phone,
+            o.photos,
             (${editable.sql}) as can_edit,
             (select count(*) from leads l
               where l.object_id = o.id and l.status = 'new') as leads_new,
@@ -408,6 +425,9 @@ export async function objectList(query: {
     ...r,
     can_edit: r.can_edit === 1,
     contract_confirmed: r.contract_confirmed === 1,
+    // Снимки разбираются здесь, а не у вызывающего: в D1 это колонка с
+    // текстом, и всякий, кто её читает, обязан разбор сделать.
+    photos: jsonArray<string>(r.photos),
     // Комиссия объекта считается на лету от текущей цены по правилу
     // мандата: записывать её некуда и незачем — объект ещё не продан, и
     // записанная сумма означала бы, что деньги уже поделены. Без

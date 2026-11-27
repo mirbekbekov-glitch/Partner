@@ -174,6 +174,7 @@ export async function updateProfile(
   patch: {
     full_name?: string; phone?: string | null; focus?: 'sale' | 'rent' | 'both';
     works_since?: number | null; certificate_no?: string | null;
+    whatsapp?: boolean; telegram_user?: string | null;
   },
 ): Promise<AgentRow> {
   const agent = await requireSelf();
@@ -188,6 +189,23 @@ export async function updateProfile(
     next.name_sort = searchText(name);
   }
   if (patch.phone !== undefined) next.phone = (patch.phone ?? '').trim() || null;
+  if (patch.whatsapp !== undefined) next.whatsapp = patch.whatsapp ? 1 : 0;
+
+  // Ник, а не ссылка и не номер: в поле вписывают и «@mirbek», и
+  // «t.me/mirbek», и адрес целиком. Всё это — один и тот же ник, и
+  // ссылку из него собираем мы, а не агент.
+  if (patch.telegram_user !== undefined) {
+    const nick = (patch.telegram_user ?? '')
+      .trim()
+      .replace(/^https?:\/\//i, '')
+      .replace(/^t\.me\//i, '')
+      .replace(/^@/, '')
+      .trim();
+    if (nick && !/^[A-Za-z0-9_]{4,32}$/.test(nick)) {
+      throw new Invalid('Ник в Telegram — латиница, цифры и подчёркивание, от 4 знаков');
+    }
+    next.telegram_user = nick || null;
+  }
   if (patch.focus !== undefined) next.focus = patch.focus;
 
   if (patch.works_since !== undefined) {

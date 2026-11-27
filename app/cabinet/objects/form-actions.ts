@@ -8,6 +8,7 @@ import {
 } from '@/lib/db/objects';
 import { createMandate, terminateMandate } from '@/lib/db/mandates';
 import { currentAgent } from '@/lib/db/session';
+import { updateProfile } from '@/lib/db/agents';
 import { toMinor } from '@/lib/db/money';
 import { attempt, explain } from '@/lib/db/report';
 import { describeObject, type DraftResult } from '@/lib/ai/describe';
@@ -76,9 +77,44 @@ const platformFields = (formData: FormData) => ({
   build_year: num(formData.get('build_year')),
 });
 
+
+/**
+ * Телефон агента — обязателен при заведении объекта.
+ *
+ * Объявление без связи бессмысленно: покупатель читает карточку и не
+ * может ничего спросить. Поэтому номер спрашивается там же, где всё
+ * остальное, а не прячется в профиле, куда агент заходит раз в жизнь.
+ *
+ * Сохраняется он в профиль, а не в объект: номер у агента один, и держать
+ * его копию в каждой карточке значит получить десять разных номеров
+ * одного человека, из которых девять устареют.
+ *
+ * Чужой профиль не трогается. Номер записывается только тогда, когда он
+ * отличается от своего же: админ, правящий чужой объект, иначе переписал
+ * бы СВОЙ номер тем, что стоит в карточке коллеги.
+ */
+async function saveOwnPhone(formData: FormData): Promise<string | null> {
+  const phone = str(formData.get('agent_phone'));
+  if (!phone) return 'Впишите свой телефон: без него объявление не опубликовать.';
+
+  const me = await currentAgent();
+  if (me && (me.phone ?? '') !== phone) {
+    try {
+      await updateProfile({ phone });
+    } catch (e) {
+      return explain(e);
+    }
+  }
+
+  return null;
+}
+
 export async function createObject(formData: FormData): Promise<FormResult> {
   const price = money(formData.get('price'));
   if (price === null) return { error: 'Укажите цену.' };
+
+  const phoneError = await saveOwnPhone(formData);
+  if (phoneError) return { error: phoneError };
 
   const mandateKind = str(formData.get('mandate_kind'));
   let id: string;
@@ -123,6 +159,9 @@ export async function updateObject(formData: FormData): Promise<FormResult> {
   const id = String(formData.get('id') ?? '');
   const price = money(formData.get('price'));
   if (price === null) return { error: 'Укажите цену.' };
+
+  const phoneError = await saveOwnPhone(formData);
+  if (phoneError) return { error: phoneError };
 
   const error = await attempt(() => editObject(id, {
     kind: str(formData.get('kind')) ?? undefined,

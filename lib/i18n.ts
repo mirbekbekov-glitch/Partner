@@ -57,6 +57,7 @@ type Dict = {
   toAll: string; about: string; published: string; roomsLabel: string;
   areaLabel: string; floorLabel: string; floorOf: string; zoneLabel: string; cityLabel: string;
   zoneSearch: string; zoneNone: string; regionLabel: string; otherPlaces: string;
+  callAgent: string; writeWhatsapp: string; writeTelegram: string;
   confirmedPrice: string; notFound: string; notFoundLede: string; seeWhatIsThere: string;
   // Блок агента на странице объекта. Открыты ровно три поля: имя, стаж и
   // подтверждённый номер в реестре. Телефон агента здесь намеренно
@@ -130,6 +131,7 @@ const ru: Dict = {
   zoneLabel: 'Район', cityLabel: 'Город',
   zoneSearch: 'Поиск…', zoneNone: 'Такого района нет в списке',
   regionLabel: 'Регион', otherPlaces: 'Другие места',
+  callAgent: 'Позвонить', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   confirmedPrice: 'Агент подтвердил цену и доступность',
   agentLeads: 'Объект ведёт',
   // «год», «года», «лет»: иначе строка читается как машинный перевод.
@@ -234,6 +236,7 @@ const ky: Dict = {
   zoneLabel: 'Район', cityLabel: 'Шаар',
   zoneSearch: 'Издөө…', zoneNone: 'Мындай район тизмеде жок',
   regionLabel: 'Аймак', otherPlaces: 'Башка жерлер',
+  callAgent: 'Чалуу', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   confirmedPrice: 'Агент бааны жана жеткиликтүүлүктү ырастады',
   agentLeads: 'Объектти алып баруучу',
   agentYears: (n) => `кыймылсыз мүлктө ${n} жыл`,
@@ -328,6 +331,7 @@ const en: Dict = {
   zoneLabel: 'District', cityLabel: 'City',
   zoneSearch: 'Search…', zoneNone: 'No such district in the list',
   regionLabel: 'Region', otherPlaces: 'Other places',
+  callAgent: 'Call', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   confirmedPrice: 'Agent confirmed the price and availability',
   agentLeads: 'Listing agent',
   agentYears: (n) => `${n} ${n === 1 ? 'year' : 'years'} in real estate`,
@@ -422,6 +426,7 @@ const zh: Dict = {
   zoneLabel: '区域', cityLabel: '城市',
   zoneSearch: '搜索…', zoneNone: '列表中没有该区域',
   regionLabel: '地区', otherPlaces: '其他地方',
+  callAgent: '拨打电话', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   confirmedPrice: '经纪人已确认价格与可售状态',
   agentLeads: '负责经纪人',
   agentYears: (n) => `从事房地产 ${n} 年`,
