@@ -36,8 +36,14 @@ export function CatalogHeader({ lang }: { lang: Lang }) {
         </Link>
         {/* Единственный раздел рядом со знаком: человек, не нашедший
             объект в каталоге, не должен искать, куда написать. */}
-        <Link href={`/${lang}/agents`} className="nav-link">{d.agentsNav}</Link>
-        <Link href={`/${lang}/request`} className="nav-link">{d.reqNav}</Link>
+        {/* Разделы в своей обёртке. На широком экране она прозрачна
+            (display: contents) и ничего не меняет; на телефоне становится
+            отдельной строкой целиком — иначе один из разделов остаётся
+            наверху, а второй висит внизу один. */}
+        <nav className="nav-sections">
+          <Link href={`/${lang}/agents`} className="nav-link">{d.agentsNav}</Link>
+          <Link href={`/${lang}/request`} className="nav-link">{d.reqNav}</Link>
+        </nav>
         <span className="spacer" />
         <ThemeSwitch label={d.themeSwitch} />
         <LangSwitcher lang={lang} />
