@@ -5,8 +5,11 @@ import {
   addActivity,
   toggleActivity,
   deleteActivity,
+  reassign,
   type ActivityResult,
 } from './activity-actions';
+
+export type Colleague = { id: string; full_name: string };
 
 export const KIND_RU: Record<string, string> = {
   call: 'звонок',
@@ -45,7 +48,9 @@ const when = (v: string | null) =>
  * Править и отмечать можно только своё: политика чужую строку не находит,
  * поэтому у чужой записи кнопок нет вовсе.
  */
-export function ActivityActions({ a }: { a: ActivityRow }) {
+export function ActivityActions(
+  { a, colleagues = [] }: { a: ActivityRow; colleagues?: Colleague[] },
+) {
   const [, toggle, toggling] = useActionState<ActivityResult, FormData>(
     async (_p, fd) => toggleActivity(fd),
     { error: null },
@@ -54,8 +59,16 @@ export function ActivityActions({ a }: { a: ActivityRow }) {
     async (_p, fd) => deleteActivity(fd),
     { error: null },
   );
+  const [handState, handOver, handing] = useActionState<ActivityResult, FormData>(
+    async (_p, fd) => reassign(fd),
+    { error: null },
+  );
 
   if (!a.mine) return null;
+
+  // Передавать осмысленно только незакрытое и только когда есть кому:
+  // у одинокого агента этот выпадающий список был бы пустым обещанием.
+  const canHandOver = !a.done && colleagues.length > 0;
 
   return (
     <div className="actions">
@@ -78,7 +91,23 @@ export function ActivityActions({ a }: { a: ActivityRow }) {
         <input type="hidden" name="id" value={a.id} />
         <button type="submit" disabled={deleting} className="ghost">удалить</button>
       </form>
+      {canHandOver ? (
+        <form action={handOver} className="hand-over">
+          <input type="hidden" name="id" value={a.id} />
+          {/* Передача — одно действие, а не «выбрать и подтвердить»: выбор
+              без кнопки сработал бы от случайного промаха по списку. */}
+          <select name="to_agent_id" required defaultValue=""
+                  aria-label="Передать коллеге">
+            <option value="" disabled>передать…</option>
+            {colleagues.map((c) => (
+              <option key={c.id} value={c.id}>{c.full_name}</option>
+            ))}
+          </select>
+          <button type="submit" disabled={handing} className="ghost">передать</button>
+        </form>
+      ) : null}
       {delState.error ? <span className="error inline-error">{delState.error}</span> : null}
+      {handState.error ? <span className="error inline-error">{handState.error}</span> : null}
     </div>
   );
 }
@@ -99,7 +128,7 @@ export function ActivityMeta({ a }: { a: ActivityRow }) {
 
 export const activityWhen = when;
 
-function Row({ a }: { a: ActivityRow }) {
+function Row({ a, colleagues }: { a: ActivityRow; colleagues?: Colleague[] }) {
   return (
     <div className="act">
       <div className="row">
@@ -110,7 +139,7 @@ function Row({ a }: { a: ActivityRow }) {
 
       {a.body ? <p className="act-body">{a.body}</p> : null}
 
-      <ActivityActions a={a} />
+      <ActivityActions a={a} colleagues={colleagues} />
     </div>
   );
 }
@@ -120,10 +149,12 @@ export function Activities({
   entityType,
   entityId,
   rows,
+  colleagues = [],
 }: {
   entityType: string;
   entityId: string;
   rows: ActivityRow[];
+  colleagues?: Colleague[];
 }) {
   const [state, formAction, pending] = useActionState<ActivityResult, FormData>(
     async (_p, fd) => addActivity(fd),
@@ -153,6 +184,17 @@ export function Activities({
           {kind === 'task' || kind === 'showing' ? (
             <input name="due_at" type="datetime-local" aria-label="Срок" />
           ) : null}
+          {/* Поставить на коллегу можно задачу и показ. Заметку и звонок —
+              нет: это запись о том, что сделал ТЫ, и приписать её другому
+              значило бы сочинять за него историю. */}
+          {(kind === 'task' || kind === 'showing') && colleagues.length > 0 ? (
+            <select name="agent_id" defaultValue="" aria-label="На кого">
+              <option value="">на себя</option>
+              {colleagues.map((c) => (
+                <option key={c.id} value={c.id}>{c.full_name}</option>
+              ))}
+            </select>
+          ) : null}
         </div>
 
         <textarea name="body" rows={2} placeholder="что произошло или что нужно сделать" />
@@ -180,7 +222,7 @@ export function Activities({
         <p className="empty">Записей пока нет.</p>
       ) : null}
 
-      {open.map((a) => <Row key={a.id} a={a} />)}
+      {open.map((a) => <Row key={a.id} a={a} colleagues={colleagues} />)}
 
       {done.length > 0 ? (
         <>

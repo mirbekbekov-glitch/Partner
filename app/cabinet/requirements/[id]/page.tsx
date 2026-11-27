@@ -171,6 +171,7 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
         entityType="requirement"
         entityId={requirement.id}
         rows={(activities ?? []) as ActivityRow[]}
+        colleagues={(colleagues ?? []) as Colleague[]}
       />
 
       <h2>Создать подбор</h2>

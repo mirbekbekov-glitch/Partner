@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { myActivities, myReminders } from '@/lib/db/cabinet';
+import { approvedColleagues } from '@/lib/db/agents';
 import {
-  ActivityActions, ActivityMeta, activityWhen, KIND_RU, type ActivityRow,
+  ActivityActions, ActivityMeta, activityWhen, KIND_RU,
+  type ActivityRow, type Colleague,
 } from '../Activities';
 
 export const metadata = { title: 'Задачи' };
@@ -25,14 +27,16 @@ export default async function ActivitiesPage() {
     activity_id: string; kind: string; status: string;
     channel: string | null; last_error: string | null;
   }> = [];
+  let colleagues: Colleague[] = [];
   let failed: string | null = null;
 
   try {
     // Состояние напоминаний рядом со списком: молчание хуже всего — агент
     // должен видеть, отправлено ли напоминание и если нет, то почему.
-    [rows, reminders] = await Promise.all([
+    [rows, reminders, colleagues] = await Promise.all([
       myActivities(),
       myReminders(),
+      approvedColleagues(),
     ]);
   } catch (e) {
     failed = e instanceof Error ? e.message : 'Не удалось загрузить задачи.';
@@ -62,15 +66,20 @@ export default async function ActivitiesPage() {
       </p>
 
       <Section title={`Просрочено (${overdue.length})`} rows={overdue}
-               reminders={byActivity} warn />
+               reminders={byActivity} colleagues={colleagues} warn />
       <Section title={`Со сроком (${dueSoon.length})`} rows={dueSoon}
-               reminders={byActivity} />
+               reminders={byActivity} colleagues={colleagues} />
       <Section title={`Без срока (${noDate.length})`} rows={noDate}
-               reminders={byActivity} />
+               reminders={byActivity} colleagues={colleagues} />
 
+      {/* Этот раздел сейчас не показывается никогда: myActivities отдаёт
+          только незакрытые (`and a.done = 0`), поэтому done всегда пуст.
+          Разметка оставлена как есть — решать, показывать ли выполненные
+          в личном списке, надо продуктово, а не заодно. Передачи у
+          закрытой записи всё равно нет: ActivityActions её не рисует. */}
       {done.length > 0 ? (
         <Section title={`Выполнено (${done.length})`} rows={done.slice(0, 30)}
-                 reminders={byActivity} />
+                 reminders={byActivity} colleagues={colleagues} />
       ) : null}
 
       {rows.length === 0 ? (
@@ -102,11 +111,13 @@ function Section({
   title,
   rows,
   reminders,
+  colleagues,
   warn,
 }: {
   title: string;
   rows: ActivityRow[];
   reminders: Map<string, { status: string; last_error: string | null }>;
+  colleagues: Colleague[];
   warn?: boolean;
 }) {
   if (rows.length === 0) return null;
@@ -188,7 +199,7 @@ function Section({
                     )}
                   </td>
                   <td data-l="Действия">
-                    <ActivityActions a={a} />
+                    <ActivityActions a={a} colleagues={colleagues} />
                   </td>
                 </tr>
               );

@@ -15,6 +15,8 @@ import { resetCookies, setCookie } from './stubs/next-headers';
 import { SESSION_COOKIE, currentAgent, endSession, sessionAgent } from '@/lib/db/session';
 import { completeLogin, requestLogin, revokePendingLinks } from '@/lib/db/login';
 import { inviteAgent } from '@/lib/db/invites';
+import { approvedColleagues } from '@/lib/db/agents';
+import { myActivities } from '@/lib/db/cabinet';
 import { outbox, tokenFromLastLetter } from './stubs/email';
 import {
   confirmActual, createObject, getObject, publishObject,
@@ -23,7 +25,7 @@ import {
 import { createMandate, expireMandates, terminateMandate } from '@/lib/db/mandates';
 import { canSeeContact } from '@/lib/db/access';
 import { createRequirement } from '@/lib/db/requirements';
-import { createActivity, setActivityDone } from '@/lib/db/activities';
+import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import {
   catalogAgent, catalogCities, catalogCount, catalogObject, catalogPage,
@@ -904,6 +906,112 @@ export default {
     await throws('а шестая попытка входа за час по-прежнему отклонена',
       () => requestLogin({ email: 'mnogo@example.kg', origin: 'https://liberterra.kg' }),
       Invalid);
+
+    await loginAs(db, anna);
+
+    // -----------------------------------------------------------------
+    // Задачу можно поставить коллеге и передать коллеге
+    // -----------------------------------------------------------------
+    const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const colleagues = await approvedColleagues();
+    check('список коллег отдаёт одобренных', colleagues.some((c) => c.id === vera));
+    check('и не предлагает передать самому себе',
+      !colleagues.some((c) => c.id === anna));
+    // Имя и агентство — и больше ничего. Список видит любой агент, а
+    // телефоны коллег в выпадающем списке не нужны никому.
+    const colleagueKeys = Object.keys(colleagues[0] ?? {}).sort().join(',');
+    check('и только имя, без почты и телефона',
+      colleagueKeys === 'full_name,id', colleagueKeys);
+
+    // Постановка на коллегу: агентство так и работает.
+    const forVera = await createActivity({
+      kind: 'task', entity_type: 'object', entity_id: forSale.id,
+      body: 'показать квартиру вместо меня', due_at: nextWeek,
+      agent_id: vera,
+    });
+    check('задачу можно поставить на коллегу', forVera.agent_id === vera);
+
+    // Ради чего всё: задача должна появиться в списке дел ТОГО, на кого
+    // поставлена, а не того, кто поставил. Иначе коллега о ней не узнает.
+    await loginAs(db, vera);
+    check('и она появилась в списке дел коллеги',
+      (await myActivities()).some((t) => t.id === forVera.id));
+    await loginAs(db, anna);
+    check('а в моём списке её нет',
+      !(await myActivities()).some((t) => t.id === forVera.id));
+
+    const assignAudit = await db
+      .prepare(`select diff from audit_log where entity_type = 'activities'
+                 and entity_id = ? order by id desc limit 1`)
+      .bind(forVera.id).first<{ diff: string }>();
+    check('в журнале видно, что задачу выдал один, а делает другой',
+      String(assignAudit?.diff ?? '').includes(vera));
+
+    // Выдуманный и неодобренный — отказ. Проверка значения живёт в слое
+    // доступа: до сих пор agent_id никто не проверял, потому что из
+    // браузера он был недоступен.
+    await throws('на выдуманного агента задачу не поставить',
+      () => createActivity({
+        kind: 'task', entity_type: 'object', entity_id: forSale.id,
+        due_at: nextWeek, agent_id: 'нет-такого',
+      }), NotFound);
+
+    await db.prepare(`update agents set status = 'blocked' where id = ?`).bind(vera).run();
+    await throws('на заблокированного — тоже отказ',
+      () => createActivity({
+        kind: 'task', entity_type: 'object', entity_id: forSale.id,
+        due_at: nextWeek, agent_id: vera,
+      }), Invalid);
+    check('и заблокированного нет в списке коллег',
+      !(await approvedColleagues()).some((c) => c.id === vera));
+    await db.prepare(`update agents set status = 'approved' where id = ?`).bind(vera).run();
+
+    // Передача: напоминание обязано уехать за задачей.
+    const myTask = await createActivity({
+      kind: 'task', entity_type: 'object', entity_id: forSale.id,
+      body: 'съездить на замеры', due_at: nextWeek,
+    });
+    check('задача по умолчанию на себе', myTask.agent_id === anna);
+
+    await db.prepare(
+      `insert into notifications (id, agent_id, activity_id, kind, status, body, created_at)
+       values (?, ?, ?, 'due_soon', 'pending', 'съездить на замеры', ?)`,
+    ).bind('n-reassign', anna, myTask.id, new Date().toISOString()).run();
+
+    const moved = await reassignActivity(myTask.id, vera);
+    check('задача передана', moved.agent_id === vera);
+
+    // Вот ради чего всё: напоминание хранит агента отдельной колонкой, и
+    // без переписывания очереди «позвоните клиенту» ушло бы прежнему
+    // владельцу по задаче, которой у него уже нет.
+    const movedNote = await db.prepare('select agent_id from notifications where id = ?')
+      .bind('n-reassign').first<{ agent_id: string }>();
+    check('и напоминание уехало за ней',
+      movedNote?.agent_id === vera, `осталось на ${movedNote?.agent_id}`);
+
+    // Уже отправленное напоминание не переписывается: его агент — факт о
+    // прошлом, и правка была бы подделкой истории.
+    await db.prepare(
+      `insert into notifications (id, agent_id, activity_id, kind, status, body, created_at, sent_at)
+       values (?, ?, ?, 'overdue', 'sent', 'просрочено', ?, ?)`,
+    ).bind('n-sent', vera, myTask.id, new Date().toISOString(), new Date().toISOString()).run();
+    await loginAs(db, vera);
+    await reassignActivity(myTask.id, anna);
+    const sentNote = await db.prepare('select agent_id from notifications where id = ?')
+      .bind('n-sent').first<{ agent_id: string }>();
+    check('отправленное напоминание осталось на прежнем агенте',
+      sentNote?.agent_id === vera, `стало ${sentNote?.agent_id}`);
+
+    // Передавать может тот, на ком задача, или админ. Иначе чужую задачу
+    // можно спихнуть любому: пришёл, нашёл запись, переписал владельца.
+    await loginAs(db, vera);
+    await throws('чужую задачу коллега не передаёт',
+      () => reassignActivity(myTask.id, vera), Forbidden);
+
+    await loginAs(db, anna);
+    const noop = await reassignActivity(myTask.id, anna);
+    check('передача себе же ничего не меняет', noop.agent_id === anna);
 
     await loginAs(db, anna);
 

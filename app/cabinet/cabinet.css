@@ -408,3 +408,8 @@ form.stack.card { max-width: 760px; }
 .invite-out { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 .invite-out input { width: 100%; font-size: 13px; }
 .invite-out .tag { margin-left: 8px; }
+
+/* Передача задачи коллеге: список и кнопка рядом, в одну строку с
+   остальными действиями. Форма своя, потому что действие своё. */
+.hand-over { display: inline-flex; align-items: center; gap: 6px; }
+.hand-over select { font-size: 13px; padding: 4px 6px; }
