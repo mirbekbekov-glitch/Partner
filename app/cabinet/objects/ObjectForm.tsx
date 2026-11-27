@@ -409,13 +409,17 @@ export function ObjectForm({
               </p>
             </div>
             <div className="field s1">
-              <label className="key" htmlFor="partner_share">Партнёру, %</label>
-              <input id="partner_share" name="partner_share" type="text"
-                     inputMode="numeric" placeholder="50" />
+              <label className="key" htmlFor="partner_rate">
+                Партнёру, %{dealType === 'rent' ? ' от месяца' : ' от цены'}
+              </label>
+              <input id="partner_rate" name="partner_rate" type="text"
+                     inputMode="decimal"
+                     placeholder={dealType === 'rent' ? '20' : '1'} />
               <p className="key">
-                Сколько от комиссии получит агент, который приведёт
-                покупателя. Пусто — половина. Ноль значит ноль: клиентов
-                ищу сам.
+                {dealType === 'rent'
+                  ? 'Сколько получит агент, который приведёт нанимателя. Обычно 10–30 % месячной платы.'
+                  : 'Сколько получит агент, который приведёт покупателя. Обычно 0,5–2 % от цены.'}
+                {' '}Ноль значит ноль: клиентов ищу сам. Пусто — половина комиссии.
               </p>
             </div>
             <div className="field s4">

@@ -171,8 +171,8 @@ export type NewObject = {
   mandate_start_price_minor?: number | null;
   /** Правило комиссии: JSON {kind, value}. Пусто — базовое правило. */
   mandate_commission_rule?: string | null;
-  /** Доля партнёра в процентах от комиссии. Пусто — половина. */
-  mandate_partner_share?: number | null;
+  /** Процент от сделки, обещанный партнёру. Пусто — половина комиссии. */
+  mandate_partner_rate?: number | null;
   contract_confirmed?: boolean;
   document_url?: string | null;
 };
@@ -270,7 +270,7 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
     const mandateId = newId();
     writes.push(stmt(
       `insert into mandates (id, object_id, kind, valid_from, valid_to,
-                             start_price_minor, commission_rule, partner_share,
+                             start_price_minor, commission_rule, partner_rate,
                              listing_agent_id,
                              contract_confirmed, document_url, status,
                              created_at, updated_at)
@@ -279,7 +279,7 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
       input.mandate_valid_to ?? null,
       input.mandate_start_price_minor ?? input.price_minor,
       input.mandate_commission_rule ?? null,
-      input.mandate_partner_share ?? null,
+      input.mandate_partner_rate ?? null,
       agent.id, flag(input.contract_confirmed ?? false),
       blank(input.document_url), at, at,
     ));

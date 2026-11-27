@@ -131,7 +131,9 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
               <span>{money(mandate.commission_total, object.currency)}</span>
               <span className="key">партнёру</span>
               <span>
-                {mandate.partner_percent}%
+                {mandate.partner_rate !== null
+                  ? `${String(mandate.partner_rate).replace('.', ',')}%`
+                  : 'половина комиссии'}
                 {mandate.partner_amount !== null
                   ? ` · ${money(mandate.partner_amount, object.currency)}`
                   : ''}
