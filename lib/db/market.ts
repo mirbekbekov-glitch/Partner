@@ -7,6 +7,7 @@ import {
   AREA_SPREAD, rateFromPairs, valuate,
   type Comparable, type Valuation, type Widening,
 } from '@/lib/market/valuation';
+import { resembleAll, type Resemblance } from '@/lib/market/duplicate';
 
 /**
  * Индекс рынка: запись наблюдений за чужими объявлениями.
@@ -406,4 +407,82 @@ export async function marketUpdatedAt(): Promise<string | null> {
     `select max(last_seen_at) as at from market_listings`,
   );
   return row?.at ?? null;
+}
+
+/**
+ * Что из нашего объекта уже висит на площадке.
+ *
+ * Отбор здесь широкий нарочно: сузить до «тот же адрес» нельзя — адрес
+ * агент и площадка пишут по-разному («Чуй 120» и «ул. Чүй 120/1»).
+ * Поэтому база отдаёт всё, что подходит по виду, городу и площади, а
+ * сличением занимается lib/market/duplicate.ts, где признаки
+ * перечислимы и проверяемы.
+ *
+ * Типы, которых обход не берёт (коммерция, гараж, таунхаус), сравнивать
+ * не с чем: возвращается пусто, и страница об этом говорит прямо.
+ */
+export async function marketLookalikes(ours: {
+  kind: string;
+  deal_type: string;
+  city: string;
+  address: string;
+  zone: string | null;
+  rooms: number | null;
+  area: number | null;
+  floor: number | null;
+  price: number;
+  currency: string;
+}): Promise<{ found: Resemblance[]; comparable: boolean }> {
+  const KNOWN: string[] = ['flat', 'room', 'house', 'land'];
+  if (!KNOWN.includes(ours.kind)) return { found: [], comparable: false };
+
+  // Площадь гуляет: площадка округляет, агент пишет по документам.
+  // Пятнадцать процентов — это запас на такое расхождение, а не на
+  // «похожий объект»: похожесть решается уже сличением.
+  const low = ours.area === null ? null : ours.area * 0.85;
+  const high = ours.area === null ? null : ours.area * 1.15;
+
+  const rows = await all<{
+    id: string; url: string; address: string | null; rooms: number | null;
+    area: number | null; floor: number | null;
+    price_usd_minor: number | null; price_kgs_minor: number | null;
+    seller_kind: 'owner' | 'agency' | 'unknown'; seller_name: string | null;
+    bumped_at: string | null;
+  }>(
+    `select id, url, address, rooms, area, floor,
+            price_usd_minor, price_kgs_minor, seller_kind, seller_name, bumped_at
+       from market_listings
+      where source = ? and deal_type = ? and kind = ? and city = ?
+        and gone_at is null
+        and (? is null or (area is not null and area between ? and ?))
+      limit 500`,
+    HOUSE_KG, ours.deal_type, ours.kind, ours.city,
+    low, low, high,
+  );
+
+  const rate = await observedRate();
+
+  return {
+    comparable: true,
+    found: resembleAll(
+      {
+        address: ours.address, zone: ours.zone, rooms: ours.rooms,
+        area: ours.area, floor: ours.floor, price: ours.price, currency: ours.currency,
+      },
+      rows.map((r) => ({
+        id: r.id,
+        url: r.url,
+        address: r.address,
+        rooms: r.rooms,
+        area: r.area,
+        floor: r.floor,
+        priceUsd: r.price_usd_minor === null ? null : r.price_usd_minor / 100,
+        priceKgs: r.price_kgs_minor === null ? null : r.price_kgs_minor / 100,
+        sellerKind: r.seller_kind,
+        sellerName: r.seller_name,
+        bumpedAt: r.bumped_at,
+      })),
+      rate,
+    ),
+  };
 }

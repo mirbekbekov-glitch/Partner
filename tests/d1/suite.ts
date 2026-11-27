@@ -83,7 +83,10 @@ import houseKgRent from '../fixtures/house-kg-rent.html?raw';
 import {
   bumpedAt, parsePrices, parseSearchPage, searchUrl, sellerOf, specsOf,
 } from '@/lib/market/house-kg';
-import { estimate, markGone, marketSize, observedRate, saveCards } from '@/lib/db/market';
+import {
+  estimate, markGone, marketLookalikes, marketSize, observedRate, saveCards,
+} from '@/lib/db/market';
+import { addressOverlap, resemble, resembleAll } from '@/lib/market/duplicate';
 import {
   awayFromMarket, median, quantile, rateFromPairs, valuate, type Comparable,
 } from '@/lib/market/valuation';
@@ -3156,6 +3159,99 @@ export default {
     });
     check('пустой сегмент отличается от «мало похожих»',
       emptySegment.reason === 'индекс пуст', String(emptySegment.reason));
+
+
+    // -----------------------------------------------------------------
+    // Проверка своего объекта по площадке
+    // -----------------------------------------------------------------
+    //
+    // Ради этого и собирался индекс. «Проверен» — обещание, и проверяемо
+    // оно здесь: объект, который уже висит на площадке под другой ценой,
+    // виден агенту до того, как карточка уйдёт в работу.
+
+    check('«Чуй» не теряется из-за длины слова',
+      addressOverlap('Чуй 120', 'ул. Чүй 120/1').words.join() === 'чуй',
+      JSON.stringify(addressOverlap('Чуй 120', 'ул. Чүй 120/1')));
+
+    check('служебные слова совпадением не считаются',
+      addressOverlap('ул. Советская 5, дом', 'улица Ахунбаева 7, дом').words.length === 0,
+      JSON.stringify(addressOverlap('ул. Советская 5, дом', 'улица Ахунбаева 7, дом')));
+
+    // В Бишкеке половина адресов — микрорайоны, и они записаны числами.
+    // Без отдельного признака такой адрес распадался на цифры и не
+    // сличался никогда.
+    check('микрорайон — это признак места, а не номер дома',
+      addressOverlap('12 мкр 57/1', 'мкр 12, д. 57/1').words.join() === 'мкр-12',
+      JSON.stringify(addressOverlap('12 мкр 57/1', 'мкр 12, д. 57/1')));
+    check('разные микрорайоны не совпадают',
+      addressOverlap('12 мкр 57', '6 мкр 57').words.length === 0);
+
+    const ourFlat = {
+      address: 'Чуй 120', zone: 'Центр', rooms: 2, area: 60, floor: 5,
+      price: 80000, currency: 'USD',
+    };
+    const theirs = (over: Partial<Parameters<typeof resemble>[1]> = {}) => ({
+      id: 'x', url: 'https://www.house.kg/details/x', address: 'ул. Чүй 120/1',
+      rooms: 2, area: 60, floor: 5, priceUsd: 90000, priceKgs: null,
+      sellerKind: 'agency' as const, sellerName: 'Этажи', bumpedAt: null, ...over,
+    });
+
+    check('совпали улица и площадь — объявление показывается',
+      resemble(ourFlat, theirs(), null) !== null);
+
+    // Одной похожей площади мало: в доме таких квартир десяток.
+    check('одна лишь похожая площадь совпадением не считается',
+      resemble(ourFlat, theirs({ address: 'Ахунбаева 7' }), null) === null);
+
+    const found = resemble(ourFlat, theirs(), null);
+    check('расхождение в цене названо числом и процентом',
+      found?.differences.some((d) => d.what === 'цена' && d.theirs.includes('+13%')) === true,
+      JSON.stringify(found?.differences));
+
+    check('кто подаёт объявление — всегда в расхождениях',
+      found?.differences.some((d) => d.what === 'подаёт' && d.theirs.includes('Этажи')) === true);
+
+    const areaOff = resemble(ourFlat, theirs({ area: 72 }), null);
+    check('расхождение в площади названо',
+      areaOff?.differences.some((d) => d.what === 'площадь') === true,
+      JSON.stringify(areaOff?.differences));
+
+    // Сортировка: сперва то, где признаков больше. Агент смотрит первое.
+    const ranked = resembleAll(ourFlat, [
+      theirs({ id: 'слабое', address: 'Чуй 200', area: 60.5 }),
+      theirs({ id: 'сильное' }),
+    ], null);
+    check('первым показывается то, где признаков больше',
+      ranked[0]?.candidate.id === 'сильное',
+      ranked.map((r) => `${r.candidate.id}:${r.signals.length}`).join(' '));
+
+    // --- по настоящей базе -------------------------------------------
+
+    await db.prepare(
+      `insert into market_listings
+         (id, source, source_id, url, deal_type, kind, city, address, rooms, area, floor,
+          price_usd_minor, price_kgs_minor, seller_kind, seller_name, search_text,
+          first_seen_at, last_seen_at)
+       values (?, 'house.kg', ?, 'https://www.house.kg/details/dup', 'sale', 'flat',
+               'Бишкек', 'ул. Чүй 120/1', 2, 60, 5, ?, null, 'owner', null, 'чуй', ?, ?)`,
+    ).bind(crypto.randomUUID(), crypto.randomUUID(), 90000_00, iso(), iso()).run();
+
+    const lookalike = await marketLookalikes({
+      kind: 'flat', deal_type: 'sale', city: 'Бишкек', address: 'Чуй 120',
+      zone: null, rooms: 2, area: 60, floor: 5, price: 80000, currency: 'USD',
+    });
+    check('свой объект находится среди объявлений площадки',
+      lookalike.comparable && lookalike.found.length === 1,
+      JSON.stringify({ c: lookalike.comparable, n: lookalike.found.length }));
+
+    // Типы, которых обход не берёт, сравнивать не с чем — и об этом
+    // надо сказать, а не показывать «ничего не нашлось».
+    const noCompare = await marketLookalikes({
+      kind: 'garage', deal_type: 'sale', city: 'Бишкек', address: 'Чуй 120',
+      zone: null, rooms: null, area: 20, floor: null, price: 10000, currency: 'USD',
+    });
+    check('«сравнивать не с чем» отличается от «не нашлось»',
+      noCompare.comparable === false && noCompare.found.length === 0);
 
     } catch (e) {
       // Падение посреди набора — это тоже результат, и он должен быть виден
