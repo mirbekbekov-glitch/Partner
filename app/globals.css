@@ -175,11 +175,23 @@
 .pitch :focus-visible,
 .callout :focus-visible { --focus: #FFFFFF; }
 
+/* Базовый кегль — один на всю шкалу и плывущий по ширине окна.
+   Было две базы сразу: body держал жёсткие 15px, а все размеры в rem
+   считались от корневых 16px. Поэтому заголовок в 1.4rem выходил 22.4px
+   при тексте в 15 — шкала не сходилась сама с собой, и подогнать её
+   можно было только на глаз.
+   clamp: на телефоне ровно 16px (ниже iOS сам зумит поля при фокусе), на
+   ноутбуке около 16.5, на большом экране до 18. Проценты и vw, а не
+   media-запросы: кегль меняется плавно, без ступеньки посреди ширины.
+   И rem, а не px: кегль, заданный пикселями, не слушается настройки
+   «размер шрифта» в браузере — а ею пользуются те, кому мелко. */
+html { font-size: clamp(16px, 14px + 0.2vw, 18px); }
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 15px/1.55 var(--font);
+  font: 1rem/1.55 var(--font);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -190,7 +202,11 @@ h2 { font-size: 1.05rem; margin: 32px 0 12px; }
 
 a { color: var(--accent); }
 
-.sub { color: var(--muted); margin: 0 0 24px; }
+/* Длина строки. Абзац, растянутый на всю ширину окна, читается тяжело
+   независимо от кегля: глаз теряет начало следующей строки. На 1920 этот
+   подзаголовок шёл в 183 знака при норме 45–75. Ограничение в знаках, а
+   не в пикселях: оно плывёт вместе с кеглем. */
+.sub { color: var(--muted); margin: 0 0 24px; max-width: 75ch; }
 
 .card {
   border: 1px solid var(--line);
@@ -203,14 +219,14 @@ a { color: var(--accent); }
 .row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
 .row > * { margin: 0; }
 
-.key { color: var(--muted); font-size: 0.85rem; }
+.key { color: var(--muted); font-size: 0.875rem; }
 
 .tag {
   display: inline-block;
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 1px 10px;
-  font-size: 0.8rem;
+  font-size: 0.8125rem;
   background: var(--bg);
 }
 
@@ -221,7 +237,7 @@ a { color: var(--accent); }
   background: var(--hidden-bg);
   border-radius: 6px;
   padding: 1px 8px;
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
 }
 
 .warn {
@@ -229,7 +245,7 @@ a { color: var(--accent); }
   background: var(--warn-bg);
   border-radius: 6px;
   padding: 1px 8px;
-  font-size: 0.8rem;
+  font-size: 0.8125rem;
 }
 
 .empty {
@@ -314,7 +330,7 @@ button.ghost {
 /* Та же плашка, но в строку: рядом с кнопкой блок разорвал бы ряд. */
 .inline-error {
   display: inline-block; margin: 0 0 0 8px;
-  padding: 2px 8px; font-size: 0.85rem;
+  padding: 2px 8px; font-size: 0.8125rem;
 }
 
 /* Формы в столбик: профиль */
@@ -363,7 +379,7 @@ a.tile:hover { border-color: var(--accent); }
    был только в наведении, то есть его не было у того, кто не навёл. */
 div.tile { background: var(--sunk); }
 .tile-n { font-size: 1.6rem; font-weight: 600; line-height: 1.1; }
-.tile-t { font-size: 0.9rem; }
+.tile-t { font-size: 0.9375rem; }
 
 /* Фильтры списков */
 .filters {
@@ -381,7 +397,7 @@ div.tile { background: var(--sunk); }
    стала на 18 px выше — это цена того, чтобы по выбранному фильтру было
    видно, какое поле он сужает. */
 .fld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.fld > span { font-size: 12px; font-weight: 700; letter-spacing: .08em;
+.fld > span { font-size: 0.75rem; font-weight: 700; letter-spacing: .08em;
   text-transform: uppercase; color: var(--muted); }
 .filters .fld input { min-width: 120px; }
 .filters .fld input[type='search'] { min-width: 180px; }
@@ -413,7 +429,7 @@ div.tile { background: var(--sunk); }
      2.6 : 1. Цвет текста на фирменном фоне задаёт тема. */
   color: var(--accent-fg);
   text-decoration: none;
-  font-size: 0.9rem;
+  font-size: 0.9375rem;
   white-space: nowrap;
 }
 
@@ -456,7 +472,7 @@ textarea {
   resize: vertical;
 }
 
-.check { display: flex; gap: 8px; align-items: center; font-size: 0.9rem; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 0.9375rem; }
 .check input { width: auto; }
 
 /* Активности */
@@ -543,11 +559,11 @@ main:has(.auth) { max-width: none; padding: 0; }
 .nav .spacer { margin-left: auto; }
 /* Отступ сверху и снизу — ради пальца, а не ради вида: без него ссылка
    была 20 px высотой при соседях в 40. Ширину он не меняет. */
-.nav-link { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600;
+.nav-link { color: var(--muted); text-decoration: none; font-size: 0.875rem; font-weight: 600;
   white-space: nowrap; padding-block: 10px; transition: color .18s; }
 .nav-link:hover { color: var(--accent); }
 .enter { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: var(--r-full);
-  padding: 11px 18px; font-weight: 700; font-size: 14px; text-decoration: none; white-space: nowrap;
+  padding: 11px 18px; font-weight: 700; font-size: 0.875rem; text-decoration: none; white-space: nowrap;
   transition: background .18s, transform .18s; }
 .enter:hover { background: var(--accent-hover); transform: translateY(-1px); }
 .enter .narrow { display: none; }
@@ -646,7 +662,7 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* Вкладки сделки: подчёркивание красным у выбранной, а не заливка —
    заливка спорила бы с кнопкой «Показать» в той же панели. */
 .tabs { display: flex; gap: 2px; padding: 8px 10px 0; border-bottom: 1px solid var(--line); }
-.tab { position: relative; padding: 12px 18px; font-weight: 700; font-size: 15px;
+.tab { position: relative; padding: 12px 18px; font-weight: 700; font-size: 0.9375rem;
   color: var(--muted); text-decoration: none; border-radius: var(--r-md) var(--r-md) 0 0;
   transition: color .18s, background .18s; }
 .tab:hover { color: var(--fg); background: var(--sunk); }
@@ -666,15 +682,15 @@ main:has(.auth) { max-width: none; padding: 0; }
 .console .row { display: grid; gap: 10px; padding: 14px;
   grid-template-columns: 1.5fr 1fr .8fr 1fr auto; }
 .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.cell label { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+.cell label { font-size: 0.75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
 .cell input, .cell select { border: 1px solid var(--line); background: var(--bg); color: var(--fg);
-  border-radius: var(--r-md); padding: 11px 12px; font-size: 15px; font-weight: 500;
+  border-radius: var(--r-md); padding: 11px 12px; font-size: 0.9375rem; font-weight: 500;
   width: 100%; min-width: 0; font-family: inherit;
   transition: border-color .18s, box-shadow .18s; }
 .cell input:focus, .cell select:focus { border-color: var(--accent); }
 .go { align-self: end; background: var(--accent); color: var(--accent-fg); border: 0;
-  border-radius: var(--r-md); padding: 12px 24px; font-weight: 700; font-size: 15px;
+  border-radius: var(--r-md); padding: 12px 24px; font-weight: 700; font-size: 0.9375rem;
   cursor: pointer; white-space: nowrap; transition: background .18s, transform .18s; }
 .go:hover { background: var(--accent-hover); transform: translateY(-1px); }
 .go:active { transform: translateY(0); }
@@ -692,7 +708,7 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* Купить или снять — две кнопки, а не выпадающий список: это первое и
    самое крупное решение на странице, и оно должно быть видно целиком. */
 .seg { border: 0; margin: 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
-.seg legend { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+.seg legend { font-size: 0.75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); margin-bottom: 8px; }
 .seg label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
   border: 1px solid var(--line); border-radius: var(--r-full); padding: 10px 18px;
@@ -855,7 +871,7 @@ main:has(.auth) { max-width: none; padding: 0; }
   overflow: hidden; margin: 22px 0 0; }
 .spec { flex: 1 1 128px; min-width: 0; background: var(--panel); padding: 14px 16px;
   display: flex; flex-direction: column; gap: 4px; }
-.spec dt { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+.spec dt { font-size: 0.75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
 .spec dd { margin: 0; font-size: 17px; font-weight: 700; }
 .desc { margin: 24px 0 0; font-size: 16px; line-height: 1.65; white-space: pre-wrap; }
@@ -928,13 +944,13 @@ main:has(.auth) { max-width: none; padding: 0; }
 .auth-card h1 { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 6px; }
 .auth-sub { margin: 0 0 22px; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .auth-form { display: flex; flex-direction: column; }
-.auth-form label { font-size: 12px; font-weight: 700; letter-spacing: .1em;
+.auth-form label { font-size: 0.75rem; font-weight: 700; letter-spacing: .1em;
   text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
-.auth-form input[type='email'] { width: 100%; padding: 11px 12px; font-size: 15px;
+.auth-form input[type='email'] { width: 100%; padding: 11px 12px; font-size: 0.9375rem;
   font-weight: 500; border-radius: var(--r-md); transition: border-color .18s; }
 .auth-form input[type='email']:focus { border-color: var(--accent); }
 .auth-form button { margin-top: 14px; padding: 12px 20px; border-radius: var(--r-md);
-  font-size: 15px; font-weight: 700; cursor: pointer;
+  font-size: 0.9375rem; font-weight: 700; cursor: pointer;
   transition: background .18s, transform .18s; }
 .auth-form button:hover:not(:disabled) { background: var(--accent-hover); }
 .auth-form .error { margin-top: 14px; }
