@@ -9,13 +9,15 @@ import { MapPick } from './MapPick';
 import { Suggest } from '../../Suggest';
 import { citiesOf, zonesOf } from '@/lib/geo';
 import {
-  BUILDING_TYPE, COMMERCIAL_TYPE, PARKING_TYPE, REGION,
+  BUILDING_TYPE, PARKING_TYPE, REGION,
   RENTAL_TERM, ROOM_LOCATION, SERIE,
 } from '@/lib/mhouse';
+import { OBJECT_TYPES } from '@/lib/space-types';
 
 export type ObjectDraft = {
   id?: string;
   kind: string;
+  subkind?: string | null;
   deal_type: string;
   address: string;
   city: string;
@@ -66,6 +68,35 @@ function Pick({
     </div>
   );
 }
+
+/**
+ * Точный вид нежилого — наш словарь, а не справочник площадки.
+ *
+ * Раньше здесь спрашивался «вид коммерции» словами m-house: тринадцать
+ * строк вроде «цеха, заводы, фабрики, мастерские». Кабинета и рабочего
+ * места в коворкинге в том списке нет, а это настоящий товар — агент
+ * заводил их «офисами» и терял обоих клиентов: ищущий кабинет видел
+ * офис, ищущий коворкинг не видел ничего.
+ *
+ * Теперь спрашиваем своё, а значение для площадки выводим из ответа
+ * (mhouseCommercial). Один вопрос вместо двух, и словарь один.
+ */
+const SUBKINDS: [string, string][] = [
+  ['office', 'офис'],
+  ['cabinet', 'кабинет'],
+  ['desk', 'рабочее место в коворкинге'],
+  ['building', 'здание целиком'],
+  ['retail', 'магазин, бутик'],
+  ['container', 'торговый контейнер'],
+  ['warehouse', 'склад'],
+  ['production', 'цех, завод, мастерская'],
+  ['catering', 'ресторан, кафе, общепит'],
+  ['hotel', 'отель, хостел, зона отдыха'],
+  ['auto', 'автосервис, автомойка'],
+  ['beauty', 'салон красоты'],
+  ['medical', 'медцентр, аптека'],
+  ['agriculture', 'сельское хозяйство'],
+];
 
 const KINDS: [string, string][] = [
   ['flat', 'квартира'],
@@ -305,8 +336,19 @@ export function ObjectForm({
         ) : null}
 
         {kind === 'commercial' ? (
-          <Pick name="commercial_type" label="Вид коммерции" values={COMMERCIAL_TYPE}
-                value={draft?.commercial_type} hint="Без него объект не опубликуют." />
+          <div className="field">
+            <label className="key" htmlFor="subkind">Что именно</label>
+            <select id="subkind" name="subkind" defaultValue={draft?.subkind ?? ''}>
+              <option value="">не указано</option>
+              {SUBKINDS.map(([v, title]) => (
+                <option key={v} value={v}>{title}</option>
+              ))}
+            </select>
+            <p className="key">
+              Этим словом объект подписан в каталоге. Без него площадка
+              объявление не опубликует.
+            </p>
+          </div>
         ) : null}
 
         {kind === 'room' ? (

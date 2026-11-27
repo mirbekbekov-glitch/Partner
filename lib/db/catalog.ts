@@ -21,7 +21,7 @@ import { fromMinor } from './money';
 
 /** Единственный разрешённый состав публичной выдачи. */
 const COLUMNS = [
-  'id', 'kind', 'deal_type', 'address', 'city', 'zone',
+  'id', 'kind', 'subkind', 'deal_type', 'address', 'city', 'zone',
   'rooms', 'area', 'floor', 'floors_total',
   'price_minor', 'currency', 'photos', 'description',
   'published_at', 'actual_at',
@@ -39,6 +39,8 @@ const SELECT = COLUMNS.map((c) => `o.${c}`).join(', ');
 export type CatalogRow = {
   id: string;
   kind: string;
+  /** Точный вид внутри kind: кабинет, склад, рабочее место. */
+  subkind: string | null;
   deal_type: 'rent' | 'sale';
   address: string;
   city: string;

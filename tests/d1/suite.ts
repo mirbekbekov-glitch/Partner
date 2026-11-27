@@ -44,12 +44,12 @@ import {
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
-import { mhouseOffers, mhouseXml } from '@/lib/mhouse-feed';
+import { mhouseOffers, mhouseXml, missingFields } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
 import { convert, parseNbkr } from '@/lib/fx';
 import { contactLinks, phoneDigits } from '@/lib/contact-links';
-import { coarseOf, SPACE_TYPES } from '@/lib/space-types';
-import { COMMERCIAL_TYPE, commercialCode } from '@/lib/mhouse';
+import { coarseOf, isSpaceType, OBJECT_TYPES, SPACE_TYPES } from '@/lib/space-types';
+import { COMMERCIAL_TYPE, commercialCode, mhouseCommercial } from '@/lib/mhouse';
 import { refreshRates, usdRate } from '@/lib/db/fx';
 import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
@@ -2313,6 +2313,35 @@ export default {
       !mhFull.includes(anna) && !mhFull.includes('Собственник витрины')
       && !mhFull.includes('555121314'));
 
+    // Выгрузка берёт вид коммерции ИЗ НАШЕГО кода, а не из отдельного
+    // поля: иначе агенту пришлось бы отвечать на один вопрос дважды, а
+    // двум ответам — расходиться.
+    const shop = await createObject({
+      kind: 'commercial', subkind: 'catering', deal_type: 'rent',
+      address: 'Общепитная 2', price_minor: 4_000_000, area: 120,
+      latitude: 42.87, longitude: 74.6, region: 'Бишкек',
+      rental_term: 'на долгий срок',
+      description: 'Помещение под кафе', photos: ['/photos/c.jpg'],
+    });
+    await createMandate({ object_id: shop.id, kind: 'non_exclusive' });
+    await publishObject(shop.id);
+
+    const withShop = await mhouseXml('https://liberterra.kg');
+    check('коммерческое помещение уходит в фид MHouse', withShop.includes(shop.id));
+    check('и вид коммерции в нём выведен из нашего кода',
+      withShop.includes('<commercial-type>рестораны, кафе, общепит</commercial-type>'));
+    // Без точного вида площадка объявление не возьмёт — и кабинет сообщает
+    // об этом ТЕМ ЖЕ missingFields, которым строится фид.
+    check('карточка не жалуется на вид коммерции, когда он указан',
+      !missingFields({
+        ...shop, photos: ['/photos/c.jpg'], subkind: 'catering',
+      }).includes('вид коммерции'));
+    check('а без него — жалуется',
+      missingFields({
+        ...shop, photos: ['/photos/c.jpg'], subkind: null, commercial_type: null,
+      }).includes('вид коммерции'));
+    await withdrawObject(shop.id);
+
     // Значение не из справочника площадка не примет. Пропустить такое
     // поле — потерять объявление целиком, поэтому оно и не выводится.
     await updateObject(shown.id, { serie: 'какая-то своя серия' });
@@ -2786,26 +2815,68 @@ export default {
     check('а в витрине он при этом есть — значит дело в фиде, а не в публикации',
       (await catalogPage({})).items.some((i) => i.id === commercial.id));
 
-    // Склад на витрине подписан складом, а не «коммерческой».
-    //
-    // Точный вид берётся из commercial_type — того самого поля, которое
-    // агент заполняет обязательно ради фида. Второго словаря для этого
-    // нет нарочно: он разошёлся бы с первым.
-    await updateObject(commercial.id, { commercial_type: 'склады' });
-    const warehouse = (await catalogPage({})).items
-      .find((i) => i.id === commercial.id);
-    check('витрина отдаёт вид коммерции', warehouse?.commercial_type === 'склады');
-    check('и показывает его складом',
-      spaceName('ru', warehouse!) === 'склад', spaceName('ru', warehouse!));
-    // На другом языке — своим словом, а не русским: витрина четырёхъязычна,
-    // а значения площадки русские.
-    check('на другом языке — словом этого языка',
-      spaceName('en', warehouse!) === 'warehouse', spaceName('en', warehouse!));
+    // -----------------------------------------------------------------
+    // Точный вид объекта: кабинет кабинетом, коворкинг коворкингом
+    // -----------------------------------------------------------------
+    // Словарь объектов шире словаря заявок на семь значений: так требует
+    // справочник площадки. Будь он беднее — ресторанное помещение уехало
+    // бы в выгрузку «офисом».
+    check('кабинет огрубляется в коммерческую', coarseOf('cabinet') === 'commercial');
+    check('и общепит тоже', coarseOf('catering') === 'commercial');
+    check('словарь объектов шире словаря заявок',
+      OBJECT_TYPES.length > SPACE_TYPES.length);
+    // В колонке заявок стоит CHECK с коротким списком: пропусти мы туда
+    // объектный код — база ответила бы отказом вместо внятной ошибки.
+    check('объектный код в заявку не проходит', !isSpaceType('hotel'));
+    check('а заявочный проходит', isSpaceType('cabinet'));
 
-    // Жилья этот слой не касается: у квартиры вид точен сам. И остаётся
-    // точным, даже если вид коммерции в записи заполнен: агент мог
-    // перевести объект из коммерческой в жильё, а поле осталось. Квартира,
-    // подписанная складом, — худшее, что может сделать эта подпись.
+    await updateObject(commercial.id, { subkind: 'cabinet' });
+    const cabinet = (await catalogPage({})).items.find((i) => i.id === commercial.id);
+    check('витрина отдаёт точный вид', cabinet?.subkind === 'cabinet');
+    check('и подписывает объект кабинетом',
+      spaceName('ru', cabinet!) === 'кабинет', spaceName('ru', cabinet!));
+    // Витрина четырёхъязычна: код без перевода вышел бы на карточку как есть.
+    check('на другом языке — словом этого языка',
+      spaceName('en', cabinet!) === 'private office', spaceName('en', cabinet!));
+    check('огрублённый вид при этом не подменён',
+      cabinet?.kind === 'commercial', String(cabinet?.kind));
+
+    // Несогласованный вид не уточнение, а противоречие: каталог фильтрует
+    // по kind, а карточка показывала бы другое.
+    await updateObject(commercial.id, { subkind: 'flat' });
+    const afterBogus = (await catalogPage({})).items.find((i) => i.id === commercial.id);
+    check('вид, не огрубляющийся в этот kind, не сохраняется',
+      afterBogus?.subkind === null, String(afterBogus?.subkind));
+    check('и kind из-за него не меняется', afterBogus?.kind === 'commercial');
+
+    // Смена kind снимает уточнение сама: «склад» при квартире — ложь.
+    await updateObject(commercial.id, { subkind: 'warehouse' });
+    await updateObject(commercial.id, { kind: 'flat' });
+    const asFlat = (await catalogPage({})).items.find((i) => i.id === commercial.id);
+    check('смена вида объекта снимает прежнее уточнение',
+      asFlat?.subkind === null, String(asFlat?.subkind));
+    check('и объект подписан новым видом',
+      spaceName('ru', asFlat!) === 'квартира', spaceName('ru', asFlat!));
+    await updateObject(commercial.id, { kind: 'commercial', subkind: 'warehouse' });
+
+    // Запасной путь для объектов, заведённых до появления колонки: у них
+    // точный вид лежит в словаре площадки, и терять его нельзя.
+    const legacy = await createObject({
+      kind: 'commercial', deal_type: 'rent', address: 'Складская 7',
+      price_minor: 1_500_000, commercial_type: 'склады',
+    });
+    await createMandate({ object_id: legacy.id, kind: 'non_exclusive' });
+    await publishObject(legacy.id);
+    const legacyRow = (await catalogPage({})).items.find((i) => i.id === legacy.id);
+    check('у старого объекта точного вида нет', legacyRow?.subkind === null);
+    check('но он всё равно подписан складом, а не «коммерческой»',
+      spaceName('ru', legacyRow!) === 'склад', spaceName('ru', legacyRow!));
+    check('и на другом языке тоже',
+      spaceName('en', legacyRow!) === 'warehouse', spaceName('en', legacyRow!));
+
+    // Жилья слой не касается, даже если поле площадки заполнено: агент мог
+    // перевести объект из коммерческой в жильё, а значение осталось.
+    // Квартира, подписанная складом, — худшее, что подпись может сделать.
     await updateObject(forSale.id, { commercial_type: 'склады' });
     const flatShown = (await catalogPage({})).items.find((i) => i.id === forSale.id);
     check('вид коммерции у квартиры в записи остался',
@@ -2815,8 +2886,8 @@ export default {
     await updateObject(forSale.id, { commercial_type: null });
 
     // «Другая коммерческая недвижимость» точнее «коммерческой» не стала:
-    // подменять её выдуманной точностью нельзя.
-    check('неточный вид не подменяется точным',
+    // это единственное значение справочника без нашего кода.
+    check('неточный вид площадки не подменяется точным',
       commercialCode('другая коммерческая недвижимость') === null);
     check('незаполненный — тоже', commercialCode(null) === null);
     // Значения приходят не только из нашего select'а: разбор чужих
@@ -2824,18 +2895,36 @@ export default {
     // lower() кириллицу не трогает.
     check('лишние пробелы и регистр узнать вид не мешают',
       commercialCode('  Склады ') === 'warehouse');
+
     // Иначе новое значение в справочнике площадки молча показывалось бы
     // «коммерческой», и никто бы не заметил.
     check('весь справочник площадки разобран, кроме «другой»',
       COMMERCIAL_TYPE.filter((v) => commercialCode(v) === null).length === 1,
       COMMERCIAL_TYPE.filter((v) => commercialCode(v) === null).join('; '));
-    // Код без подписи вывел бы на карточку сам код: «warehouse» по-русски.
-    check('у каждого вида коммерции есть подпись на всех языках',
-      LANGS.every((l) => COMMERCIAL_TYPE.every((v) => {
-        const code = commercialCode(v);
-        return code === null || t(l).kinds[code] !== undefined;
-      })));
 
+    // Обратное направление — главное: наш код ведущий, значение площадки
+    // выводится. Код без вывода унёс бы объявление из выгрузки целиком.
+    check('каждый нежилой вид умеет назваться словом площадки',
+      OBJECT_TYPES.filter((t) => t.coarse === 'commercial')
+        .every((t) => {
+          const value = mhouseCommercial(t.code);
+          return value !== null && COMMERCIAL_TYPE.includes(
+            value as (typeof COMMERCIAL_TYPE)[number],
+          );
+        }));
+    // Площадка кабинета и коворкинга не знает — уезжают офисами, и это
+    // осознанный выбор: иначе объявления не будет вовсе.
+    check('кабинет уезжает на площадку офисом', mhouseCommercial('cabinet') === 'офисы');
+    check('рабочее место — тоже', mhouseCommercial('desk') === 'офисы');
+    check('жильё словом площадки не называется', mhouseCommercial('flat') === null);
+
+    // Код без подписи вывел бы на карточку сам код: «warehouse» по-русски.
+    check('у каждого вида объекта есть подпись на всех языках',
+      LANGS.every((l) => OBJECT_TYPES.every((type) => t(l).kinds[type.code] !== undefined)),
+      LANGS.map((l) => OBJECT_TYPES.filter((type) => t(l).kinds[type.code] === undefined)
+        .map((type) => `${l}:${type.code}`).join(',')).join(' '));
+
+    await withdrawObject(legacy.id);
     await withdrawObject(commercial.id);
     await updateObject(shown.id, { description: null, photos: [] });
 

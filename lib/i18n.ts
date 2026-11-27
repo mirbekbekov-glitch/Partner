@@ -288,7 +288,8 @@ const ru: Dict = {
   themeSwitch: 'Светлая или тёмная тема',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
            land: 'участок', commercial: 'коммерческая', garage: 'гараж',
-           office: 'офис', building: 'здание', retail: 'магазин',
+           office: 'офис', cabinet: 'кабинет', desk: 'рабочее место',
+           building: 'здание', retail: 'магазин',
            warehouse: 'склад', production: 'цех', container: 'торговый контейнер',
            agriculture: 'сельхозугодье', catering: 'общепит', hotel: 'отель',
            auto: 'автосервис', beauty: 'салон красоты', medical: 'медцентр' },
@@ -434,7 +435,8 @@ const ky: Dict = {
   themeSwitch: 'Жарык же караңгы тема',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
            land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж',
-           office: 'офис', building: 'имарат', retail: 'дүкөн',
+           office: 'офис', cabinet: 'кабинет', desk: 'иш орун',
+           building: 'имарат', retail: 'дүкөн',
            warehouse: 'кампа', production: 'цех', container: 'соода контейнери',
            agriculture: 'айыл чарба жери', catering: 'ашхана', hotel: 'мейманкана',
            auto: 'автосервис', beauty: 'сулуулук салону', medical: 'медайкел' },
@@ -580,7 +582,8 @@ const en: Dict = {
   themeSwitch: 'Light or dark theme',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
            land: 'land', commercial: 'commercial', garage: 'garage',
-           office: 'office', building: 'whole building', retail: 'shop',
+           office: 'office', cabinet: 'private office', desk: 'coworking desk',
+           building: 'whole building', retail: 'shop',
            warehouse: 'warehouse', production: 'workshop', container: 'retail container',
            agriculture: 'farmland', catering: 'restaurant space', hotel: 'hotel',
            auto: 'car service', beauty: 'beauty salon', medical: 'medical centre' },
@@ -725,7 +728,8 @@ const zh: Dict = {
   themeSwitch: '浅色或深色主题',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
            land: '地块', commercial: '商业用房', garage: '车库',
-           office: '办公室', building: '整栋楼', retail: '商铺',
+           office: '办公室', cabinet: '独立办公间', desk: '联合办公工位',
+           building: '整栋楼', retail: '商铺',
            warehouse: '仓库', production: '厂房', container: '商业集装箱',
            agriculture: '农用地', catering: '餐饮用房', hotel: '酒店',
            auto: '汽车服务', beauty: '美容院', medical: '医疗中心' },
@@ -739,20 +743,30 @@ export const t = (lang: Lang): Dict => DICTS[lang] ?? DICTS[DEFAULT_LANG];
 export const kindName = (lang: Lang, kind: string) => t(lang).kinds[kind] ?? kind;
 
 /**
- * Что это за объект словами: склад — складом, а не «коммерческой».
+ * Что это за объект словами: кабинет — кабинетом, а не «коммерческой».
  *
  * kind огрублён — на нём держатся фильтр каталога, выгрузка в фид и
  * порог рынка, и дробить его нельзя. Но «коммерческая» на карточке не
- * отвечает на вопрос, что именно сдают. Точный вид берётся из
- * commercial_type, который агент и так заполняет обязательно.
+ * отвечает на вопрос, что именно сдают. Поэтому показываем subkind.
  *
- * Жильё этого не касается: там kind уже точен, и лишнего слоя нет.
+ * Запасной путь по commercial_type — для объектов, заведённых до
+ * появления subkind: у них точный вид есть, но лежит в словаре площадки.
+ * Переписывать их задним числом не стали: вывод из словаря площадки
+ * угадывает «офис» там, где агент имел в виду кабинет, а подпись,
+ * выдуманная за агента, хуже огрублённой.
+ *
+ * Жилья слой не касается, даже если поле заполнено: агент мог перевести
+ * объект из коммерческой в жильё, а значение осталось в записи.
+ * Квартира, подписанная складом, — худшее, что эта подпись может сделать.
  */
 export const spaceName = (
   lang: Lang,
-  o: { kind: string; commercial_type: string | null },
-) => kindName(lang, (o.kind === 'commercial' && commercialCode(o.commercial_type))
-  || o.kind);
+  o: { kind: string; subkind?: string | null; commercial_type?: string | null },
+) => kindName(
+  lang,
+  o.subkind
+    || (o.kind === 'commercial' && commercialCode(o.commercial_type)) || o.kind,
+);
 
 /** Срок последнего подтверждения словами. */
 export function freshWordIn(lang: Lang, days: number): string {

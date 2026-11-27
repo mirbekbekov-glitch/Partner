@@ -49,10 +49,51 @@ export const SPACE_TYPES: SpaceType[] = [
   { code: 'desk',       group: 'workplace',  coarse: 'commercial' },
 ];
 
-const BY_CODE = new Map(SPACE_TYPES.map((t) => [t.code, t]));
+/**
+ * Что можно ЗАВЕСТИ как объект. Шире, чем список заявки, и вот почему.
+ *
+ * Список заявки (SPACE_TYPES выше) ограничен CHECK'ом колонки space_type,
+ * а CHECK в SQLite меняется только перестройкой таблицы. Расширять его
+ * заодно нельзя — это отдельная работа.
+ *
+ * Объекту же нужнее. Во-первых, кабинет и рабочее место в коворкинге —
+ * настоящий товар площадки, и опубликовать их надо, а не подписывать
+ * офисом. Во-вторых, справочник m-house, куда уходит выгрузка, различает
+ * общепит, отель, автосервис, салон красоты, медцентр, сельхозугодье и
+ * торговый контейнер. Будь наш словарь беднее его, выгрузка потеряла бы
+ * точность: ресторанное помещение уехало бы «офисом».
+ *
+ * Поэтому здесь объединение: наши коды — главные, значение площадки
+ * ВЫВОДИТСЯ из них (mhouseCommercial в lib/mhouse.ts), а не наоборот.
+ *
+ * «Сельхозугодье» огрубляется в commercial, а не в land, потому что так
+ * его считает площадка: в её справочнике это вид коммерции. Расхождение
+ * с ней стоило бы дороже, чем неидеальное огрубление.
+ */
+export const OBJECT_TYPES: SpaceType[] = [
+  ...SPACE_TYPES,
 
+  { code: 'catering',    group: 'commercial', coarse: 'commercial' },
+  { code: 'hotel',       group: 'commercial', coarse: 'commercial' },
+  { code: 'auto',        group: 'commercial', coarse: 'commercial' },
+  { code: 'beauty',      group: 'commercial', coarse: 'commercial' },
+  { code: 'medical',     group: 'commercial', coarse: 'commercial' },
+  { code: 'agriculture', group: 'commercial', coarse: 'commercial' },
+  { code: 'container',   group: 'commercial', coarse: 'commercial' },
+];
+
+const BY_CODE = new Map(OBJECT_TYPES.map((t) => [t.code, t]));
+
+/**
+ * Годится ли код для ЗАЯВКИ.
+ *
+ * Именно для заявки, а не вообще: в её колонке стоит CHECK с коротким
+ * списком, и код из объектного расширения база не примет. Проверять по
+ * общей карте значило бы пропустить «отель» в заявку и получить отказ
+ * базы вместо внятной ошибки.
+ */
 export function isSpaceType(v: string | null | undefined): boolean {
-  return typeof v === 'string' && BY_CODE.has(v);
+  return typeof v === 'string' && SPACE_TYPES.some((t) => t.code === v);
 }
 
 /**
