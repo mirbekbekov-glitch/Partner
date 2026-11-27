@@ -12,6 +12,7 @@ import { t, kindName, freshWordIn, LANGS, isLang, type Lang, placeName } from '@
 import { CatalogHeader } from '../CatalogHeader';
 import { HeroArt } from '../HeroArt';
 import { FindButton } from '../FindButton';
+import { ZonePick } from '../ZonePick';
 import { RequestPitch } from '../RequestPitch';
 import { CatalogFooter } from '../CatalogFooter';
 import { Facade } from '../Facade';
@@ -112,25 +113,14 @@ function Search({ lang, f, deal, cities, zones }: {
               снять», и спрашивать его надо там же, где остальные.
               Списком, потому что строкой человек пишет «джал», «Джал-23»
               и «Jal», а в карточке стоит «Джал»: три написания из
-              четырёх не находили ничего. В списке — только районы, в
-              которых объекты есть, и рядом сказано сколько: выбор,
-              после которого пусто, — обман. */}
+              четырёх не находили ничего. Список свой, с поиском: районов
+              два десятка, и набрать «ас» быстрее, чем искать «Асанбай»
+              глазами. Рядом с районом — число объектов: оно говорит,
+              стоит ли нажимать. */}
           {zones.length > 0 ? (
-            <div className="cell">
-              <label htmlFor="zone">{d.zoneLabel}</label>
-              <select id="zone" name="zone" defaultValue={f.zone ?? ''}>
-                <option value="">{d.anyKind}</option>
-                {zones.map((z) => (
-                  <option key={z.zone} value={z.zone}>{z.zone} · {z.n}</option>
-                ))}
-                {/* Выбранный район мог уйти из выдачи, пока им делились
-                    ссылкой: в списке его уже нет, а в адресе он есть.
-                    Без этой строки список молча показал бы «любой». */}
-                {f.zone && !zones.some((z) => z.zone === f.zone) ? (
-                  <option value={f.zone}>{f.zone}</option>
-                ) : null}
-              </select>
-            </div>
+            <ZonePick label={d.zoneLabel} value={f.zone} options={zones}
+                      anyLabel={d.anyKind} searchHint={d.zoneSearch}
+                      emptyHint={d.zoneNone} />
           ) : null}
           <div className="cell">
             <label htmlFor="kind">{d.kind}</label>
@@ -240,18 +230,26 @@ export default async function Catalog({
 
   const zoneCounts = failed ? [] : await catalogZoneCounts(deal, f.city);
 
-  // Порядок районов в списке — с севера на юг, как город лежит на самом
-  // деле, и только для города, который виден целиком: городов несколько
-  // и ни один не выбран — раскладка одного поверх объектов всех соврёт.
-  // Район, которого в раскладке нет, не выбрасывается, а встаёт следом:
-  // агент мог написать в карточке посёлок, которого в списке не было.
+  // В списке — все районы города, а не только те, где сейчас есть
+  // объекты: человек ищет свой район и должен его там найти, даже если
+  // ответом будет «пока ничего». Число объектов стоит рядом и отвечает
+  // на вопрос «стоит ли нажимать» честнее, чем отсутствие строки.
+  //
+  // Порядок — с севера на юг, как город лежит на самом деле, и только
+  // для города, который виден целиком: городов несколько и ни один не
+  // выбран — раскладка одного поверх объектов всех соврёт. Район,
+  // которого в раскладке нет, встаёт следом: агент мог написать в
+  // карточке посёлок, которого в списке не было.
   const order = zonesOf(manyCities ? f.city : (f.city ?? cities[0] ?? 'Бишкек'));
   const rank = (z: string) => {
     const i = order.indexOf(z);
     return i < 0 ? order.length : i;
   };
-  const zoneList = [...zoneCounts].sort((a, b) => rank(a.zone) - rank(b.zone)
-    || a.zone.localeCompare(b.zone, 'ru'));
+  const named = new Map(zoneCounts.map((z) => [z.zone, z.n]));
+  for (const z of order) if (!named.has(z)) named.set(z, 0);
+  if (f.zone && !named.has(f.zone)) named.set(f.zone, 0);
+  const zoneList = [...named].map(([zone, n]) => ({ zone, n }))
+    .sort((a, b) => rank(a.zone) - rank(b.zone) || a.zone.localeCompare(b.zone, 'ru'));
 
   // Строкой над выдачей — самые населённые районы: это быстрый путь,
   // а не полный список, полный живёт в поле «Район» на пульте.

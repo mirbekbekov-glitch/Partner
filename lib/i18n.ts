@@ -56,6 +56,7 @@ type Dict = {
   // Страница объекта
   toAll: string; about: string; published: string; roomsLabel: string;
   areaLabel: string; floorLabel: string; floorOf: string; zoneLabel: string; cityLabel: string;
+  zoneSearch: string; zoneNone: string;
   confirmedPrice: string; notFound: string; notFoundLede: string; seeWhatIsThere: string;
   // Блок агента на странице объекта. Открыты ровно три поля: имя, стаж и
   // подтверждённый номер в реестре. Телефон агента здесь намеренно
@@ -124,6 +125,7 @@ const ru: Dict = {
   toAll: '← Ко всем объектам', about: 'Об объекте', published: 'Опубликован',
   roomsLabel: 'Комнат', areaLabel: 'Площадь', floorLabel: 'Этаж', floorOf: 'из',
   zoneLabel: 'Район', cityLabel: 'Город',
+  zoneSearch: 'Поиск…', zoneNone: 'Такого района нет в списке',
   confirmedPrice: 'Агент подтвердил цену и доступность',
   agentLeads: 'Объект ведёт',
   // «год», «года», «лет»: иначе строка читается как машинный перевод.
@@ -218,6 +220,7 @@ const ky: Dict = {
   toAll: '← Бардык объекттерге', about: 'Объект жөнүндө', published: 'Жарыяланган',
   roomsLabel: 'Бөлмө', areaLabel: 'Аянты', floorLabel: 'Кабат', floorOf: '/',
   zoneLabel: 'Район', cityLabel: 'Шаар',
+  zoneSearch: 'Издөө…', zoneNone: 'Мындай район тизмеде жок',
   confirmedPrice: 'Агент бааны жана жеткиликтүүлүктү ырастады',
   agentLeads: 'Объектти алып баруучу',
   agentYears: (n) => `кыймылсыз мүлктө ${n} жыл`,
@@ -305,6 +308,7 @@ const en: Dict = {
   toAll: '← All listings', about: 'About this property', published: 'Published',
   roomsLabel: 'Rooms', areaLabel: 'Area', floorLabel: 'Floor', floorOf: 'of',
   zoneLabel: 'District', cityLabel: 'City',
+  zoneSearch: 'Search…', zoneNone: 'No such district in the list',
   confirmedPrice: 'Agent confirmed the price and availability',
   agentLeads: 'Listing agent',
   agentYears: (n) => `${n} ${n === 1 ? 'year' : 'years'} in real estate`,
@@ -392,6 +396,7 @@ const zh: Dict = {
   toAll: '← 返回全部房源', about: '房源介绍', published: '发布时间',
   roomsLabel: '房间数', areaLabel: '面积', floorLabel: '楼层', floorOf: '/',
   zoneLabel: '区域', cityLabel: '城市',
+  zoneSearch: '搜索…', zoneNone: '列表中没有该区域',
   confirmedPrice: '经纪人已确认价格与可售状态',
   agentLeads: '负责经纪人',
   agentYears: (n) => `从事房地产 ${n} 年`,

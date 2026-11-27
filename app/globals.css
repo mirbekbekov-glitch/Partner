@@ -719,6 +719,51 @@ main:has(.auth) { max-width: none; padding: 0; }
   width: 100%; min-width: 0; font-family: inherit;
   transition: border-color .18s, box-shadow .18s; }
 .cell input:focus, .cell select:focus { border-color: var(--accent); }
+/* --- Выбор района ------------------------------------------------------- */
+/* Кнопка притворяется полем ввода: в ряду пульта она стоит рядом с
+   настоящими, и любое расхождение в высоте или рамке сразу видно. */
+.pick { position: relative; }
+.pick-label { font-size: 0.75rem; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); }
+.pick-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; text-align: left; font: inherit; font-size: 0.9375rem; font-weight: 500;
+  color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: var(--r-md); padding: 11px 12px; cursor: pointer;
+  transition: border-color .18s; }
+.pick-btn::after { content: ""; flex: none; width: 0; height: 0;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 5px solid var(--muted); }
+.pick-btn:hover { border-color: var(--accent); }
+.pick-btn[aria-expanded='true'] { border-color: var(--accent); }
+.pick-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Невыбранное состояние тише выбранного: «Любой» — это отсутствие
+   ответа, и выглядеть оно должно как подсказка, а не как ответ. */
+.pick-any { color: var(--muted); }
+
+.pick-pop { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0;
+  min-width: 100%; width: max-content; max-width: min(320px, 86vw);
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-lg); box-shadow: var(--sh-lg); padding: 8px; }
+.pick-find { width: 100%; font: inherit; font-size: 0.9375rem;
+  border: 1px solid var(--accent); border-radius: var(--r-md);
+  padding: 9px 11px; background: var(--bg); color: var(--fg); }
+/* Высота в строках, а не в пикселях: список обрывается посреди строки
+   только там, где строк действительно больше, чем помещается, — и тем
+   самым сам показывает, что его можно прокрутить. */
+.pick-list { margin-top: 6px; max-height: 280px; overflow-y: auto;
+  display: flex; flex-direction: column; }
+.pick-row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; text-align: left; font: inherit; font-size: 0.9375rem; font-weight: 500;
+  color: var(--fg); background: none; border: 0; border-radius: var(--r-md);
+  padding: 9px 10px; cursor: pointer; }
+.pick-row[data-at='true'] { background: var(--sunk); }
+.pick-row[aria-selected='true'] { color: var(--accent); font-weight: 700; }
+.pick-row small { color: var(--muted); font-weight: 600; font-size: 0.8125rem; }
+.pick-none { margin: 10px; color: var(--muted); font-size: 0.875rem; }
+.pick-plain { width: 100%; font: inherit; font-size: 0.9375rem; padding: 11px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--bg); color: var(--fg); }
+
 .go { align-self: end; background: var(--accent); color: var(--accent-fg); border: 0;
   border-radius: var(--r-md); padding: 12px 24px; font-weight: 700; font-size: 0.9375rem;
   cursor: pointer; white-space: nowrap; transition: background .18s, transform .18s; }
