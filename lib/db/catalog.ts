@@ -2,6 +2,7 @@ import 'server-only';
 import { all, holders, jsonArray, one } from './sql';
 import { searchText } from './normalize';
 import { fromMinor } from './money';
+import { panoramasFrom, type Panorama } from './panoramas';
 
 /**
  * Публичный каталог — витрина.
@@ -32,6 +33,9 @@ const COLUMNS = [
   'latitude', 'longitude', 'region', 'district', 'micro_district',
   'house_number', 'building_type', 'serie', 'land_area', 'rental_term',
   'commercial_type', 'room_location', 'parking_type', 'build_year',
+  // Панорамы тура публичны по той же причине, что и снимки: их для того
+  // и снимали. Подпись комнаты — единственное, что в них написано.
+  'panoramas',
 ] as const;
 
 const SELECT = COLUMNS.map((c) => `o.${c}`).join(', ');
@@ -52,6 +56,7 @@ export type CatalogRow = {
   price_minor: number;
   currency: string;
   photos: string;
+  panoramas: string | null;
   description: string | null;
   published_at: string | null;
   actual_at: string;
@@ -79,8 +84,9 @@ export type CatalogRow = {
  * показывают человеку, и переводить её в каждом месте значило бы
  * размножить одно и то же деление по всем страницам.
  */
-export type CatalogItem = Omit<CatalogRow, 'photos'> & {
+export type CatalogItem = Omit<CatalogRow, 'photos' | 'panoramas'> & {
   photos: string[];
+  panoramas: Panorama[];
   price: number;
 };
 
@@ -88,6 +94,7 @@ function view(row: CatalogRow): CatalogItem {
   return {
     ...row,
     photos: jsonArray<string>(row.photos),
+    panoramas: panoramasFrom(row.panoramas),
     price: fromMinor(row.price_minor) ?? 0,
   };
 }

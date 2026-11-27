@@ -131,3 +131,55 @@ export async function thumbnailFrom(blob: Blob): Promise<Blob | null> {
     return null;
   }
 }
+
+/* --- Панорамы ------------------------------------------------------------
+ *
+ * У панорамы другие правила, чем у снимка. Её не рассматривают целиком:
+ * просмотрщик показывает кусок в градусов шестьдесят, растягивая его на
+ * весь экран. Сожми панораму до двух тысяч точек по длинной стороне, как
+ * обычный снимок, — и в окне останется каша.
+ *
+ * 5120 — предел, после которого выигрыш в чёткости перестаёт
+ * чувствоваться, а памяти в браузере телефона на пересборку уже не
+ * хватает: площадь такой картинки около шести мегапикселей, и это
+ * укладывается в ограничение холста на iOS.
+ */
+const PANO_SIDE = 5120;
+const PANO_QUALITY = 0.8;
+
+export type PreparedPano = {
+  full: Blob;
+  /** Размеры ПОСЛЕ сжатия: по ним просмотрщик считает углы обзора. */
+  width: number;
+  height: number;
+  before: number;
+  after: number;
+};
+
+export async function preparePanorama(file: File): Promise<PreparedPano> {
+  const before = file.size;
+
+  if (!canResize()) {
+    // Старый браузер: отправляем как есть. Размеры неизвестны — пусть
+    // просмотрщик считает панораму полной сферой, это частый случай.
+    return { full: file, width: 0, height: 0, before, after: before };
+  }
+
+  const bitmap = await createImageBitmap(file);
+  const scale = scaleFor(bitmap.width, bitmap.height, PANO_SIDE);
+  const width = Math.round(bitmap.width * scale);
+  const height = Math.round(bitmap.height * scale);
+
+  const canvas = new OffscreenCanvas(width, height);
+  const context = canvas.getContext('2d');
+  if (!context) {
+    bitmap.close();
+    return { full: file, width: bitmap.width, height: bitmap.height, before, after: before };
+  }
+
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  const full = await canvas.convertToBlob({ type: 'image/jpeg', quality: PANO_QUALITY });
+  return { full, width, height, before, after: full.size };
+}
