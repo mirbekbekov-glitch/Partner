@@ -36,7 +36,7 @@ import {
   photosMissingThumb, putAvatar, putPhoto, putThumb, readPhoto, sniff,
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
-import { feedXml } from '@/lib/feed';
+import { feedXml, inFeed } from '@/lib/feed';
 import {
   catalogHref, hasAnyFilter, parseCatalogFilters,
 } from '@/lib/catalog-params';
@@ -1977,6 +1977,14 @@ export default {
     const withCommercial = await feedXml('https://liberterra.kg');
     check('коммерческий объект в фид не попадает',
       !withCommercial.includes(commercial.id));
+
+    // Кабинет предупреждает об этом, и предупреждение завязано на ТОТ ЖЕ
+    // словарь, из которого строится фид. Без связки «commercial» однажды
+    // появится в фиде, а кабинет продолжит писать «не попадает».
+    check('кабинет знает, что коммерческий в выгрузку не идёт', !inFeed('commercial'));
+    check('и что квартира идёт', inFeed('flat'));
+    check('согласовано с самим фидом: что фид отдаёт, то inFeed и признаёт',
+      withCommercial.includes(forSale.id) === inFeed('flat'));
     check('а в витрине он при этом есть — значит дело в фиде, а не в публикации',
       (await catalogPage({})).items.some((i) => i.id === commercial.id));
 
