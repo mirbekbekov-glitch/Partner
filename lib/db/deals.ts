@@ -177,9 +177,9 @@ export async function closeDeal(
   }
 
   const context = await one<{
-    deal_type: 'rent' | 'sale'; commission_rule: string | null; partner_share: number | null;
+    deal_type: 'rent' | 'sale'; commission_rule: string | null; partner_rate: number | null;
   }>(
-    `select o.deal_type, m.commission_rule, m.partner_share
+    `select o.deal_type, m.commission_rule, m.partner_rate
        from objects o join mandates m on m.id = ?
       where o.id = ?`,
     before.mandate_id, before.object_id,
@@ -188,7 +188,7 @@ export async function closeDeal(
 
   const total = commissionTotal(context.deal_type, finalPriceMinor,
     parseRule(context.commission_rule));
-  const shares = commissionShares(total, context.partner_share);
+  const shares = commissionShares(total, { priceMinor: finalPriceMinor, rate: context.partner_rate });
   const at = now();
 
   await batch([
@@ -280,12 +280,12 @@ export async function indicativeCommission(dealId: string): Promise<{
 }> {
   const row = await one<{
     deal_type: 'rent' | 'sale'; price_minor: number;
-    commission_rule: string | null; partner_share: number | null;
+    commission_rule: string | null; partner_rate: number | null;
     final_price_minor: number | null;
     commission_total_minor: number | null; listing_share_minor: number | null;
     closing_share_minor: number | null;
   }>(
-    `select o.deal_type, o.price_minor, m.commission_rule, m.partner_share, d.final_price_minor,
+    `select o.deal_type, o.price_minor, m.commission_rule, m.partner_rate, d.final_price_minor,
             d.commission_total_minor, d.listing_share_minor, d.closing_share_minor
        from deals d
        join objects  o on o.id = d.object_id
@@ -306,6 +306,8 @@ export async function indicativeCommission(dealId: string): Promise<{
 
   const total = commissionTotal(row.deal_type,
     row.final_price_minor ?? row.price_minor, parseRule(row.commission_rule));
-  const shares = commissionShares(total, row.partner_share);
-  return { total, listing: shares.listing, closing: shares.closing };
+  const shares = commissionShares(total, {
+    priceMinor: row.final_price_minor ?? row.price_minor, rate: row.partner_rate,
+  });
+  return { total: shares.total, listing: shares.listing, closing: shares.closing };
 }

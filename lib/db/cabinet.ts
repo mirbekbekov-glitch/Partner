@@ -2,7 +2,7 @@ import 'server-only';
 import { all, jsonArray, one } from './sql';
 import { requireAgent } from './session';
 import { fromMinor } from './money';
-import { commissionShares, commissionTotal, parseRule, partnerShare } from './commission';
+import { commissionShares, commissionTotal, parseRule, partnerAmount } from './commission';
 import { contactVisible, dealParty, objectEditable } from './visibility';
 import { searchText } from './normalize';
 import { PAGE_SIZE } from '../list-params';
@@ -293,9 +293,10 @@ export type ObjectListItem = {
   commission_total: number | null;
   can_edit: boolean;
   leads_new: number;
-  /** Сколько и какую долю получит агент, который приведёт покупателя. */
+  /** Сколько получит агент, который приведёт покупателя. */
   partner_amount: number | null;
-  partner_percent: number;
+  /** Названный процент от сделки. Пусто — половина комиссии, по старому правилу. */
+  partner_rate: number | null;
 };
 
 export type ObjectSource = 'mine' | 'org' | 'others' | 'all';
@@ -359,7 +360,7 @@ export async function objectList(query: {
   const rows = await all<
     Omit<ObjectListItem, 'can_edit' | 'contract_confirmed' | 'commission_total' | 'photos'> & {
       can_edit: number; contract_confirmed: number | null;
-      price_minor: number; commission_rule: string | null; partner_share: number | null;
+      price_minor: number; commission_rule: string | null; partner_rate: number | null;
       total_count: number;
       photos: string;
     }
@@ -369,7 +370,7 @@ export async function objectList(query: {
             o.publication_state, o.published_at, o.actual_at, o.created_at,
             m.id as mandate_id,
             coalesce(m.contract_confirmed, 0) as contract_confirmed,
-            m.listing_agent_id, m.commission_rule, m.partner_share,
+            m.listing_agent_id, m.commission_rule, m.partner_rate,
             la.full_name as listing_agent_name,
             org.name as organization_name,
             ra.full_name as responsible_name,
@@ -439,13 +440,13 @@ export async function objectList(query: {
     commission_total: fromMinor(
       commissionTotal(r.deal_type, r.price_minor, parseRule(r.commission_rule)),
     ),
-    // Доля партнёра — то, ради чего в список заглядывает чужой агент:
-    // она решает, звонить ему по этому объекту или нет.
+    // Комиссия партнёру — то, ради чего в список заглядывает чужой
+    // агент: она решает, звонить ему по этому объекту или нет.
     partner_amount: fromMinor(commissionShares(
       commissionTotal(r.deal_type, r.price_minor, parseRule(r.commission_rule)),
-      r.partner_share,
+      { priceMinor: r.price_minor, rate: r.partner_rate },
     ).closing),
-    partner_percent: partnerShare(r.partner_share),
+    partner_rate: r.partner_rate,
     })),
   };
 }
@@ -633,11 +634,11 @@ export async function activeMandateOf(objectId: string) {
   await asker();
   const row = await one<{
     id: string; kind: string; contract_confirmed: number; valid_to: string | null;
-    commission_rule: string | null; partner_share: number | null;
+    commission_rule: string | null; partner_rate: number | null;
     price_minor: number; deal_type: 'rent' | 'sale'; currency: string;
   }>(
     `select m.id, m.kind, m.contract_confirmed, m.valid_to,
-            m.commission_rule, m.partner_share,
+            m.commission_rule, m.partner_rate,
             o.price_minor, o.deal_type, o.currency
        from mandates m
        join objects o on o.id = m.object_id
@@ -648,14 +649,15 @@ export async function activeMandateOf(objectId: string) {
 
   // Комиссия считается от ТЕКУЩЕЙ цены: записывать её некуда — объект
   // ещё не продан, и записанная сумма означала бы, что деньги поделены.
-  const total = commissionTotal(row.deal_type, row.price_minor, parseRule(row.commission_rule));
-  const shares = commissionShares(total, row.partner_share);
+  const base = commissionTotal(row.deal_type, row.price_minor, parseRule(row.commission_rule));
+  const shares = commissionShares(base, { priceMinor: row.price_minor, rate: row.partner_rate });
 
   return {
     ...row,
-    commission_total: fromMinor(total),
+    // Итог — тот, что сходится с долями: обещано партнёру больше нашей
+    // комиссии, и итогом становится обещанное.
+    commission_total: fromMinor(shares.total),
     partner_amount: fromMinor(shares.closing),
-    partner_percent: partnerShare(row.partner_share),
   };
 }
 
@@ -678,7 +680,7 @@ export async function objectMatches(objectId: string) {
     deal_type: 'rent' | 'sale'; budget_min: number | null; budget_max: number | null;
     zones: string; rooms_wanted: string; requirement_status: string;
     client_name: string | null; price_minor: number; commission_rule: string | null;
-    partner_share: number | null;
+    partner_rate: number | null;
     deal_id: string | null; deal_status: string | null;
     deal_total: number | null; deal_listing: number | null; deal_closing: number | null;
     can_lead: number;
@@ -692,7 +694,7 @@ export async function objectMatches(objectId: string) {
             r.zones, r.rooms as rooms_wanted, r.status as requirement_status,
             (select case when ${visible.sql} then c.name end
                from contacts c where c.id = r.contact_id) as client_name,
-            o.price_minor, m.commission_rule, m.partner_share,
+            o.price_minor, m.commission_rule, m.partner_rate,
             d.id as deal_id, d.status as deal_status,
             d.commission_total_minor as deal_total,
             d.listing_share_minor as deal_listing,
@@ -717,7 +719,7 @@ export async function objectMatches(objectId: string) {
       : commissionTotal(r.deal_type, r.price_minor, parseRule(r.commission_rule));
     const shares = fixed
       ? { listing: r.deal_listing, closing: r.deal_closing }
-      : commissionShares(total, r.partner_share);
+      : commissionShares(total, { priceMinor: r.price_minor, rate: r.partner_rate });
 
     return {
       ...r,
@@ -907,7 +909,7 @@ export async function requirementMatches(requirementId: string) {
     price: number; price_minor: number; currency: string;
     publication_state: string; actual_at: string; deal_type: 'rent' | 'sale';
     mandate_id: string | null; contract_confirmed: number | null;
-    commission_rule: string | null; partner_share: number | null;
+    commission_rule: string | null; partner_rate: number | null;
     listing_agent_name: string | null;
     owner_name: string | null; deal_id: string | null; deal_status: string | null;
     deal_total: number | null; deal_listing: number | null; deal_closing: number | null;
@@ -918,7 +920,7 @@ export async function requirementMatches(requirementId: string) {
             o.address, o.zone, o.rooms, o.area, o.floor,
             o.price_minor / 100.0 as price, o.price_minor, o.currency,
             o.publication_state, o.actual_at, o.deal_type,
-            m.id as mandate_id, m.contract_confirmed, m.commission_rule, m.partner_share,
+            m.id as mandate_id, m.contract_confirmed, m.commission_rule, m.partner_rate,
             la.full_name as listing_agent_name,
             (select case when ${visible.sql} then c.name end
                from object_ownerships oo join contacts c on c.id = oo.contact_id
@@ -947,7 +949,7 @@ export async function requirementMatches(requirementId: string) {
       : commissionTotal(r.deal_type, r.price_minor, parseRule(r.commission_rule));
     const shares = fixed
       ? { listing: r.deal_listing, closing: r.deal_closing }
-      : commissionShares(total, r.partner_share);
+      : commissionShares(total, { priceMinor: r.price_minor, rate: r.partner_rate });
 
     return {
       ...r,
@@ -1048,13 +1050,13 @@ export async function dealList(
     failure_reason: string | null;
     commission_total_minor: number | null;
     listing_share_minor: number | null; closing_share_minor: number | null;
-    commission_rule: string | null; partner_share: number | null;
+    commission_rule: string | null; partner_rate: number | null;
     listing_agent_name: string | null; closing_agent_name: string | null;
     client_name: string | null; can_act: number;
     created_at: string; closed_at: string | null;
   }>(
     `select d.id, d.status, o.address, o.deal_type,
-            d.final_price_minor, o.price_minor, o.currency, m.commission_rule, m.partner_share,
+            d.final_price_minor, o.price_minor, o.currency, m.commission_rule, m.partner_rate,
             d.failure_reason,
             d.commission_total_minor, d.listing_share_minor, d.closing_share_minor,
             la.full_name as listing_agent_name,
@@ -1092,7 +1094,7 @@ export async function dealList(
                         parseRule(r.commission_rule));
     const shares = fixed
       ? { listing: r.listing_share_minor, closing: r.closing_share_minor }
-      : commissionShares(total, r.partner_share);
+      : commissionShares(total, { priceMinor: r.price_minor, rate: r.partner_rate });
 
     return {
       id: r.id,
@@ -1138,7 +1140,7 @@ export async function dealCard(id: string) {
     object_id: string; requirement_id: string; match_id: string; mandate_id: string;
     address: string; deal_type: 'rent' | 'sale'; zone: string | null;
     rooms: number | null; object_price_minor: number; currency: string;
-    commission_rule: string | null; partner_share: number | null;
+    commission_rule: string | null; partner_rate: number | null;
     listing_agent_name: string | null; closing_agent_name: string | null;
     commission_total_minor: number | null; listing_share_minor: number | null;
     closing_share_minor: number | null;
@@ -1147,7 +1149,7 @@ export async function dealCard(id: string) {
     `select d.id, d.status, d.created_at, d.closed_at, d.final_price_minor,
             d.failure_reason, d.object_id, d.requirement_id, d.match_id,
             d.mandate_id, o.address, o.deal_type, o.zone, o.rooms,
-            o.price_minor as object_price_minor, o.currency, m.commission_rule, m.partner_share,
+            o.price_minor as object_price_minor, o.currency, m.commission_rule, m.partner_rate,
             la.full_name as listing_agent_name,
             ca.full_name as closing_agent_name,
             d.commission_total_minor, d.listing_share_minor, d.closing_share_minor,
@@ -1175,7 +1177,9 @@ export async function dealCard(id: string) {
                       parseRule(row.commission_rule));
   const shares = fixed
     ? { listing: row.listing_share_minor, closing: row.closing_share_minor }
-    : commissionShares(total, row.partner_share);
+    : commissionShares(total, {
+      priceMinor: row.final_price_minor ?? row.object_price_minor, rate: row.partner_rate,
+    });
 
   return {
     ...row,

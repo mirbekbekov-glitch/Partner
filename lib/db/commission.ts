@@ -22,20 +22,14 @@ export type CommissionRule =
   | null;
 
 /**
- * Доля closing-агента по умолчанию, в процентах.
+ * Доля closing-агента, когда процент партнёра не назван, в процентах
+ * от комиссии.
  *
- * Половина — не произвол, а обычай рынка: тот, кто привёл покупателя,
- * сделал половину работы. Это именно УМОЛЧАНИЕ: мандат вправе назвать
- * другую долю, и тогда работает она.
+ * Половина — обычай рынка: тот, кто привёл покупателя, сделал половину
+ * работы. Это именно УМОЛЧАНИЕ для старых объектов: в карточке условие
+ * теперь называют процентом от сделки, и тогда работает он.
  */
 export const PARTNER_SHARE_DEFAULT = 50;
-
-/** Доля из мандата или умолчание. Мусор в колонке означает умолчание. */
-export function partnerShare(value: number | null | undefined): number {
-  if (value === null || value === undefined) return PARTNER_SHARE_DEFAULT;
-  const n = Math.trunc(value);
-  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : PARTNER_SHARE_DEFAULT;
-}
 
 /** Итог комиссии в минорных единицах. */
 export function commissionTotal(
@@ -63,19 +57,53 @@ export function commissionTotal(
 }
 
 /**
- * Доли сторон. Складываются ровно в итог — это проверяется тестом.
+ * Сколько обещано партнёру.
  *
- * Остаток от деления отдаётся listing-агенту: две доли обязаны давать
- * ровно итог, иначе в отчёте не сойдётся на копейку.
+ * Процент НЕ от нашей комиссии, а от сделки: от цены при продаже, от
+ * месячной платы при аренде (у аренды цена и есть месячная плата). Так
+ * это условие называют на рынке — «отдаю процент с продажи», «отдаю
+ * столько-то процентов месяца», — и так его называет агент в карточке.
  */
-export function commissionShares(totalMinor: number | null, share?: number | null): {
-  listing: number | null;
-  closing: number | null;
-} {
-  if (totalMinor === null) return { listing: null, closing: null };
+export function partnerAmount(
+  priceMinor: number | null,
+  rate: number | null | undefined,
+): number | null {
+  if (priceMinor === null || priceMinor <= 0) return null;
+  if (rate === null || rate === undefined || !Number.isFinite(rate)) return null;
+  if (rate < 0 || rate > 100) return null;
+  return Math.round(priceMinor * rate / 100);
+}
 
-  const closing = Math.round(totalMinor * partnerShare(share) / 100);
-  return { listing: totalMinor - closing, closing };
+/**
+ * Итог и доли сторон.
+ *
+ * Названный процент партнёра И ЕСТЬ доля closing-агента: это обещание,
+ * данное в карточке, и пересчитывать его нам нечем. Остальное достаётся
+ * listing-агенту.
+ *
+ * Обещано больше, чем наша комиссия, — итогом считается обещанное:
+ * агентство не может получить меньше, чем должно отдать, а отрицательная
+ * доля прятала бы ошибку в условиях за арифметикой. Ведущий агент видит
+ * у себя ноль и понимает, что назначил партнёру больше, чем берёт сам.
+ *
+ * Процент не назван — прежнее правило: пополам. Остаток от деления
+ * достаётся listing-агенту, чтобы две доли давали ровно итог.
+ */
+export function commissionShares(
+  totalMinor: number | null,
+  partner?: { priceMinor: number | null; rate: number | null } | null,
+): { listing: number | null; closing: number | null; total: number | null } {
+  if (totalMinor === null) return { listing: null, closing: null, total: null };
+
+  const promised = partner ? partnerAmount(partner.priceMinor, partner.rate) : null;
+
+  if (promised === null) {
+    const closing = Math.round(totalMinor * PARTNER_SHARE_DEFAULT / 100);
+    return { listing: totalMinor - closing, closing, total: totalMinor };
+  }
+
+  const total = Math.max(totalMinor, promised);
+  return { listing: total - promised, closing: promised, total };
 }
 
 /** Разбор commission_rule из колонки. Мусор в колонке означает «базовое правило». */

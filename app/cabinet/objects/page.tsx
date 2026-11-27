@@ -211,7 +211,9 @@ export default async function ObjectsList({
                         заглядывает агент из другого агентства: она
                         решает, звонить ему по объекту или нет. */}
                     <span className="tbl-sub">
-                      партнёру {o.partner_percent}%
+                      {o.partner_rate !== null
+                        ? `партнёру ${String(o.partner_rate).replace('.', ',')}%`
+                        : 'партнёру половина'}
                       {o.partner_amount !== null
                         ? ` · ${money(o.partner_amount, o.currency)}`
                         : ''}

@@ -123,7 +123,7 @@ async function saveOwnPhone(formData: FormData): Promise<string | null> {
  * месячная плата, но правило должно называться тем, что оно значит.
  */
 function commissionFields(formData: FormData, deal: string): {
-  rule: string | null; share: number | null;
+  rule: string | null; rate: number | null;
 } {
   const percent = num(formData.get('commission_percent'));
   const rule = percent === null ? null : JSON.stringify(
@@ -132,10 +132,13 @@ function commissionFields(formData: FormData, deal: string): {
       : { kind: 'percent', value: percent },
   );
 
-  const shareRaw = str(formData.get('partner_share'));
-  const share = shareRaw === null ? null : num(formData.get('partner_share'));
+  // Процент партнёра — от СДЕЛКИ, а не от нашей комиссии: «отдаю 1 % с
+  // продажи», «отдаю 20 % месяца». Дробный разрешён: 0,5 % — обычное
+  // условие при продаже.
+  const rateRaw = str(formData.get('partner_rate'));
+  const rate = rateRaw === null ? null : num(formData.get('partner_rate'));
 
-  return { rule, share };
+  return { rule, rate };
 }
 
 export async function createObject(formData: FormData): Promise<FormResult> {
@@ -173,7 +176,7 @@ export async function createObject(formData: FormData): Promise<FormResult> {
       mandate_valid_to: str(formData.get('mandate_valid_to')),
       mandate_start_price_minor: money(formData.get('mandate_start_price')),
       mandate_commission_rule: commission.rule,
-      mandate_partner_share: commission.share,
+      mandate_partner_rate: commission.rate,
       contract_confirmed: formData.get('contract_confirmed') === 'on',
       document_url: str(formData.get('document_url')),
     });
