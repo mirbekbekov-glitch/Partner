@@ -33,19 +33,39 @@ export default {
       return;
     }
 
-    const request = new Request('https://cron.internal/api/cron/reminders', {
+    // Два дела по одному расписанию: разослать напоминания и перенести
+    // объявления старого сайта. Отдельного расписания второму не нужно —
+    // оно суточное и дешёвое, — но маршрут у него свой: имя маршрута
+    // должно говорить, что он делает.
+    await run('/api/cron/reminders', 'напоминания', secret, env, ctx);
+    await run('/api/cron/catalog-import', 'перенос каталога', secret, env, ctx);
+  },
+};
+
+/**
+ * Один маршрут расписания: дёрнуть и записать итог.
+ *
+ * Итог в журнал обязателен: без него «молчащее» расписание неотличимо от
+ * работающего. Отказ одного дела не отменяет второго — они независимы.
+ */
+async function run(
+  path: string,
+  what: string,
+  secret: string,
+  env: unknown,
+  ctx: ExecutionContext,
+): Promise<void> {
+  try {
+    const request = new Request(`https://cron.internal${path}`, {
       headers: { authorization: `Bearer ${secret}` },
     });
 
     const response = await handler.fetch(request, env, ctx);
     const body = await response.text();
 
-    // Итог в журнал: сколько разослано и сколько не ушло. Без этого
-    // «молчащее» расписание неотличимо от работающего.
-    if (response.ok) {
-      console.log('расписание: напоминания разосланы —', body);
-    } else {
-      console.error(`расписание: ответ ${response.status} —`, body);
-    }
-  },
-};
+    if (response.ok) console.log(`расписание: ${what} —`, body);
+    else console.error(`расписание: ${what}, ответ ${response.status} —`, body);
+  } catch (e) {
+    console.error(`расписание: ${what} сорвалось —`, e instanceof Error ? e.message : e);
+  }
+}

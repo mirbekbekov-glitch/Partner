@@ -82,11 +82,13 @@ export default async function RequirementCard({ params }: { params: Promise<{ id
         ) : null}
       </div>
 
-      <p className="key">
-        <Link href={`/cabinet/requirements/${requirement.id}/edit`}>
-          править потребность →
+      {/* Кнопкой и первой, как на карточке объекта: редактирование — самое
+          частое действие, и строчной ссылкой под остальными оно терялось. */}
+      <div className="actions">
+        <Link className="btn" href={`/cabinet/requirements/${requirement.id}/edit`}>
+          Редактировать
         </Link>
-      </p>
+      </div>
 
       {/* Передаётся КЛИЕНТ целиком, а не одна потребность: иначе контакт
           остался бы у одного агента, а работа с ним — у другого. */}

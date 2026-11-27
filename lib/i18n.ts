@@ -56,6 +56,7 @@ type Dict = {
   // Страница объекта
   toAll: string; about: string; published: string; roomsLabel: string;
   areaLabel: string; floorLabel: string; floorOf: string; zoneLabel: string; cityLabel: string;
+  zoneSearch: string; zoneNone: string;
   confirmedPrice: string; notFound: string; notFoundLede: string; seeWhatIsThere: string;
   // Блок агента на странице объекта. Открыты ровно три поля: имя, стаж и
   // подтверждённый номер в реестре. Телефон агента здесь намеренно
@@ -84,7 +85,6 @@ type Dict = {
   pitchStep1: string; pitchStep1Note: string;
   pitchStep2: string; pitchStep2Note: string;
   pitchStep3: string; pitchStep3Note: string;
-  mapTitle: string; mapHint: string; mapEmpty: string;
   // Заявка «что я ищу»
   reqNav: string; reqTitle: string; reqLede: string;
   reqDeal: string; reqBuy: string; reqRent: string;
@@ -129,6 +129,7 @@ const ru: Dict = {
   toAll: '← Ко всем объектам', about: 'Об объекте', published: 'Опубликован',
   roomsLabel: 'Комнат', areaLabel: 'Площадь', floorLabel: 'Этаж', floorOf: 'из',
   zoneLabel: 'Район', cityLabel: 'Город',
+  zoneSearch: 'Поиск…', zoneNone: 'Такого района нет в списке',
   confirmedPrice: 'Агент подтвердил цену и доступность',
   agentLeads: 'Объект ведёт',
   // «год», «года», «лет»: иначе строка читается как машинный перевод.
@@ -203,8 +204,6 @@ const ru: Dict = {
   pitchStep1: 'Вы описываете, что нужно', pitchStep1Note: 'Две минуты, обязателен только телефон',
   pitchStep2: 'Заявку видят агенты', pitchStep2Note: 'Отвечаем в течение часа — это норматив, а не обещание',
   pitchStep3: 'Вам приносят варианты', pitchStep3Note: 'Появится позже — позвоним, заявка остаётся в работе',
-  mapTitle: 'Районы города', mapHint: 'Нажмите район — покажем, что в нём есть',
-  mapEmpty: 'пока пусто',
   themeSwitch: 'Светлая или тёмная тема',
   kinds: { flat: 'квартира', room: 'комната', house: 'дом', townhouse: 'таунхаус',
            land: 'участок', commercial: 'коммерческая', garage: 'гараж' },
@@ -234,6 +233,7 @@ const ky: Dict = {
   toAll: '← Бардык объекттерге', about: 'Объект жөнүндө', published: 'Жарыяланган',
   roomsLabel: 'Бөлмө', areaLabel: 'Аянты', floorLabel: 'Кабат', floorOf: '/',
   zoneLabel: 'Район', cityLabel: 'Шаар',
+  zoneSearch: 'Издөө…', zoneNone: 'Мындай район тизмеде жок',
   confirmedPrice: 'Агент бааны жана жеткиликтүүлүктү ырастады',
   agentLeads: 'Объектти алып баруучу',
   agentYears: (n) => `кыймылсыз мүлктө ${n} жыл`,
@@ -298,8 +298,6 @@ const ky: Dict = {
   pitchStep1: 'Эмне керектигин жазасыз', pitchStep1Note: 'Эки мүнөт, телефон гана милдеттүү',
   pitchStep2: 'Арызды агенттер көрөт', pitchStep2Note: 'Бир сааттын ичинде жооп беребиз — бул норматив',
   pitchStep3: 'Сизге варианттар келет', pitchStep3Note: 'Кийин пайда болсо — чалабыз, арыз иште калат',
-  mapTitle: 'Шаардын райондору', mapHint: 'Районду басыңыз — андагысын көрсөтөбүз',
-  mapEmpty: 'азырынча жок',
   themeSwitch: 'Жарык же караңгы тема',
   kinds: { flat: 'батир', room: 'бөлмө', house: 'үй', townhouse: 'таунхаус',
            land: 'жер тилкеси', commercial: 'коммерциялык', garage: 'гараж' },
@@ -329,6 +327,7 @@ const en: Dict = {
   toAll: '← All listings', about: 'About this property', published: 'Published',
   roomsLabel: 'Rooms', areaLabel: 'Area', floorLabel: 'Floor', floorOf: 'of',
   zoneLabel: 'District', cityLabel: 'City',
+  zoneSearch: 'Search…', zoneNone: 'No such district in the list',
   confirmedPrice: 'Agent confirmed the price and availability',
   agentLeads: 'Listing agent',
   agentYears: (n) => `${n} ${n === 1 ? 'year' : 'years'} in real estate`,
@@ -393,8 +392,6 @@ const en: Dict = {
   pitchStep1: 'You describe what you need', pitchStep1Note: 'Two minutes; only the phone number is required',
   pitchStep2: 'Agents see the request', pitchStep2Note: 'We answer within the hour — a standard, not a promise',
   pitchStep3: 'They bring you options', pitchStep3Note: 'If it appears later, we call: the request stays open',
-  mapTitle: 'Districts of the city', mapHint: 'Tap a district to see what it holds',
-  mapEmpty: 'empty for now',
   themeSwitch: 'Light or dark theme',
   kinds: { flat: 'flat', room: 'room', house: 'house', townhouse: 'townhouse',
            land: 'land', commercial: 'commercial', garage: 'garage' },
@@ -424,6 +421,7 @@ const zh: Dict = {
   toAll: '← 返回全部房源', about: '房源介绍', published: '发布时间',
   roomsLabel: '房间数', areaLabel: '面积', floorLabel: '楼层', floorOf: '/',
   zoneLabel: '区域', cityLabel: '城市',
+  zoneSearch: '搜索…', zoneNone: '列表中没有该区域',
   confirmedPrice: '经纪人已确认价格与可售状态',
   agentLeads: '负责经纪人',
   agentYears: (n) => `从事房地产 ${n} 年`,
@@ -488,8 +486,6 @@ const zh: Dict = {
   pitchStep1: '您写下需求', pitchStep1Note: '两分钟，仅电话为必填',
   pitchStep2: '经纪人看到需求', pitchStep2Note: '一小时内回复 — 这是标准，不是口号',
   pitchStep3: '他们为您带来房源', pitchStep3Note: '日后出现也会致电：需求一直有效',
-  mapTitle: '城市区域', mapHint: '点击区域，查看其中房源',
-  mapEmpty: '暂无',
   themeSwitch: '浅色或深色主题',
   kinds: { flat: '公寓', room: '单间', house: '独栋', townhouse: '联排别墅',
            land: '地块', commercial: '商业用房', garage: '车库' },

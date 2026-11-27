@@ -5,17 +5,12 @@ import { currentAgent } from '@/lib/db/session';
 import { PAGE_SIZE, parseFilters, exportHref, money, day } from '@/lib/list-params';
 import { Pager } from '../Pager';
 import { SortTh } from '../SortTh';
+import { STATE_RU } from '@/lib/object-state';
 
 export const metadata = { title: 'Объекты' };
 
 const BASE = '/cabinet/objects';
 
-
-const STATE_RU: Record<string, string> = {
-  draft: 'черновик',
-  published: 'опубликован',
-  withdrawn: 'снят',
-};
 
 export default async function ObjectsList({
   searchParams,

@@ -38,6 +38,7 @@ import {
 } from '@/lib/db/photos';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
+import { mhouseXml } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
 import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
@@ -45,7 +46,7 @@ import {
 } from '@/lib/catalog-params';
 import { listingSchema } from '@/lib/listing-schema';
 import { placeName, t } from '@/lib/i18n';
-import { citiesWithPlan, planFor } from '@/lib/city-plans';
+import { citiesWithZones, zonesOf } from '@/lib/city-zones';
 import {
   completeTelegramLink, startTelegramLink, sweepTelegramLinks, unlinkTelegram,
 } from '@/lib/db/telegram';
@@ -74,6 +75,8 @@ import {
 } from '@/lib/db/contacts';
 import { commissionShares, commissionTotal } from '@/lib/db/commission';
 import { normalizePhone } from '@/lib/db/normalize';
+import { draftsFromCatalog, parseCsv } from '@/lib/catalog-csv';
+import { importCatalog, IMPORT_SOURCE } from '@/lib/db/catalog-import';
 import { Conflict, Forbidden, Invalid, NotFound } from '@/lib/db/errors';
 
 type Result = { name: string; ok: boolean; note?: string };
@@ -121,7 +124,7 @@ async function loginAs(db: D1Database, agentId: string) {
 export default {
   async fetch(
     _request: Request,
-    env: { DB: D1Database; PHOTOS: R2Bucket },
+    env: { DB: D1Database; PHOTOS: R2Bucket; CATALOG: D1Database },
   ): Promise<Response> {
     setEnv(env as unknown as Record<string, unknown>);
     results.length = 0;
@@ -1707,6 +1710,81 @@ export default {
     check('телефон собственника в фид не просочился',
       !(await feedXml('https://liberterra.kg')).includes('555121314'));
 
+    // -----------------------------------------------------------------
+    // Фид MHouse
+    // -----------------------------------------------------------------
+    // У площадки свой формат и свои справочники: значение не из списка
+    // она не примет, а без обязательного поля не опубликует объявление.
+    // Поэтому здесь проверяется не разметка, а отбор: уходит ли наружу
+    // то, что площадка возьмёт, и остаётся ли дома то, что она отклонит.
+
+    setEnv({ ...(env as unknown as Record<string, unknown>),
+      FEED_PHONE: '0700 11 22 33', FEED_ORG: 'Liberterra' });
+
+    const incomplete = await mhouseXml('https://liberterra.kg');
+    check('без координат и серии квартира в фид MHouse не идёт',
+      !incomplete.includes(shown.id));
+
+    // Дозаполняем ровно то, чего требует площадка от квартиры.
+    await updateObject(shown.id, {
+      latitude: 42.819242, longitude: 74.619628,
+      building_type: 'монолитный', serie: 'элитка',
+      rooms: 3, area: 85.27, floor: 8, floors_total: 15,
+    });
+
+    const mhFull = await mhouseXml('https://liberterra.kg');
+    check('заполненная квартира в фид MHouse идёт', mhFull.includes(shown.id));
+    check('регион Бишкека подставлен по справочнику',
+      mhFull.includes('<region>Чуйская область / Бишкек</region>'));
+    check('координаты на месте',
+      mhFull.includes('<latitude>42.819242</latitude>')
+      && mhFull.includes('<longitude>74.619628</longitude>'));
+    check('серия и тип дома на языке площадки',
+      mhFull.includes('<serie>элитка</serie>')
+      && mhFull.includes('<building-type>монолитный</building-type>'));
+    check('контакт MHouse называет имя и роль подающего',
+      mhFull.includes('<owner-type>агент</owner-type>')
+      && mhFull.includes('<name>Liberterra</name>'));
+
+    // Главное правило витрины держится и здесь: фид уходит наружу
+    // навсегда, и собственник в нём невозможен.
+    check('в фиде MHouse нет ни агента, ни собственника, ни его телефона',
+      !mhFull.includes(anna) && !mhFull.includes('Собственник витрины')
+      && !mhFull.includes('555121314'));
+
+    // Значение не из справочника площадка не примет. Пропустить такое
+    // поле — потерять объявление целиком, поэтому оно и не выводится.
+    await updateObject(shown.id, { serie: 'какая-то своя серия' });
+    const bogus = await mhouseXml('https://liberterra.kg');
+    check('выдуманная серия не уходит в фид и уносит объявление с собой',
+      !bogus.includes('какая-то своя серия') && !bogus.includes(shown.id));
+    await updateObject(shown.id, { serie: 'элитка' });
+
+    // Аренда без срока — отказ площадки, и объявление остаётся дома.
+    const rentNoTerm = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Арендная 3',
+      price_minor: 3_500_000, rooms: 1, area: 40, floor: 2, floors_total: 9,
+      latitude: 42.8, longitude: 74.6,
+      building_type: 'панельный', serie: '105 серия',
+      description: 'Сдаётся', photos: ['/photos/a.jpg'],
+    });
+    await createMandate({ object_id: rentNoTerm.id, kind: 'non_exclusive' });
+    await publishObject(rentNoTerm.id);
+    check('аренда без срока в фид MHouse не идёт',
+      !(await mhouseXml('https://liberterra.kg')).includes(rentNoTerm.id));
+
+    await updateObject(rentNoTerm.id, { rental_term: 'на долгий срок' });
+    const withTerm = await mhouseXml('https://liberterra.kg');
+    check('со сроком аренда уходит в фид',
+      withTerm.includes(rentNoTerm.id)
+      && withTerm.includes('<rental-term>на долгий срок</rental-term>'));
+
+    // Без контакта площадка не примет ни одного объявления: фид пустой.
+    setEnv({ ...(env as unknown as Record<string, unknown>), FEED_PHONE: '' });
+    const noAgent = await mhouseXml('https://liberterra.kg');
+    check('без телефона агентства фид MHouse пуст',
+      !noAgent.includes('<offer ') && noAgent.includes('</realty-feed>'));
+
     setEnv(env as unknown as Record<string, unknown>);
 
     // -----------------------------------------------------------------
@@ -2045,25 +2123,25 @@ export default {
     await loginAs(db, anna);
     setEnv(env as unknown as Record<string, unknown>);
 
-    // Схемы районов по городам. Схема — не карта, и вся её ценность в
-    // правде расположения: местный должен узнать город с первого
-    // взгляда. Поэтому город попадает в список, только когда раскладку
-    // назвал тот, кто город знает, а не тот, кто догадался.
-    check('у Бишкека схема есть', planFor('Бишкек') !== null);
-    check('у города без схемы её нет, и это не сбой', planFor('Ош') === null);
-    check('пустой город схемы не получает',
-      planFor(null) === null && planFor('') === null);
+    // Районы по городам. Вся ценность списка в правде расположения:
+    // местный должен узнать город с первого взгляда. Поэтому город
+    // попадает сюда, только когда районы назвал тот, кто город знает,
+    // а не тот, кто догадался.
+    check('у Бишкека районы перечислены', zonesOf('Бишкек').length > 0);
+    check('у города без списка его нет, и это не сбой', zonesOf('Ош').length === 0);
+    check('пустой город районов не получает',
+      zonesOf(null).length === 0 && zonesOf('').length === 0);
 
-    // Названия в схеме обязаны совпадать с тем, что агенты пишут в поле
-    // зоны: иначе ячейка никогда не наберёт ни одного объекта и навсегда
-    // останется приглушённой.
-    const plan = planFor('Бишкек');
-    check('в схеме есть Центр — та же зона, что у объектов витрины',
-      plan !== null && plan.cells.some((c) => c.name === 'Центр'));
-    check('у схемы есть ось и названа она городской улицей',
-      plan?.avenue === 'Чүй');
-    check('схем ровно столько, сколько городов описали руками',
-      citiesWithPlan().join() === 'Бишкек');
+    // Названия в списке обязаны совпадать с тем, что агенты пишут в поле
+    // зоны: иначе выбор района в поиске не найдёт ни одного объекта.
+    const bishkek = zonesOf('Бишкек');
+    check('в списке есть Центр — та же зона, что у объектов витрины',
+      bishkek.includes('Центр'));
+    check('порядок районов с севера на юг, а не по алфавиту',
+      bishkek.indexOf('Тунгуч') < bishkek.indexOf('Центр')
+      && bishkek.indexOf('Центр') < bishkek.indexOf('Асанбай'));
+    check('списков ровно столько, сколько городов описали руками',
+      citiesWithZones().join() === 'Бишкек');
 
     // Как сайт себя называет. Пока город один — он; городов несколько —
     // страна. Текст считается по каталогу, а не правится руками: иначе
@@ -2515,6 +2593,118 @@ export default {
     ).bind(crypto.randomUUID(), owner?.contact_id ?? '', '+996 700 11 22 33',
            normalizePhone('+996700112233'), iso()).run().then(() => true).catch(() => false);
     check('один номер — один контакт: дубль отклонён схемой', dup === false);
+
+
+    // --- Перенос каталога старого сайта -----------------------------------
+    //
+    // Главное здесь — ЧЕГО перенос не делает: не заводит объект из чужого
+    // поискового запроса, не публикует и не переписывает то, что агент уже
+    // правил. Выгрузка на 27 ноября 2026 года — 283 строки, из них 281
+    // «Запрос».
+
+    const csv = parseCsv(
+      'id,title,description\n'
+      + 'a,"Дом, с садом","строка\nвторая, с запятой и ""кавычками"""\n'
+      + 'b,Квартира,\n',
+    );
+    check('CSV: поле с запятой и переводом строки прочитано целиком',
+      csv.length === 2 && csv[0].title === 'Дом, с садом'
+      && csv[0].description === 'строка\nвторая, с запятой и "кавычками"',
+      JSON.stringify(csv[0]));
+
+    const mapped = draftsFromCatalog([
+      { id: 's1', deal: 'Аренда', status: 'опубликован', title: 'Дом', segment: 'Жильё',
+        price: '150000 сом', per: '', rooms: '5', area: '156', floor: '1/1 этаж',
+        district: 'Азия Молл', city: 'Бишкек', description: 'дом', actuality_at: '2026-11-12T12:36:58.772Z',
+        photo_url: 'https://example.invalid/1.jpg' },
+      { id: 's2', deal: 'Продажа', status: 'опубликован', title: 'Квартира', segment: 'Жильё',
+        price: '145000 $', per: '', rooms: '2', area: '64', floor: '8/9 этаж',
+        district: 'Бишкек', city: 'Бишкек', description: '', actuality_at: '' },
+      { id: 's3', deal: 'Запрос', status: 'опубликован', title: 'Ищу комнату',
+        price: '12000 сом', per: '/ мес', district: 'Джал', city: 'Бишкек' },
+      { id: 's4', deal: 'Аренда', status: 'снят', title: 'Квартира', price: '500 $',
+        per: '', district: 'Центр', city: 'Бишкек' },
+      { id: 's5', deal: 'Аренда', status: 'опубликован', title: 'Квартира', price: '700 $',
+        per: '/ м²/мес', district: 'Центр', city: 'Бишкек' },
+      { id: 's6', deal: 'Аренда', status: 'опубликован', title: 'Яхта', price: '700 $',
+        per: '', district: 'Центр', city: 'Бишкек' },
+    ] as never);
+
+    check('перенос: запрос объектом не становится',
+      !mapped.drafts.some((d) => d.id === 's3')
+      && mapped.skipped.some((s) => s.id === 's3' && s.why === 'не объявление, а запрос'));
+    check('перенос: снятое с публикации не переносится',
+      !mapped.drafts.some((d) => d.id === 's4'));
+    check('перенос: цена за метр не кладётся туда, где цена за объект',
+      !mapped.drafts.some((d) => d.id === 's5'));
+    check('перенос: неизвестный вид жилья не угадывается',
+      !mapped.drafts.some((d) => d.id === 's6'));
+
+    const s1 = mapped.drafts.find((d) => d.id === 's1');
+    const s2 = mapped.drafts.find((d) => d.id === 's2');
+    check('перенос: сом и доллар разложены в минорные единицы',
+      s1?.price_minor === 15000000 && s1?.currency === 'KGS'
+      && s2?.price_minor === 14500000 && s2?.currency === 'USD',
+      JSON.stringify([s1?.price_minor, s1?.currency, s2?.price_minor, s2?.currency]));
+    check('перенос: «8/9 этаж» — восьмой из девяти',
+      s2?.floor === 8 && s2?.floors_total === 9);
+    check('перенос: адрес собран из вида и района',
+      s1?.address === 'Дом, Азия Молл' && s1?.zone === 'Азия Молл', s1?.address);
+
+    // Теперь то же самое, но через настоящую базу снимка.
+    const snapshotCsv = [
+      'id,segment,deal,title,price,per,rooms,area,floor,district,city,status,description,actuality_at,photo_url',
+      'site-1,Жильё,Аренда,Дом,150000 сом,,5,156,1/1 этаж,Азия Молл,Бишкек,опубликован,дом у парка,2026-11-12T12:36:58.772Z,https://example.invalid/1.jpg',
+      'site-2,Жильё,Запрос,Ищу комнату,12000 сом,/ мес,1,,3,Джал,Бишкек,опубликован,ищу комнату,,',
+    ].join('\n');
+
+    await env.CATALOG.prepare(
+      `insert or replace into public_catalog_snapshot
+         (singleton, generated_at_ms, content_type, body, sha256, row_count)
+       values (1, ?, 'text/csv', ?, '', 2)`,
+    ).bind(Date.now(), snapshotCsv).run();
+
+    // Хозяин черновиков — старший одобренный администратор. Проверяем
+    // именно правило, а не заранее известный идентификатор: к этому месту
+    // набора администраторы уже заведены предыдущими проверками.
+    const chief = (await db.prepare(
+      `select id from agents where role = 'admin' and status = 'approved'
+        order by created_at limit 1`,
+    ).first<{ id: string }>())?.id;
+
+    const first = await importCatalog();
+    check('перенос: из двух строк заведена одна — объявление, не запрос',
+      first.imported === 1 && first.rows === 2 && first.skipped === 1,
+      JSON.stringify({ imported: first.imported, rows: first.rows, skipped: first.skipped }));
+
+    const landed = await db.prepare(
+      'select id, publication_state, source, created_by_agent_id, price_minor, currency, zone from objects where id = ?',
+    ).bind('site-1').first<{ publication_state: string; source: string; created_by_agent_id: string;
+      price_minor: number; currency: string; zone: string }>();
+    check('перенос: карточка приехала черновиком, с отметкой источника и хозяином',
+      landed?.publication_state === 'draft' && landed?.source === IMPORT_SOURCE
+      && landed?.created_by_agent_id === chief && landed?.price_minor === 15000000
+      && landed?.currency === 'KGS' && landed?.zone === 'Азия Молл',
+      JSON.stringify(landed));
+
+    const rerun = await importCatalog();
+    check('перенос идемпотентен: второй прогон дубликатов не плодит',
+      rerun.imported === 0 && rerun.already === 1,
+      JSON.stringify({ imported: rerun.imported, already: rerun.already }));
+
+    // Агент поправил адрес и опубликовал — ночной прогон не вправе это
+    // затереть. Проверяем не «не изменилось», а именно работу агента.
+    await db.prepare(
+      `update objects set address = ?, publication_state = 'published', updated_at = ?
+        where id = ?`,
+    ).bind('Чүй 120, кв. 5', iso(), 'site-1').run();
+    await importCatalog();
+    const afterEdit = await db.prepare(
+      'select address, publication_state from objects where id = ?',
+    ).bind('site-1').first<{ address: string; publication_state: string }>();
+    check('перенос не трогает то, что агент уже правил',
+      afterEdit?.address === 'Чүй 120, кв. 5' && afterEdit?.publication_state === 'published',
+      JSON.stringify(afterEdit));
 
     } catch (e) {
       // Падение посреди набора — это тоже результат, и он должен быть виден

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { catalogCities, catalogPage, catalogZoneCounts } from '@/lib/db/catalog';
-import { planFor } from '@/lib/city-plans';
+import { zonesOf } from '@/lib/city-zones';
 import {
   CATALOG_PAGE_SIZE, parseCatalogFilters, catalogHref, sortHref, hasAnyFilter,
   firstPhoto, daysSince,
@@ -12,8 +12,8 @@ import { t, kindName, freshWordIn, LANGS, isLang, type Lang, placeName } from '@
 import { CatalogHeader } from '../CatalogHeader';
 import { HeroArt } from '../HeroArt';
 import { FindButton } from '../FindButton';
+import { ZonePick } from '../ZonePick';
 import { RequestPitch } from '../RequestPitch';
-import { CityMap } from '../CityMap';
 import { CatalogFooter } from '../CatalogFooter';
 import { Facade } from '../Facade';
 import { Photo } from '../Photo';
@@ -54,8 +54,9 @@ type Row = {
   actual_at: string;
 };
 
-function Search({ lang, f, deal, cities }: {
+function Search({ lang, f, deal, cities, zones }: {
   lang: Lang; f: CatalogFilters; deal: 'sale' | 'rent'; cities: string[];
+  zones: Array<{ zone: string; n: number }>;
 }) {
   const d = t(lang);
   const up = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
@@ -102,11 +103,25 @@ function Search({ lang, f, deal, cities }: {
               </select>
             </div>
           ) : null}
-          <div className="cell">
+          <div className="cell wide">
             <label htmlFor="q">{d.address}</label>
             <input id="q" name="q" type="search" placeholder={d.addressHint}
                    defaultValue={f.q ?? ''} autoComplete="off" />
           </div>
+          {/* Район — список, а не строка ввода, и на пульте, а не в
+              складке «ещё». Район — второй вопрос после «купить или
+              снять», и спрашивать его надо там же, где остальные.
+              Списком, потому что строкой человек пишет «джал», «Джал-23»
+              и «Jal», а в карточке стоит «Джал»: три написания из
+              четырёх не находили ничего. Список свой, с поиском: районов
+              два десятка, и набрать «ас» быстрее, чем искать «Асанбай»
+              глазами. Рядом с районом — число объектов: оно говорит,
+              стоит ли нажимать. */}
+          {zones.length > 0 ? (
+            <ZonePick label={d.zoneLabel} value={f.zone} options={zones}
+                      anyLabel={d.anyKind} searchHint={d.zoneSearch}
+                      emptyHint={d.zoneNone} />
+          ) : null}
           <div className="cell">
             <label htmlFor="kind">{d.kind}</label>
             <select id="kind" name="kind" defaultValue={f.kind ?? ''}>
@@ -131,16 +146,11 @@ function Search({ lang, f, deal, cities }: {
           <FindButton lang={lang} deal={deal} />
         </div>
 
-        {/* Район и нижняя граница цены нужны меньшинству, но нужны всерьёз.
-            Складкой, а не шестым полем: пульт из шести полей пугает. */}
-        <details className="more" open={Boolean(f.zone || f.priceMin != null)}>
+        {/* Нижняя граница цены нужна меньшинству, но нужна всерьёз.
+            Складкой, а не полем на пульте: длинный пульт пугает. */}
+        <details className="more" open={f.priceMin != null}>
           <summary>{d.moreFilters}</summary>
           <div className="row sub">
-            <div className="cell">
-              <label htmlFor="zone">{d.zoneLabel}</label>
-              <input id="zone" name="zone" type="text" defaultValue={f.zone ?? ''}
-                     placeholder={d.addressHint} autoComplete="off" />
-            </div>
             <div className="cell">
               <label htmlFor="from">{d.priceFrom}</label>
               <input id="from" name="from" type="number" min={0} step={1000}
@@ -218,13 +228,31 @@ export default async function Catalog({
   const cities = failed ? [] : await catalogCities();
   const manyCities = cities.length > 1;
 
-  // Схема рисуется, только когда ясно, какого она города, и такая схема
-  // есть. Городов несколько и ни один не выбран — схемы нет: показать
-  // раскладку одного города поверх объектов всех значило бы соврать.
-  // Город один — он и есть ответ, даже если фильтр не трогали.
-  const plan = planFor(manyCities ? f.city : (f.city ?? cities[0] ?? 'Бишкек'));
   const zoneCounts = failed ? [] : await catalogZoneCounts(deal, f.city);
-  const byZone = new Map(zoneCounts.map((z) => [z.zone, z.n]));
+
+  // В списке — все районы города, а не только те, где сейчас есть
+  // объекты: человек ищет свой район и должен его там найти, даже если
+  // ответом будет «пока ничего». Число объектов стоит рядом и отвечает
+  // на вопрос «стоит ли нажимать» честнее, чем отсутствие строки.
+  //
+  // Порядок — с севера на юг, как город лежит на самом деле, и только
+  // для города, который виден целиком: городов несколько и ни один не
+  // выбран — раскладка одного поверх объектов всех соврёт. Район,
+  // которого в раскладке нет, встаёт следом: агент мог написать в
+  // карточке посёлок, которого в списке не было.
+  const order = zonesOf(manyCities ? f.city : (f.city ?? cities[0] ?? 'Бишкек'));
+  const rank = (z: string) => {
+    const i = order.indexOf(z);
+    return i < 0 ? order.length : i;
+  };
+  const named = new Map(zoneCounts.map((z) => [z.zone, z.n]));
+  for (const z of order) if (!named.has(z)) named.set(z, 0);
+  if (f.zone && !named.has(f.zone)) named.set(f.zone, 0);
+  const zoneList = [...named].map(([zone, n]) => ({ zone, n }))
+    .sort((a, b) => rank(a.zone) - rank(b.zone) || a.zone.localeCompare(b.zone, 'ru'));
+
+  // Строкой над выдачей — самые населённые районы: это быстрый путь,
+  // а не полный список, полный живёт в поле «Район» на пульте.
   const zones = zoneCounts.slice(0, 8).map((z) => z.zone);
 
   const sortLabel: Record<string, string> = {
@@ -244,7 +272,7 @@ export default async function Catalog({
       </section>
 
       <div className="wrap">
-        <Search lang={lang} f={f} deal={deal} cities={cities} />
+        <Search lang={lang} f={f} deal={deal} cities={cities} zones={zoneList} />
 
         {/* Районы строкой: самый частый первый шаг — «покажите, что есть
             в Асанбае». Это ссылки, а не украшение. */}
@@ -360,16 +388,6 @@ export default async function Catalog({
             {f.page > 1 ? <Link href={catalogHref(lang, f, f.page - 1)}>{d.back}</Link> : null}
             {f.page < pages ? <Link href={catalogHref(lang, f, f.page + 1)}>{d.forward}</Link> : null}
           </div>
-        ) : null}
-        {/* Схема — карта БИШКЕКА, нарисованная руками. Показывать её
-            поверх ошских объектов значило бы предлагать человеку искать
-            Ош на карте Бишкека. Поэтому она только там, где уместна: при
-            выбранном Бишкеке или когда других городов в каталоге нет.
-            Рисовать схему каждого города — отдельная работа, и пока её
-            нет, честнее не показывать ничего, чем показывать чужую. */}
-        {plan ? (
-          <CityMap lang={lang} f={f} counts={byZone} plan={plan}
-                   title={d.mapTitle} hint={d.mapHint} empty={d.mapEmpty} />
         ) : null}
       </div>
 

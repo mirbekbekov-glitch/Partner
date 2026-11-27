@@ -36,6 +36,20 @@ export type ObjectRow = {
   description: string | null;
   source: string | null;
   search_text: string;
+  latitude: number | null;
+  longitude: number | null;
+  region: string | null;
+  district: string | null;
+  micro_district: string | null;
+  house_number: string | null;
+  building_type: string | null;
+  serie: string | null;
+  land_area: number | null;
+  rental_term: string | null;
+  commercial_type: string | null;
+  room_location: string | null;
+  parking_type: string | null;
+  build_year: number | null;
   publication_state: 'draft' | 'published' | 'withdrawn';
   published_at: string | null;
   actual_at: string;
@@ -132,6 +146,21 @@ export type NewObject = {
   description?: string | null;
   photos?: string[];
   source?: string | null;
+  /* Поля выгрузки на площадки. Пусто — объект просто не уйдёт в фид. */
+  latitude?: number | null;
+  longitude?: number | null;
+  region?: string | null;
+  district?: string | null;
+  micro_district?: string | null;
+  house_number?: string | null;
+  building_type?: string | null;
+  serie?: string | null;
+  land_area?: number | null;
+  rental_term?: string | null;
+  commercial_type?: string | null;
+  room_location?: string | null;
+  parking_type?: string | null;
+  build_year?: number | null;
   /** Собственник: либо существующий контакт, либо новый по имени. */
   owner_contact_id?: string | null;
   owner_name?: string | null;
@@ -171,15 +200,26 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
     `insert into objects (
        id, kind, deal_type, address, city, zone, rooms, area, floor, floors_total,
        price_minor, currency, photos, description, source, search_text,
+       latitude, longitude, region, district, micro_district, house_number,
+       building_type, serie, land_area, rental_term, commercial_type,
+       room_location, parking_type, build_year,
        publication_state, published_at, actual_at,
        created_by_agent_id, created_at, updated_at)
-     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', null, ?, ?, ?, ?)`,
+     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             'draft', null, ?, ?, ?, ?)`,
     id, input.kind, input.deal_type, address, city,
     blank(input.zone), input.rooms ?? null, input.area ?? null,
     input.floor ?? null, input.floors_total ?? null,
     input.price_minor, (input.currency || 'USD').trim().toUpperCase(),
     photos, blank(input.description), blank(input.source),
     searchText(address, city, input.zone),
+    input.latitude ?? null, input.longitude ?? null,
+    blank(input.region), blank(input.district), blank(input.micro_district),
+    blank(input.house_number), blank(input.building_type), blank(input.serie),
+    input.land_area ?? null, blank(input.rental_term),
+    blank(input.commercial_type), blank(input.room_location),
+    blank(input.parking_type), input.build_year ?? null,
     at, agent.id, at, at,
   ));
   writes.push(auditStmt('objects', id, 'insert', agent.id, {
@@ -252,12 +292,18 @@ export async function createObject(input: NewObject): Promise<ObjectView> {
 
 export type ObjectPatch = Partial<Pick<NewObject,
   'kind' | 'deal_type' | 'address' | 'city' | 'price_minor' | 'zone' | 'rooms'
-  | 'area' | 'floor' | 'floors_total' | 'currency' | 'description' | 'photos'>>;
+  | 'area' | 'floor' | 'floors_total' | 'currency' | 'description' | 'photos'
+  | 'latitude' | 'longitude' | 'region' | 'district' | 'micro_district'
+  | 'house_number' | 'building_type' | 'serie' | 'land_area' | 'rental_term'
+  | 'commercial_type' | 'room_location' | 'parking_type' | 'build_year'>>;
 
 /** Поля, которые агент вправе править. Остальные — только через свои действия. */
 const EDITABLE = [
   'kind', 'deal_type', 'address', 'city', 'price_minor', 'zone', 'rooms', 'area',
   'floor', 'floors_total', 'currency', 'description', 'photos',
+  'latitude', 'longitude', 'region', 'district', 'micro_district',
+  'house_number', 'building_type', 'serie', 'land_area', 'rental_term',
+  'commercial_type', 'room_location', 'parking_type', 'build_year',
 ] as const;
 
 export async function updateObject(id: string, patch: ObjectPatch): Promise<ObjectView> {
@@ -265,7 +311,8 @@ export async function updateObject(id: string, patch: ObjectPatch): Promise<Obje
 
   if (!(await canEditObject(id))) {
     throw new Forbidden(
-      'Править объект может тот, кто его завёл, listing-агент активного мандата или админ',
+      'Редактировать объект может тот, кто его завёл, listing-агент активного '
+      + 'мандата или администратор',
     );
   }
 
