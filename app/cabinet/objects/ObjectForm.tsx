@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import { useActionState, useRef, useState, useTransition } from 'react';
 import type { FormResult } from './form-actions';
+import type { Panorama } from '@/lib/db/panoramas';
 import { draftDescription } from './form-actions';
 import { PhotoUpload } from './PhotoUpload';
+import { PanoramaUpload } from './PanoramaUpload';
 import { MapPick } from './MapPick';
 import { Suggest } from '../../Suggest';
 import { citiesOf, zonesOf } from '@/lib/geo';
@@ -28,6 +30,8 @@ export type ObjectDraft = {
   currency: string;
   description: string | null;
   photos: (string | { url?: string })[] | null;
+  /** Панорамы для виртуального тура. */
+  panoramas?: Panorama[];
   /* Поля для выгрузки на площадки. Пусто — объект в фид не уйдёт. */
   latitude?: number | null;
   longitude?: number | null;
@@ -349,6 +353,11 @@ export function ObjectForm({
       </div>
 
       <PhotoUpload objectId={draft?.id ?? null} initial={photoList} />
+
+      {/* Панорамы отдельным блоком от снимков: это разные вещи. Снимок
+          смотрят целиком, панораму крутят, и показывать её в ленте
+          обложкой нельзя — она выглядит растянутой полосой. */}
+      <PanoramaUpload objectId={draft?.id ?? null} initial={draft?.panoramas ?? []} />
 
       {mode === 'create' ? (
         <>

@@ -40,6 +40,7 @@ export async function generateMetadata(
 type Row = {
   id: string;
   kind: string;
+  panoramas: { url: string; room: string; w: number; h: number }[];
   deal_type: 'rent' | 'sale';
   address: string;
   city: string;
@@ -343,6 +344,12 @@ export default async function Catalog({
                       <span className="flag deal">
                         {o.deal_type === 'sale' ? d.sale : d.rent}
                       </span>
+                      {/* Второй бейдж появляется только у объявлений с
+                          туром, и это не украшение: тур — причина
+                          открыть именно эту карточку. */}
+                      {o.panoramas.length > 0 ? (
+                        <span className="flag tourflag">{d.tourFlag}</span>
+                      ) : null}
                     </div>
                   </div>
                   <div className="info">

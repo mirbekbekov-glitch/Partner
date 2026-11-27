@@ -538,3 +538,17 @@ a.tbl-sub:hover { color: var(--accent); }
 .terms-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-top: 10px; }
 .terms-form .field { flex: 0 1 180px; }
 .terms-form .key { flex: 1 1 100%; margin: 0; }
+
+/* --- Панорамы в карточке ------------------------------------------------ */
+.pano { gap: 8px; }
+.pano-how summary { font-size: 0.9375rem; }
+.pano-steps { margin: 10px 0 0; padding-left: 20px; display: flex;
+  flex-direction: column; gap: 6px; font-size: 0.9375rem; line-height: 1.45; }
+.pano-list { list-style: none; margin: 12px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 8px; }
+/* Панорама в списке — полосой: так она и выглядит, и агент сразу видит,
+   что загрузил именно панораму, а не обычный кадр. */
+.pano-item { display: flex; align-items: center; gap: 10px; }
+.pano-item img { width: 160px; height: 44px; object-fit: cover;
+  border-radius: var(--r-md); border: 1px solid var(--line); flex: none; }
+.pano-item input { flex: 1 1 160px; }
