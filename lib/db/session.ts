@@ -34,6 +34,8 @@ export type Agent = {
   certificate_confirmed: number;
   avatar_key: string | null;
   full_name: string;
+  /** Имя в сопоставимом виде: по нему идёт порядок в списках. */
+  name_sort: string;
   phone: string | null;
   role: 'agent' | 'admin';
   status: 'pending' | 'approved' | 'blocked';

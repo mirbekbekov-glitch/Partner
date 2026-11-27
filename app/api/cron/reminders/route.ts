@@ -3,6 +3,7 @@ import {
 } from '@/lib/db/notifications';
 import { sweepExpired } from '@/lib/db/session';
 import { expireMandates } from '@/lib/db/mandates';
+import { denyCron } from '@/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,27 +24,6 @@ export const dynamic = 'force-dynamic';
  * всё — потому что все три задачи идемпотентны и дешёвы, а отдельное
  * расписание на каждую пришлось бы заводить и помнить.
  */
-
-/** Сравнение без утечки времени: иначе секрет подбирается по задержке. */
-function sameSecret(a: string, b: string) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-function authorize(request: Request): string | null {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return 'CRON_SECRET не задан — маршрут отключён, чтобы не оставить рассылку открытой';
-  }
-
-  const header = request.headers.get('authorization') ?? '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (!token || !sameSecret(token, secret)) return 'неверный секрет';
-
-  return null;
-}
 
 async function sendTelegram(chatId: number, text: string): Promise<string | null> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -68,7 +48,7 @@ async function sendTelegram(chatId: number, text: string): Promise<string | null
 }
 
 export async function GET(request: Request) {
-  const denied = authorize(request);
+  const denied = denyCron(request);
   if (denied) {
     return Response.json({ error: denied }, { status: 401 });
   }

@@ -75,7 +75,7 @@ form.stack.card { max-width: 760px; }
 .crm-nav { display: flex; flex-direction: column; gap: 2px; padding: 4px 8px; }
 .crm-nav-sep {
   margin: 14px 10px 4px;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .06em;
@@ -90,7 +90,7 @@ form.stack.card { max-width: 760px; }
   border-radius: var(--r-md);
   color: var(--crm-link-fg);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 .crm-link:hover { background: var(--crm-link-hover-bg); color: var(--fg); }
@@ -125,7 +125,7 @@ form.stack.card { max-width: 760px; }
   color: var(--crm-link-fg);
   padding: 9px 10px;
   border-radius: var(--r-md);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .crm-side-foot button.ghost:hover { background: var(--crm-link-hover-bg); color: var(--fg); }
 
@@ -202,7 +202,7 @@ form.stack.card { max-width: 760px; }
   padding-bottom: 12px;
   margin-bottom: 20px;
   border-bottom: 1px solid var(--line);
-  font-size: 0.9rem;
+  font-size: 0.9375rem;
 }
 .topbar .who { display: flex; align-items: center; gap: 8px; margin-right: auto; }
 .topbar form { margin: 0; }
@@ -228,7 +228,7 @@ form.stack.card { max-width: 760px; }
   background: var(--panel);
 }
 
-.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
 
 .tbl th,
 .tbl td {
@@ -241,7 +241,7 @@ form.stack.card { max-width: 760px; }
 .tbl thead th {
   background: var(--sunk);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .04em;
@@ -261,8 +261,11 @@ form.stack.card { max-width: 760px; }
    остальных, иначе адрес переносится, пока соседние колонки пустуют. */
 .tbl th:first-child, .tbl td:first-child { min-width: 190px; }
 
-.tbl-main { font-weight: 700; }
-.tbl-sub { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+/* Адрес — то, по чему строку узнают, поэтому он крупнее остальных
+   ячеек на ступень. Раньше весь ряд шёл одним кеглем, и сильнейший
+   контраст в таблице не указывал ни на что. */
+.tbl-main { font-weight: 700; font-size: 1rem; }
+.tbl-sub { display: block; color: var(--muted); font-size: 0.8125rem; margin-top: 2px; }
 .tbl-note { display: block; margin-top: 4px; }
 /* Пометка о мандате в одну строку: разорванная пополам, она добавляла
    строке таблицы целую строку текста. */
@@ -287,13 +290,13 @@ form.stack.card { max-width: 760px; }
   .tbl td[data-l]::before {
     content: attr(data-l) ": ";
     color: var(--muted);
-    font-size: 13px;
+    font-size: 0.8125rem;
   }
   .tbl .num { text-align: left; }
   /* В карточке девять строк «подпись: значение» одного веса, и цена
      теряется среди них. На телефоне она крупнее остальных: по ней
      карточку и просматривают. */
-  .tbl td[data-l='Цена'] { font-size: 16px; font-weight: 700; padding-top: 4px; }
+  .tbl td[data-l='Цена'] { font-size: 1.0625rem; font-weight: 700; padding-top: 4px; }
   .tbl td[data-l='Цена']::before { font-weight: 400; }
   .tbl td:first-child { min-width: 0; }
   /* Пустая ячейка на телефоне исчезает вместе с подписью: «Действия:» без
@@ -306,20 +309,27 @@ form.stack.card { max-width: 760px; }
   .tbl td[data-l] .tbl-sub::before { content: " · "; }
 }
 
+/* На экранах уже 1440 кегль подрос, а колонок всё те же девять, и
+   таблица начинала уезжать вбок. Отступы ячеек ужимаются — это дешевле,
+   чем отнимать у текста размер ради ширины. */
+@media (max-width: 1440px) {
+  .tbl th, .tbl td { padding: 7px 8px; }
+}
+
 /* ── Сводки на главной ───────────────────────────────────── */
 /* Три списка под плитками: задачи, новые заявки, последние действия.
    Это выжимка, а не список: пять строк, дальше ссылка в раздел. */
 .cab-digest { margin-top: 4px; }
 .cab-digest .head { margin-bottom: 10px; }
-.cab-digest h2 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -.01em; }
+.cab-digest h2 { margin: 0; font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
 .digest { list-style: none; margin: 0; padding: 0; display: flex;
   flex-direction: column; gap: 10px; }
 .digest > li { display: flex; flex-direction: column; gap: 3px; }
 .digest > li + li { border-top: 1px solid var(--line); padding-top: 10px; }
-.digest-main { font-size: 14px; line-height: 1.45; }
+.digest-main { font-size: 0.9375rem; line-height: 1.45; max-width: 75ch; }
 /* Текст записи приписан к её предмету той же строкой, но тише: предмет —
    то, по чему строку узнают, а текст уточняет. */
-.digest-main .key { font-size: 13px; }
+.digest-main .key { font-size: 0.8125rem; }
 
 /* ── Полоса фильтров ─────────────────────────────────────── */
 /* Отдельная панель, а не линия под полями: над таблицей линия читается
@@ -347,7 +357,7 @@ form.stack.card { max-width: 760px; }
   text-decoration: none;
 }
 .th-sort:hover { color: var(--fg); }
-.th-arrow { min-width: 10px; font-size: 11px; }
+.th-arrow { min-width: 10px; font-size: 0.6875rem; }
 .tbl th[aria-sort] { color: var(--fg); }
 .tbl th.num .th-sort { justify-content: flex-end; }
 
@@ -399,12 +409,12 @@ form.stack.card { max-width: 760px; }
 
 .board-head {
   margin: 0 0 10px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   text-transform: uppercase;
   letter-spacing: .04em;
 }
 .board-head .key { font-weight: 400; }
-.board-empty { margin: 0; color: var(--muted); font-size: 13px; }
+.board-empty { margin: 0; color: var(--muted); font-size: 0.8125rem; }
 
 .board-card {
   background: var(--panel);
@@ -419,12 +429,12 @@ form.stack.card { max-width: 760px; }
 .board-card:last-child { margin-bottom: 0; }
 
 .board-title { display: block; font-weight: 700; margin-bottom: 4px; }
-.board-line { margin: 2px 0 0; font-size: 13px; }
-.board-money { margin: 6px 0 0; font-family: var(--mono); font-size: 14px; }
+.board-line { margin: 2px 0 0; font-size: 0.8125rem; }
+.board-money { margin: 6px 0 0; font-family: var(--mono); font-size: 0.9375rem; }
 
 /* Кнопки перехода: мышь не единственный способ двигать сделку. */
 .board-move { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
-.board-move button { padding: 3px 8px; font-size: 12px; }
+.board-move button { padding: 3px 8px; font-size: 0.75rem; }
 /* Аватарка агента: круг с ровным обрезом, чтобы вертикальные и
    горизонтальные снимки выглядели одинаково. Без этого один агент
    вытягивается, другой сплющивается. */
@@ -444,13 +454,13 @@ form.stack.card { max-width: 760px; }
 /* Выданная ссылка-приглашение. Поле во всю ширину: ссылка длинная, и
    обрезанная по середине читается как сломанная. */
 .invite-out { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
-.invite-out input { width: 100%; font-size: 13px; }
+.invite-out input { width: 100%; font-size: 0.8125rem; }
 .invite-out .tag { margin-left: 8px; }
 
 /* Передача задачи коллеге: список и кнопка рядом, в одну строку с
    остальными действиями. Форма своя, потому что действие своё. */
 .hand-over { display: inline-flex; align-items: center; gap: 6px; }
-.hand-over select { font-size: 13px; padding: 4px 6px; }
+.hand-over select { font-size: 0.8125rem; padding: 4px 6px; }
 
 /* Заголовок части формы. Поля площадок — отдельный разговор, и без
    подзаголовка они читались бы как продолжение описания объекта. */
@@ -458,17 +468,18 @@ form.stack.card { max-width: 760px; }
   margin: 8px 0 0;
   padding-top: 16px;
   border-top: 1px solid var(--line);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 .form-part + .key { margin-top: 0; }
 
 /* «Уйдёт на площадки» — такая же плашка, как предупреждение, но зелёная:
    это ответ на тот же вопрос, и отвечать на него в двух разных формах
-   значит заставлять читать дважды. */
+   значит заставлять читать дважды. Кегль тот же, что у .warn: рядом они
+   стоят в одной строке. */
 .ok {
   color: var(--ok-fg);
   background: var(--ok-bg);
   border-radius: 6px;
   padding: 1px 8px;
-  font-size: 0.8rem;
+  font-size: 0.8125rem;
 }

@@ -72,6 +72,10 @@ const mf = new Miniflare({
         // в памяти. Проверять загрузку по заглушке бессмысленно — вся суть
         // в том, что именно принимает и отвергает хранилище.
         PHOTOS: { type: 'r2', name: 'test-photos' },
+        // Вторая база — снимок каталога старого сайта. В боевом её
+        // наполняет чужой Worker; здесь её наполняет сам прогон, но база
+        // настоящая: перенос ходит в неё тем же запросом, что и в бою.
+        CATALOG: { type: 'd1', id: 'test-catalog' },
       },
     },
   }],
@@ -98,6 +102,15 @@ for (const file of schemaFiles) {
     }
   }
 }
+
+// 2б. Снимок каталога старого сайта: таблица такая же, как в боевой базе
+// liberterra-catalog, тело подкладывает сам тест.
+const catalog = await mf.getD1Database('CATALOG');
+await catalog.exec(
+  'create table if not exists public_catalog_snapshot ('
+  + ' singleton integer primary key, generated_at_ms integer not null,'
+  + ' content_type text, body text not null, sha256 text, row_count integer)',
+);
 
 // 3. Прогнать.
 const response = await mf.dispatchFetch('http://test/');
