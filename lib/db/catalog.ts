@@ -511,6 +511,70 @@ export async function catalogRate(): Promise<CatalogRate | null> {
 }
 
 /**
+ * Нижняя граница рынка для заявки клиента.
+ *
+ * Зачем. Человек пишет бюджет наугад: «сниму двушку в Асанбае за 20 000»,
+ * когда дешевле 35 000 там нет ни одного варианта. Заявка уходит, агент
+ * тратит день, клиент ждёт и злится — а разговор про деньги всё равно
+ * состоится, только через день и уже на раздражении.
+ *
+ * ЧТО СЧИТАЕТСЯ ПОРОГОМ. Минимальная цена среди сопоставимых объявлений,
+ * а не процентиль и не средняя со скидкой. Это единственная величина,
+ * которую можно произнести вслух без вранья: «дешевле этого у нас нет ни
+ * одного варианта». Процентиль отрезал бы людей, которым настоящее
+ * объявление по карману, — а порог здесь ЗАПРЕЩАЕТ отправку, и запрещать
+ * можно только то, что заведомо не существует.
+ *
+ * КОГДА ПОРОГА НЕТ. Когда сопоставимых объявлений меньше MIN_SAMPLE.
+ * Запретить человеку заявку, опираясь на два объявления, — это запрет по
+ * незнанию: рынок мы в этом срезе не знаем, и молчать честнее.
+ *
+ * Сравнимость: то же направление сделки, тот же вид жилья, тот же район.
+ * Комнаты НЕ учитываются намеренно: разбиение ещё и по ним дробит выборку
+ * до единиц, и порог исчезает там, где он нужнее всего.
+ */
+const MIN_SAMPLE = 5;
+
+export type PriceFloor = {
+  /** Минорные единицы, как в базе. */
+  floor_minor: number;
+  currency: string;
+  /** По скольким объявлениям посчитано — это идёт человеку в подсказку. */
+  based_on: number;
+};
+
+export async function priceFloor(query: {
+  deal: 'rent' | 'sale';
+  kind?: string | null;
+  city?: string | null;
+  zone?: string | null;
+}): Promise<PriceFloor | null> {
+  const where = [`o.publication_state = 'published'`, 'o.deal_type = ?'];
+  const params: (string | number)[] = [query.deal];
+
+  if (query.kind) { where.push('o.kind = ?'); params.push(query.kind); }
+  if (query.city) { where.push('o.city = ?'); params.push(query.city); }
+  if (query.zone) { where.push('o.zone = ?'); params.push(query.zone); }
+
+  // Валюта берётся та, в которой выставлено большинство: смешивать цены
+  // разных валют в одном минимуме нельзя, а пересчитывать здесь нечем —
+  // курс в витрину приходит отдельно и может быть неизвестен.
+  const row = await one<{ floor_minor: number; currency: string; based_on: number }>(
+    `select min(o.price_minor) as floor_minor, o.currency as currency,
+            count(*) as based_on
+       from objects o
+      where ${where.join(' and ')}
+      group by o.currency
+      order by count(*) desc
+      limit 1`,
+    ...params,
+  );
+
+  if (!row || row.based_on < MIN_SAMPLE || !row.floor_minor) return null;
+  return row;
+}
+
+/**
  * Валюты, в которых выставлены опубликованные объекты.
  *
  * Нужны полю «цена до»: число без валюты непонятно — вводить 800 или

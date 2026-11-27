@@ -3,7 +3,9 @@ import { all, batch, flag, newId, now, one, stmt } from './sql';
 import { auditStmt } from './audit';
 import { isAdmin, requireAgent } from './session';
 import { normalizeName, normalizePhone } from './normalize';
-import { Conflict, Forbidden, Invalid, NotFound } from './errors';
+import { BudgetTooLow, Conflict, Forbidden, Invalid, NotFound } from './errors';
+import { priceFloor } from './catalog';
+import { fromMinor } from './money';
 
 /**
  * Заявки-запросы: «подберите мне» с публичной страницы.
@@ -131,6 +133,35 @@ export async function submitRequest(input: NewRequest): Promise<string> {
     );
     if (found) districtId = found.id;
     else districtOther = district.slice(0, 120);
+  }
+
+  // Порог рынка. Бюджет ниже него — заявка НЕ принимается: по такой цене
+  // в этом срезе нет ни одного объявления, и приняв её, мы обещаем
+  // человеку поиск того, чего нет. Разговор про деньги всё равно
+  // состоится — лучше сейчас, чем через день ожидания и на раздражении.
+  //
+  // Проверка стоит ЗДЕСЬ, а не в форме: форма — удобство, и проверка,
+  // живущая только в ней, не значит ничего.
+  //
+  // Порога может не быть вовсе — тогда ничего не запрещаем. Так бывает,
+  // когда сопоставимых объявлений мало: рынок в этом срезе нам неизвестен,
+  // и запрет по незнанию хуже отсутствия запрета.
+  if (budget && deal) {
+    const floor = await priceFloor({
+      deal: deal === 'buy' ? 'sale' : 'rent',
+      kind,
+      zone: districtId || districtOther ? district : null,
+    });
+
+    if (floor && floor.currency === currency && budget < floor.floor_minor) {
+      // fromMinor отдаёт null только для null на входе; здесь он не
+      // может быть пустым — floor_minor проверен в priceFloor.
+      throw new BudgetTooLow(
+        fromMinor(floor.floor_minor) ?? 0,
+        floor.currency,
+        floor.based_on,
+      );
+    }
   }
 
   const dayAgo = new Date(Date.now() - DAY_MS).toISOString();

@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 import { submitRequest, type RequestError } from './request-actions';
 import { t, type Lang } from '@/lib/i18n';
+import { publicMoney } from '@/lib/catalog-params';
 
 /** Сторона заявки: человек ищет жильё или отдаёт своё. */
 export type RequestSide = 'find' | 'own';
@@ -179,7 +180,33 @@ export function RequestForm({ lang, districts, side: initial = 'find' }: {
         {pending ? d.reqSending : d.reqSend}
       </button>
 
-      {error ? <p className="error">{errorText(d, error)}</p> : null}
+      {/* Бюджет ниже рынка — не «проверьте поля», а разговор по существу:
+          сколько стоит искомое, на скольки объявлениях это видно, и
+          кнопка, которая подставит порог. Человек не должен считать сам и
+          не должен гадать, насколько он промахнулся. */}
+      {error === 'LOW_BUDGET' && result?.floor ? (
+        <div className="low-budget">
+          <p>{d.reqLowBudget(
+            publicMoney(lang, result.floor.amount, result.floor.currency),
+            result.floor.basedOn,
+          )}</p>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              const field = document.getElementById('rq-budget') as HTMLInputElement | null;
+              if (field && result.floor) {
+                field.value = String(result.floor.amount);
+                field.focus();
+              }
+            }}
+          >
+            {d.reqUseFloor}
+          </button>
+        </div>
+      ) : error ? (
+        <p className="error">{errorText(d, error)}</p>
+      ) : null}
     </form>
   );
 }

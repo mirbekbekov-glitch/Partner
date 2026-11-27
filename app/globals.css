@@ -1523,3 +1523,10 @@ a.agent-row:hover { background: var(--sunk); }
 .price-orig { display: block; font-size: 0.8125rem; color: var(--muted);
   margin: 2px 0 0; font-weight: 500; }
 .price-orig .key { display: block; font-size: 0.75rem; margin-top: 2px; }
+
+/* Бюджет ниже рынка: не ошибка в красной рамке, а разговор по существу.
+   Жёлтый, а не красный: человек ничего не сломал, ему объясняют рынок. */
+.low-budget { background: var(--sunk); border: 1px solid var(--line);
+  border-left: 3px solid var(--accent); border-radius: var(--r-md);
+  padding: 14px 16px; margin-top: 12px; }
+.low-budget p { margin: 0 0 10px; font-size: 0.9375rem; line-height: 1.55; }
