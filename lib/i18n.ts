@@ -62,6 +62,10 @@ type Dict = {
   // отсутствует — звонки идут в отдел продаж, а не минуя его.
   agentLeads: string; agentYears: (n: number) => string;
   agentRegistry: (no: string) => string; agentRegistryNote: string;
+  // Публичная страница агента
+  agentsNav: string; agentsTitle: string; agentsLede: string;
+  agentsEmpty: string; agentObjects: (n: number) => string;
+  agentNotFound: string; toAgents: string; agentOf: string;
   // Заявка
   viewObject: string; leadNote: string; yourName: string; phone: string;
   phoneNote: string; whenConvenient: string; sendRequest: string; sending: string;
@@ -137,6 +141,15 @@ const ru: Dict = {
           : 'лет'}`,
   agentRegistry: (no) => `В реестре риэлторов: ${no}`,
   agentRegistryNote: 'Номер сверен администратором',
+  agentsNav: 'Агенты', agentsTitle: 'Кто ведёт объекты',
+  agentsLede: 'Каждый объект в каталоге ведёт человек с договором. Вот они.',
+  agentsEmpty: 'Пока ни у кого нет опубликованных объектов.',
+  agentObjects: (n) =>
+    `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'объект'
+      : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'объекта'
+      : 'объектов'} в каталоге`,
+  agentNotFound: 'Такого агента на сайте нет',
+  toAgents: '← Все агенты', agentOf: 'Объекты агента',
   notFound: 'Страница не найдена',
   notFoundLede: 'Возможно, объект сняли с публикации или продали.',
   seeWhatIsThere: 'Посмотреть, что есть сейчас →',
@@ -226,6 +239,12 @@ const ky: Dict = {
   agentYears: (n) => `кыймылсыз мүлктө ${n} жыл`,
   agentRegistry: (no) => `Риэлторлор реестринде: ${no}`,
   agentRegistryNote: 'Номер администратор тарабынан текшерилген',
+  agentsNav: 'Агенттер', agentsTitle: 'Объекттерди ким алып барат',
+  agentsLede: 'Каталогдогу ар бир объектти келишими бар адам алып барат.',
+  agentsEmpty: 'Азырынча эч кимде жарыяланган объект жок.',
+  agentObjects: (n) => `каталогдо ${n} объект`,
+  agentNotFound: 'Мындай агент сайтта жок',
+  toAgents: '← Бардык агенттер', agentOf: 'Агенттин объекттери',
   notFound: 'Барак табылган жок',
   notFoundLede: 'Объект жарыядан алынган же сатылган болушу мүмкүн.',
   seeWhatIsThere: 'Азыр эмне бар экенин көрүү →',
@@ -315,6 +334,12 @@ const en: Dict = {
   agentYears: (n) => `${n} ${n === 1 ? 'year' : 'years'} in real estate`,
   agentRegistry: (no) => `Realtor registry no.: ${no}`,
   agentRegistryNote: 'Verified by the administrator',
+  agentsNav: 'Agents', agentsTitle: 'Who handles the listings',
+  agentsLede: 'Every listing in the catalogue is handled by a person with a contract.',
+  agentsEmpty: 'No one has published listings yet.',
+  agentObjects: (n) => `${n} ${n === 1 ? 'listing' : 'listings'} in the catalogue`,
+  agentNotFound: 'No such agent on this site',
+  toAgents: '← All agents', agentOf: 'Listings of this agent',
   notFound: 'Page not found',
   notFoundLede: 'The listing may have been withdrawn or sold.',
   seeWhatIsThere: 'See what is available now →',
@@ -404,6 +429,12 @@ const zh: Dict = {
   agentYears: (n) => `从事房地产 ${n} 年`,
   agentRegistry: (no) => `房地产经纪人登记号：${no}`,
   agentRegistryNote: '已由管理员核验',
+  agentsNav: '经纪人', agentsTitle: '谁在负责这些房源',
+  agentsLede: '目录中的每套房源都由持有委托合同的经纪人负责。',
+  agentsEmpty: '目前还没有人发布房源。',
+  agentObjects: (n) => `目录中有 ${n} 套房源`,
+  agentNotFound: '本站没有这位经纪人',
+  toAgents: '← 全部经纪人', agentOf: '该经纪人的房源',
   notFound: '页面未找到',
   notFoundLede: '该房源可能已下架或已售出。',
   seeWhatIsThere: '看看现在有哪些房源 →',

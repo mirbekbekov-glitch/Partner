@@ -1248,3 +1248,30 @@ main:has(.auth) { max-width: none; padding: 0; }
   padding: 4px 10px;
   font-size: 13px;
 }
+
+/* --- Агенты -------------------------------------------------------------- */
+/* Плитки в ряд по ширине экрана. minmax, а не фиксированное число колонок:
+   агентов может быть двое, и две растянутые плитки выглядят нелепо. */
+.agent-grid { display: grid; gap: 16px; margin: 24px 0 40px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.agent-tile { display: flex; flex-direction: column; align-items: center; gap: 6px;
+  text-align: center; text-decoration: none; color: inherit;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 22px 18px; box-shadow: var(--sh-md); transition: box-shadow .18s, transform .18s; }
+.agent-tile:hover { box-shadow: var(--sh-lg); transform: translateY(-2px); }
+.agent-tile b { font-size: 17px; letter-spacing: -.01em; margin-top: 4px; }
+.agent-tile .num { font-size: 13px; color: var(--muted); }
+.agent-tile .tag { margin-top: 4px; }
+.avatar-big { flex: 0 0 96px; width: 96px; height: 96px; }
+.avatar-big .initials { font-size: 28px; }
+/* Шапка страницы агента: лицо слева, всё остальное колонкой справа. */
+.agent-head { display: flex; gap: 22px; align-items: flex-start; margin: 20px 0 36px;
+  flex-wrap: wrap; }
+.agent-head h1 { margin: 0 0 4px; }
+.agent-head .sub { margin: 0 0 10px; }
+.agent-head .callout { max-width: 320px; }
+/* Строка агента на карточке объекта стала ссылкой — она должна выглядеть
+   нажимаемой, но не как обычная синяя ссылка в тексте. */
+a.agent-row { text-decoration: none; color: inherit; border-radius: var(--r-md);
+  transition: background .18s; }
+a.agent-row:hover { background: var(--sunk); }

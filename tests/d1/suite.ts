@@ -28,7 +28,8 @@ import { createRequirement, updateRequirement } from '@/lib/db/requirements';
 import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import {
-  catalogAgent, catalogCities, catalogCount, catalogObject, catalogPage,
+  catalogAgent, catalogAgentById, catalogAgents, catalogCities, catalogCount,
+  catalogObject, catalogPage,
   catalogZoneCounts, catalogZones,
 } from '@/lib/db/catalog';
 import {
@@ -1498,17 +1499,97 @@ export default {
     // Состав выдачи. Та же проверка, что защищает объекты витрины, и по
     // той же причине: сюда легко дописать «ещё одно поле».
     const agentKeys = Object.keys((await catalogAgent(shown.id)) ?? {});
-    const forbiddenAgent = ['phone', 'email', 'id', 'telegram_id', 'role',
+    // Идентификатор из этого списка УБРАН осознанно, вместе с появлением
+    // страницы агента: он стоит в её адресе, и прятать его здесь, публикуя
+    // в адресе, было бы непоследовательностью. Телефон, почта и статус
+    // закрыты как были.
+    const forbiddenAgent = ['phone', 'email', 'telegram_id', 'role',
       'status', 'organization_id', 'certificate_confirmed'];
-    check('в выдаче агента нет ни телефона, ни почты, ни идентификатора',
+    check('в выдаче агента нет ни телефона, ни почты, ни статуса',
       forbiddenAgent.every((k) => !agentKeys.includes(k)),
       `просочилось: ${agentKeys.join(', ')}`);
+    check('а идентификатор отдаётся — на него ведёт ссылка со страницы объекта',
+      (await catalogAgent(shown.id))?.id === anna);
 
     // А в самой таблице эти колонки есть — иначе проверка была бы пустой.
     const agentRow = await db.prepare('select * from agents where id = ?')
       .bind(anna).first<Record<string, unknown>>();
     check('а в таблице агентов эти колонки есть',
       Boolean(agentRow) && 'phone' in (agentRow ?? {}) && 'email' in (agentRow ?? {}));
+
+    // -----------------------------------------------------------------
+    // Публичная страница агента: только настоящее
+    // -----------------------------------------------------------------
+    await confirmAgentCertificate(anna, true);
+    const listed = await catalogAgents();
+    const me = listed.find((a) => a.id === anna);
+
+    check('агент с опубликованным объектом есть в списке', Boolean(me));
+    check('и у него считаются объекты', (me?.objects ?? 0) >= 1, `${me?.objects}`);
+    check('подтверждённый номер в реестре отдаётся', me?.certificate_no === 'КР-777');
+
+    // Состав выдачи — та же проверка, что у карточки объекта: сюда так же
+    // легко дописать «ещё одно поле», и это так же необратимо.
+    const cardKeys = Object.keys(me ?? {}).sort();
+    check('в выдаче агента нет ни телефона, ни почты, ни статуса',
+      !cardKeys.includes('phone') && !cardKeys.includes('email')
+      && !cardKeys.includes('status') && !cardKeys.includes('certificate_confirmed'),
+      cardKeys.join(', '));
+
+    // Агентство — только подтверждённое. То же правило, что у сертификата:
+    // принадлежность к фирме агент заявляет сам.
+    await setMyOrganization('Этажи');
+    check('незаверенное агентство наружу не уходит',
+      (await catalogAgentById(anna))?.organization === null,
+      String((await catalogAgentById(anna))?.organization));
+    await confirmAgentOrganization(anna, true);
+    check('подтверждённое — отдаётся',
+      (await catalogAgentById(anna))?.organization === 'Этажи');
+
+    // Неодобренного и заблокированного на сайте быть не должно.
+    await db.prepare(`update agents set status = 'blocked' where id = ?`).bind(anna).run();
+    check('заблокированного агента в списке нет',
+      !(await catalogAgents()).some((a) => a.id === anna));
+    check('и по прямой ссылке его нет', (await catalogAgentById(anna)) === null);
+    await db.prepare(`update agents set status = 'approved' where id = ?`).bind(anna).run();
+
+    // Агент без опубликованных объектов — не страница, а пустое обещание.
+    const noObjects = await ensureAgentByEmail('bezobektov@example.kg', 'Безобъектов Агент');
+    await db.prepare(`update agents set status = 'approved' where id = ?`)
+      .bind(noObjects.id).run();
+    check('агента без опубликованных объектов в списке нет',
+      !(await catalogAgents()).some((a) => a.id === noObjects.id));
+    check('и его страницы тоже нет', (await catalogAgentById(noObjects.id)) === null);
+
+    // Объекты на странице агента — те же, что в каталоге, и только его.
+    //
+    // Чужой объект здесь обязан быть ОПУБЛИКОВАННЫМ: на черновике
+    // проверка проходила бы и без фильтра по агенту, потому что черновика
+    // в каталоге нет в принципе. Проверено мутацией — первая версия с
+    // черновиком её не поймала.
+    await loginAs(db, vera);
+    const hersPublished = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Чужая 7', price_minor: 2_200_000,
+    });
+    await createMandate({ object_id: hersPublished.id, kind: 'non_exclusive' });
+    await publishObject(hersPublished.id);
+    await loginAs(db, anna);
+
+    const mine2 = await catalogPage({ agent: anna });
+    check('на странице агента есть его объект',
+      mine2.items.some((i) => i.id === shown.id));
+    check('а объект коллеги — опубликованный — туда не попадает',
+      mine2.items.every((i) => i.id !== hersPublished.id),
+      mine2.items.map((i) => i.address).join(' | '));
+    check('и в общем каталоге он при этом есть — значит дело в фильтре',
+      (await catalogPage({})).items.some((i) => i.id === hersPublished.id));
+
+    // Убираем за собой: дальше по прогону считаются объекты агентов, и
+    // лишний объект Веры ломает счётчики. Правило простое — проверка не
+    // должна менять то, на чём стоят соседние.
+    await db.prepare('delete from mandates where object_id = ?')
+      .bind(hersPublished.id).run();
+    await db.prepare('delete from objects where id = ?').bind(hersPublished.id).run();
 
     // Неопубликованный объект агента не раскрывает.
     //

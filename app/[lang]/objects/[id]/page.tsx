@@ -10,6 +10,7 @@ import { CatalogHeader } from '../../../CatalogHeader';
 import { CatalogFooter } from '../../../CatalogFooter';
 import { Facade } from '../../../Facade';
 import { Photo } from '../../../Photo';
+import { AgentFace } from '../../../AgentFace';
 import { LeadForm } from '../../../LeadForm';
 
 export const dynamic = 'force-dynamic';
@@ -55,17 +56,6 @@ async function load(id: string) {
  *  колонку характеристик и ломалась на две строки. */
 const dateIn = (lang: Lang, iso: string) =>
   new Intl.DateTimeFormat(LOCALE[lang], { dateStyle: 'short' }).format(new Date(iso));
-
-/** Буквы вместо фотографии: пустой кружок читается как «фото не
- *  загрузилось», а две буквы — как сознательный выбор. */
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join('');
-}
 
 export async function generateMetadata(
   { params }: { params: Promise<{ lang: string; id: string }> },
@@ -215,24 +205,18 @@ export default async function PublicObject({
             {agent ? (
               <div className="agent-card">
                 <span className="key">{d.agentLeads}</span>
-                <div className="agent-row">
-                  {agent.avatar_key ? (
-                    <div className="avatar">
-                      <Photo
-                        src={`/photos/${agent.avatar_key}`}
-                        fallback={<span className="initials">{initials(agent.full_name)}</span>}
-                      />
-                    </div>
-                  ) : (
-                    <div className="avatar"><span className="initials">{initials(agent.full_name)}</span></div>
-                  )}
+                {/* Ссылка на страницу агента: клиент хочет знать, с кем
+                    имеет дело, и список его объектов отвечает на это
+                    лучше любого описания. */}
+                <Link className="agent-row" href={`/${lang}/agents/${agent.id}`}>
+                  <AgentFace name={agent.full_name} avatarKey={agent.avatar_key} />
                   <div>
                     <b>{agent.full_name}</b>
                     {years !== null && years >= 0 ? (
                       <span className="mini">{d.agentYears(years)}</span>
                     ) : null}
                   </div>
-                </div>
+                </Link>
                 {agent.certificate_no ? (
                   <p className="registry">
                     {d.agentRegistry(agent.certificate_no)}
