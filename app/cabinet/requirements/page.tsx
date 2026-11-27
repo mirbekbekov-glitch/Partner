@@ -3,6 +3,7 @@ import { requirementList, type RequirementListItem } from '@/lib/db/cabinet';
 import { PAGE_SIZE, parseFilters, exportHref, money, day } from '@/lib/list-params';
 import { Pager } from '../Pager';
 import { SortTh } from '../SortTh';
+import { ZoneFilter } from '../ZoneFilter';
 
 export const metadata = { title: 'Потребности' };
 
@@ -76,8 +77,8 @@ export default async function RequirementsList({
           </select>
         </label>
         <label className="fld">
-          <span>Зона</span>
-          <input name="zone" type="text" defaultValue={f.zone ?? ''} />
+          <span>Район</span>
+          <ZoneFilter value={f.zone} />
         </label>
         {/* Сортировка переживает фильтрацию: форма отправляется методом
             get, и всё, чего в ней нет, из адреса пропадает. */}

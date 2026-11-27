@@ -5,6 +5,8 @@ import { useActionState, useRef, useState, useTransition } from 'react';
 import type { FormResult } from './form-actions';
 import { draftDescription } from './form-actions';
 import { PhotoUpload } from './PhotoUpload';
+import { Suggest } from '../../Suggest';
+import { citiesOf, zonesOf } from '@/lib/geo';
 
 export type ObjectDraft = {
   id?: string;
@@ -50,6 +52,10 @@ export function ObjectForm({
   // Описание — управляемое поле: черновик приходит с сервера и должен
   // оказаться в том же поле, которое агент тут же правит руками.
   const [description, setDescription] = useState(draft?.description ?? '');
+  // Город и район живут в состоянии, потому что связаны: подсказки
+  // района берутся от набранного города.
+  const [city, setCity] = useState(draft?.city ?? 'Бишкек');
+  const [zone, setZone] = useState(draft?.zone ?? '');
   const [draftError, setDraftError] = useState<string | null>(null);
   const [drafting, startDrafting] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
@@ -127,13 +133,20 @@ export function ObjectForm({
               бишкекские, и заставлять агента печатать это каждый раз —
               лишняя работа ради редкого случая. Но поле на виду: объект
               из Оша иначе молча уехал бы в выгрузку как бишкекский. */}
-          <input id="city" name="city" type="text"
-                 defaultValue={draft?.city ?? 'Бишкек'} placeholder="Бишкек" />
+          <Suggest id="city" name="city" value={city} onChange={setCity}
+                   options={citiesOf(null)} placeholder="Бишкек" />
         </div>
         <div className="field">
-          <label className="key" htmlFor="zone">Зона</label>
-          <input id="zone" name="zone" type="text" defaultValue={draft?.zone ?? ''}
-                 placeholder="Центр" />
+          <label className="key" htmlFor="zone">Район</label>
+          {/* Подсказки идут от набранного города: районы Бишкека в
+              карточке каракольского объекта — чужая география. Писать
+              своё можно: словарь отстаёт от жизни, и новый жилмассив не
+              должен ждать, пока кто-то допишет файл. Но одно нажатие
+              приводит написание к общему, и объект находится в поиске
+              по району. */}
+          <Suggest id="zone" name="zone" value={zone} onChange={setZone}
+                   options={zonesOf(city.trim())} placeholder="Центр"
+                   hint="Такого района нет в списке — сохраним как есть" />
         </div>
       </div>
 

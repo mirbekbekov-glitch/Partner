@@ -6,6 +6,7 @@ import { PAGE_SIZE, parseFilters, exportHref, money, day } from '@/lib/list-para
 import { Pager } from '../Pager';
 import { SortTh } from '../SortTh';
 import { STATE_RU } from '@/lib/object-state';
+import { ZoneFilter } from '../ZoneFilter';
 
 export const metadata = { title: 'Объекты' };
 
@@ -94,8 +95,8 @@ export default async function ObjectsList({
           </select>
         </label>
         <label className="fld">
-          <span>Зона</span>
-          <input name="zone" type="text" defaultValue={f.zone ?? ''} />
+          <span>Район</span>
+          <ZoneFilter value={f.zone} />
         </label>
         <label className="fld">
           <span>Источник</span>
