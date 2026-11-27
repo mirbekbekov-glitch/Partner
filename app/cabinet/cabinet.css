@@ -230,7 +230,7 @@ form.stack.card { max-width: 760px; }
   background: var(--panel);
 }
 
-.tbl { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 1rem; }
 
 .tbl th,
 .tbl td {
@@ -269,7 +269,9 @@ form.stack.card { max-width: 760px; }
    ячеек на ступень. Раньше весь ряд шёл одним кеглем, и сильнейший
    контраст в таблице не указывал ни на что. */
 .tbl-main { font-weight: 700; font-size: 1rem; }
-.tbl-sub { display: block; color: var(--muted); font-size: 0.875rem; margin-top: 2px; }
+.tbl-sub { display: block; color: var(--muted); font-size: 0.9375rem; margin-top: 2px; }
+a.tbl-sub { text-decoration: none; }
+a.tbl-sub:hover { color: var(--accent); }
 .tbl-note { display: block; margin-top: 4px; }
 /* Пометка о мандате в одну строку: разорванная пополам, она добавляла
    строке таблицы целую строку текста. */
@@ -303,6 +305,10 @@ form.stack.card { max-width: 760px; }
   .tbl td[data-l='Цена'] { font-size: 1.0625rem; font-weight: 700; padding-top: 4px; }
   .tbl td[data-l='Цена']::before { font-weight: 400; }
   .tbl td:first-child { min-width: 0; }
+  /* На телефоне строка — карточка, и снимок в ней работает как обложка:
+     крупнее, чем в таблице, и над адресом, а не сбоку. */
+  .tbl .tbl-pic { width: auto; }
+  .tbl-thumb { width: 112px; height: 84px; margin-bottom: 6px; }
   /* Пустая ячейка на телефоне исчезает вместе с подписью: «Действия:» без
      кнопок — это строка ни о чём. */
   .tbl td:empty { display: none; }
@@ -487,3 +493,40 @@ form.stack.card { max-width: 760px; }
   padding: 1px 8px;
   font-size: 0.8125rem;
 }
+
+/* --- Точка на карте ----------------------------------------------------- */
+.mappick { gap: 8px; }
+.mappick-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mappick-head .btn { border: 0; cursor: pointer; font-family: inherit; }
+.mappick-head .key { margin-right: auto; }
+/* Высота в пикселях, а не в долях экрана: карта стоит внутри длинной
+   формы, и доля экрана на ноутбуке съела бы всё поле зрения. 320 px —
+   это квартал вокруг дома на масштабе улицы. */
+.mappick-box { height: 320px; border: 1px solid var(--line); border-radius: var(--r-md);
+  overflow: hidden; background: var(--sunk); }
+.mappick-box:focus-within { border-color: var(--accent); }
+/* Метка — та же ступенька красного, что и везде, а не картинка из
+   пакета: пути к картинкам при сборке ломаются, и метка пропадает молча. */
+.map-pin { background: var(--accent); border: 3px solid #FFFFFF; border-radius: 50%;
+  box-shadow: 0 1px 6px rgba(0,0,0,.45); cursor: grab; }
+.map-pin:active { cursor: grabbing; }
+/* Подписи Leaflet живут по своим правилам и не знают нашей темы. */
+.mappick-box.leaflet-container { font: inherit; font-size: 0.75rem; background: var(--sunk); }
+.mappick-box .leaflet-control-attribution { background: rgba(255,255,255,.75); }
+/* Кнопки масштаба Leaflet рисует сам; приводим к нашим скруглениям. */
+.mappick-box .leaflet-bar a { border-radius: 6px; color: var(--fg); }
+
+/* Снимок объекта в списке. 64 px — размер, на котором узнаётся комната,
+   но не узнаётся трещина на потолке; больше — и таблица превращается в
+   галерею, в которой не найти строку. */
+.tbl-pic { width: 72px; }
+/* Адресу — место: это главный столбец, и в нём имя объекта и строка
+   характеристик. Без нижней границы он отдаёт ширину соседям и рвётся
+   по слогам, а строка таблицы раздувается на четыре строки текста. */
+.tbl td:nth-child(2) { min-width: 210px; }
+.tbl-thumb { display: block; width: 64px; height: 48px; border-radius: var(--r-md);
+  overflow: hidden; background: var(--sunk); border: 1px solid var(--line); }
+.tbl-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tbl-nopic { display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%; font-size: 0.6875rem; color: var(--muted);
+  text-align: center; line-height: 1.1; text-decoration: none; }

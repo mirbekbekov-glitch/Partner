@@ -15,6 +15,8 @@ function yearsWord(n: number): string {
 export function ProfileForm({
   fullName,
   phone,
+  whatsapp,
+  telegramUser,
   email,
   organization,
   orgConfirmed,
@@ -26,6 +28,8 @@ export function ProfileForm({
 }: {
   fullName: string;
   phone: string | null;
+  whatsapp: boolean;
+  telegramUser: string | null;
   email: string | null;
   organization: string | null;
   orgConfirmed: boolean;
@@ -78,7 +82,38 @@ export function ProfileForm({
           placeholder="+996 700 00 00 00"
           autoComplete="tel"
         />
-        <p className="key">Не обязателен. Коллегам виден, клиентам — нет.</p>
+        <p className="key">
+          Клиент увидит его в объявлении и позвонит напрямую вам. Без
+          телефона объект не опубликовать.
+        </p>
+      </div>
+
+      {/* Мессенджеры — отдельными отметками, а не догадкой по номеру.
+          Проверить, есть ли на номере WhatsApp или Telegram, нельзя: ни
+          один из них такого не отдаёт. Кнопка, ведущая в пустоту, хуже
+          отсутствия кнопки — клиент решит, что агент не отвечает. */}
+      <div className="field">
+        <label className="row-check">
+          <input type="checkbox" name="whatsapp" defaultChecked={whatsapp} />
+          <span>На этом номере есть WhatsApp</span>
+        </label>
+        <p className="key">Отмечено — в объявлении появится кнопка WhatsApp.</p>
+      </div>
+
+      <div className="field">
+        <label className="key" htmlFor="telegram_user">Ник в Telegram</label>
+        <input
+          id="telegram_user"
+          name="telegram_user"
+          type="text"
+          defaultValue={telegramUser ?? ''}
+          placeholder="@mirbek"
+          autoComplete="off"
+        />
+        <p className="key">
+          Ник, а не номер: ссылка по номеру работает только у тех, кто
+          разрешил искать себя по телефону. Пусто — кнопки Telegram не будет.
+        </p>
       </div>
 
       <div className="field">

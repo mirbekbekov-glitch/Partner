@@ -8,9 +8,11 @@ import {
 } from '@/lib/db/objects';
 import { createMandate, terminateMandate } from '@/lib/db/mandates';
 import { currentAgent } from '@/lib/db/session';
+import { updateProfile } from '@/lib/db/agents';
 import { toMinor } from '@/lib/db/money';
 import { attempt, explain } from '@/lib/db/report';
 import { describeObject, type DraftResult } from '@/lib/ai/describe';
+import { geocode, type Spot } from '@/lib/geocode';
 
 export type FormResult = { error: string | null };
 export type { DraftResult };
@@ -75,9 +77,44 @@ const platformFields = (formData: FormData) => ({
   build_year: num(formData.get('build_year')),
 });
 
+
+/**
+ * Телефон агента — обязателен при заведении объекта.
+ *
+ * Объявление без связи бессмысленно: покупатель читает карточку и не
+ * может ничего спросить. Поэтому номер спрашивается там же, где всё
+ * остальное, а не прячется в профиле, куда агент заходит раз в жизнь.
+ *
+ * Сохраняется он в профиль, а не в объект: номер у агента один, и держать
+ * его копию в каждой карточке значит получить десять разных номеров
+ * одного человека, из которых девять устареют.
+ *
+ * Чужой профиль не трогается. Номер записывается только тогда, когда он
+ * отличается от своего же: админ, правящий чужой объект, иначе переписал
+ * бы СВОЙ номер тем, что стоит в карточке коллеги.
+ */
+async function saveOwnPhone(formData: FormData): Promise<string | null> {
+  const phone = str(formData.get('agent_phone'));
+  if (!phone) return 'Впишите свой телефон: без него объявление не опубликовать.';
+
+  const me = await currentAgent();
+  if (me && (me.phone ?? '') !== phone) {
+    try {
+      await updateProfile({ phone });
+    } catch (e) {
+      return explain(e);
+    }
+  }
+
+  return null;
+}
+
 export async function createObject(formData: FormData): Promise<FormResult> {
   const price = money(formData.get('price'));
   if (price === null) return { error: 'Укажите цену.' };
+
+  const phoneError = await saveOwnPhone(formData);
+  if (phoneError) return { error: phoneError };
 
   const mandateKind = str(formData.get('mandate_kind'));
   let id: string;
@@ -122,6 +159,9 @@ export async function updateObject(formData: FormData): Promise<FormResult> {
   const id = String(formData.get('id') ?? '');
   const price = money(formData.get('price'));
   if (price === null) return { error: 'Укажите цену.' };
+
+  const phoneError = await saveOwnPhone(formData);
+  if (phoneError) return { error: phoneError };
 
   const error = await attempt(() => editObject(id, {
     kind: str(formData.get('kind')) ?? undefined,
@@ -216,4 +256,48 @@ export async function draftDescription(formData: FormData): Promise<DraftResult>
     currency: str(formData.get('currency')),
     notes: str(formData.get('description')),
   });
+}
+
+
+/**
+ * Догадка о координатах по тому, что уже введено в карточке.
+ *
+ * Проверка на агента — по той же причине, что и у генерации описания:
+ * действие ходит НАРУЖУ, мимо слоя доступа, и без этой строки любой, кто
+ * дотянулся до него, ходил бы в чужую службу от нашего имени.
+ *
+ * Ничего не сохраняется: точка возвращается в форму, агент видит её на
+ * карте и сохраняет вместе с остальными полями — или двигает, или
+ * убирает. Догадка, записанная молча, однажды отправит покупателя не в
+ * тот двор.
+ */
+export async function findOnMap(formData: FormData): Promise<{
+  point: Spot | null;
+  error?: string;
+}> {
+  if (!(await currentAgent())) {
+    return { point: null, error: 'Поиск по адресу доступен одобренным агентам.' };
+  }
+
+  // Город и район сужают поиск: «Московская» есть и в Бишкеке, и в Оше.
+  const query = [
+    str(formData.get('address')),
+    str(formData.get('zone')),
+    str(formData.get('city')) ?? 'Бишкек',
+  ].filter(Boolean).join(', ');
+
+  if (!str(formData.get('address'))) {
+    return { point: null, error: 'Сначала впишите адрес.' };
+  }
+
+  try {
+    const point = await geocode(query);
+    return point
+      ? { point }
+      : { point: null, error: 'По такому адресу ничего не нашлось — поставьте точку сами.' };
+  } catch {
+    // Служба чужая и может молчать. Это не повод ронять форму: карта
+    // остаётся, точку всегда можно поставить рукой.
+    return { point: null, error: 'Служба карт не ответила — поставьте точку сами.' };
+  }
 }

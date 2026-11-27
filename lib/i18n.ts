@@ -37,7 +37,7 @@ type Dict = {
   // Герой
   heroTitle: string; heroEm: string;
   // Поиск
-  address: string; addressHint: string; deal: string; anyDeal: string;
+  deal: string; anyDeal: string;
   tabBuy: string; tabRent: string;
   moreFilters: string; priceFrom: string;
   sale: string; rent: string; kind: string; anyKind: string;
@@ -59,7 +59,8 @@ type Dict = {
   // Страница объекта
   toAll: string; about: string; published: string; roomsLabel: string;
   areaLabel: string; floorLabel: string; floorOf: string; zoneLabel: string; cityLabel: string;
-  zoneSearch: string; zoneNone: string;
+  zoneSearch: string; zoneNone: string; regionLabel: string; otherPlaces: string;
+  callAgent: string; writeWhatsapp: string; writeTelegram: string;
   confirmedPrice: string; notFound: string; notFoundLede: string; seeWhatIsThere: string;
   // Блок агента на странице объекта. Открыты ровно три поля: имя, стаж и
   // подтверждённый номер в реестре. Телефон агента здесь намеренно
@@ -114,7 +115,6 @@ const ru: Dict = {
   country: 'Кыргызстан',
   cabinetLine: 'Кабинет и CRM — по входу для агентов.',
   heroTitle: 'Найдите своё пространство для комфортной', heroEm: 'работы и жилья',
-  address: 'Адрес или район', addressHint: 'Чүй, Асанбай, Джал…',
   deal: 'Сделка', anyDeal: 'Любая', sale: 'Продажа', rent: 'Аренда',
   kind: 'Тип', anyKind: 'Любой', rooms: 'Комнат', anyRooms: 'Любое',
   priceTo: 'Цена до', search: 'Показать', searchCount: (n) => `Найти ${n}`,
@@ -137,6 +137,8 @@ const ru: Dict = {
   roomsLabel: 'Комнат', areaLabel: 'Площадь', floorLabel: 'Этаж', floorOf: 'из',
   zoneLabel: 'Район', cityLabel: 'Город',
   zoneSearch: 'Поиск…', zoneNone: 'Такого района нет в списке',
+  regionLabel: 'Регион', otherPlaces: 'Другие места',
+  callAgent: 'Позвонить', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   confirmedPrice: 'Агент подтвердил цену и доступность',
   agentLeads: 'Объект ведёт',
   // «год», «года», «лет»: иначе строка читается как машинный перевод.
@@ -222,7 +224,6 @@ const ky: Dict = {
   country: 'Кыргызстан',
   cabinetLine: 'Кабинет жана CRM — агенттер үчүн кирүү аркылуу.',
   heroTitle: 'Ыңгайлуу жашоо жана жумуш үчүн', heroEm: 'өз мейкиндигиңизди табыңыз',
-  address: 'Дарек же район', addressHint: 'Чүй, Асанбай, Жал…',
   deal: 'Бүтүм', anyDeal: 'Баары', sale: 'Сатуу', rent: 'Ижара',
   kind: 'Түрү', anyKind: 'Баары', rooms: 'Бөлмө', anyRooms: 'Баары',
   priceTo: 'Баасы чейин', search: 'Көрсөтүү', searchCount: (n) => `${n} табуу`,
@@ -245,6 +246,8 @@ const ky: Dict = {
   roomsLabel: 'Бөлмө', areaLabel: 'Аянты', floorLabel: 'Кабат', floorOf: '/',
   zoneLabel: 'Район', cityLabel: 'Шаар',
   zoneSearch: 'Издөө…', zoneNone: 'Мындай район тизмеде жок',
+  regionLabel: 'Аймак', otherPlaces: 'Башка жерлер',
+  callAgent: 'Чалуу', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   confirmedPrice: 'Агент бааны жана жеткиликтүүлүктү ырастады',
   agentLeads: 'Объектти алып баруучу',
   agentYears: (n) => `кыймылсыз мүлктө ${n} жыл`,
@@ -320,7 +323,6 @@ const en: Dict = {
   country: 'Kyrgyzstan',
   cabinetLine: 'The agent cabinet and CRM are behind the agent login.',
   heroTitle: 'Find your space for comfortable', heroEm: 'living and work',
-  address: 'Address or district', addressHint: 'Chuy, Asanbay, Jal…',
   deal: 'Deal', anyDeal: 'Any', sale: 'For sale', rent: 'For rent',
   kind: 'Type', anyKind: 'Any', rooms: 'Rooms', anyRooms: 'Any',
   priceTo: 'Price up to', search: 'Show', searchCount: (n) => `Show ${n}`,
@@ -343,6 +345,8 @@ const en: Dict = {
   roomsLabel: 'Rooms', areaLabel: 'Area', floorLabel: 'Floor', floorOf: 'of',
   zoneLabel: 'District', cityLabel: 'City',
   zoneSearch: 'Search…', zoneNone: 'No such district in the list',
+  regionLabel: 'Region', otherPlaces: 'Other places',
+  callAgent: 'Call', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   confirmedPrice: 'Agent confirmed the price and availability',
   agentLeads: 'Listing agent',
   agentYears: (n) => `${n} ${n === 1 ? 'year' : 'years'} in real estate`,
@@ -418,7 +422,6 @@ const zh: Dict = {
   country: '吉尔吉斯斯坦',
   cabinetLine: '经纪人工作台与 CRM 需登录后使用。',
   heroTitle: '找到适合您的', heroEm: '居住与工作空间',
-  address: '地址或区域', addressHint: '楚河、阿桑拜、扎尔…',
   deal: '交易', anyDeal: '不限', sale: '出售', rent: '出租',
   kind: '类型', anyKind: '不限', rooms: '房间数', anyRooms: '不限',
   priceTo: '价格上限', search: '查找', searchCount: (n) => `查找 ${n} 套`,
@@ -441,6 +444,8 @@ const zh: Dict = {
   roomsLabel: '房间数', areaLabel: '面积', floorLabel: '楼层', floorOf: '/',
   zoneLabel: '区域', cityLabel: '城市',
   zoneSearch: '搜索…', zoneNone: '列表中没有该区域',
+  regionLabel: '地区', otherPlaces: '其他地方',
+  callAgent: '拨打电话', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
   confirmedPrice: '经纪人已确认价格与可售状态',
   agentLeads: '负责经纪人',
   agentYears: (n) => `从事房地产 ${n} 年`,

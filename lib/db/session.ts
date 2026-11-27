@@ -37,6 +37,10 @@ export type Agent = {
   /** Имя в сопоставимом виде: по нему идёт порядок в списках. */
   name_sort: string;
   phone: string | null;
+  /** На номере есть WhatsApp — со слов агента: проверить это нельзя. */
+  whatsapp: number;
+  /** Ник в Telegram, без «@». Ссылка собирается из него при показе. */
+  telegram_user: string | null;
   role: 'agent' | 'admin';
   status: 'pending' | 'approved' | 'blocked';
   focus: 'sale' | 'rent' | 'both';

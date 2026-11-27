@@ -46,7 +46,7 @@ import {
 } from '@/lib/catalog-params';
 import { listingSchema } from '@/lib/listing-schema';
 import { placeName, t } from '@/lib/i18n';
-import { citiesWithZones, zonesOf } from '@/lib/city-zones';
+import { citiesOf, regionOf, regions, zoneMatch, zonesOf } from '@/lib/geo';
 import {
   completeTelegramLink, startTelegramLink, sweepTelegramLinks, unlinkTelegram,
 } from '@/lib/db/telegram';
@@ -851,6 +851,25 @@ export default {
     check('ожидающий остаётся ожидающим',
       pendingRow?.status === 'pending', `статус стал ${pendingRow?.status}`);
 
+    // Мессенджеры — со слов агента, и записываются ровно так, как
+    // сказано: проверить номер в WhatsApp или Telegram нельзя.
+    await updateProfile({ whatsapp: true, telegram_user: '@petr_novich' });
+    const withMess = await getAgent(newcomer.id);
+    check('WhatsApp отмечается', withMess?.whatsapp === 1);
+    check('ник Telegram чистится от «@» и ссылки',
+      withMess?.telegram_user === 'petr_novich');
+
+    await updateProfile({ telegram_user: 'https://t.me/petr_novich' });
+    check('адрес целиком тоже приводится к нику',
+      (await getAgent(newcomer.id))?.telegram_user === 'petr_novich');
+
+    await throws('ник с пробелом и кириллицей не проходит',
+      () => updateProfile({ telegram_user: 'Пётр Новичков' }), Invalid);
+
+    await updateProfile({ telegram_user: '' });
+    check('пустой ник снимает кнопку Telegram',
+      (await getAgent(newcomer.id))?.telegram_user === null);
+
     await setMyOrganization('Этажи');
     check('ожидающий заявляет агентство',
       (await getAgent(newcomer.id))?.org_confirmed === 0);
@@ -1502,15 +1521,21 @@ export default {
     // Состав выдачи. Та же проверка, что защищает объекты витрины, и по
     // той же причине: сюда легко дописать «ещё одно поле».
     const agentKeys = Object.keys((await catalogAgent(shown.id)) ?? {});
-    // Идентификатор из этого списка УБРАН осознанно, вместе с появлением
-    // страницы агента: он стоит в её адресе, и прятать его здесь, публикуя
-    // в адресе, было бы непоследовательностью. Телефон, почта и статус
-    // закрыты как были.
-    const forbiddenAgent = ['phone', 'email', 'telegram_id', 'role',
+    // Из этого списка УБРАНЫ два поля, и каждое — решением владельца
+    // площадки, а не упрощением. Идентификатор: он стоит в адресе
+    // страницы агента, и прятать его здесь было бы непоследовательностью.
+    // Телефон: покупатель пишет тому, кто ведёт объект, — прежний порядок
+    // со звонком в отдел продаж этого не давал. Почта, статус и роль
+    // закрыты как были: по почте в недвижимости не отвечают, а статус —
+    // внутреннее дело.
+    const forbiddenAgent = ['email', 'telegram_id', 'role',
       'status', 'organization_id', 'certificate_confirmed'];
-    check('в выдаче агента нет ни телефона, ни почты, ни статуса',
+    check('в выдаче агента нет ни почты, ни статуса, ни роли',
       forbiddenAgent.every((k) => !agentKeys.includes(k)),
       `просочилось: ${agentKeys.join(', ')}`);
+    check('телефон агента теперь отдаётся — по нему и звонят из объявления',
+      agentKeys.includes('phone') && agentKeys.includes('whatsapp')
+      && agentKeys.includes('telegram_user'));
     check('а идентификатор отдаётся — на него ведёт ссылка со страницы объекта',
       (await catalogAgent(shown.id))?.id === anna);
 
@@ -1534,10 +1559,12 @@ export default {
     // Состав выдачи — та же проверка, что у карточки объекта: сюда так же
     // легко дописать «ещё одно поле», и это так же необратимо.
     const cardKeys = Object.keys(me ?? {}).sort();
-    check('в выдаче агента нет ни телефона, ни почты, ни статуса',
-      !cardKeys.includes('phone') && !cardKeys.includes('email')
+    check('в выдаче агента нет ни почты, ни статуса',
+      !cardKeys.includes('email')
       && !cardKeys.includes('status') && !cardKeys.includes('certificate_confirmed'),
       cardKeys.join(', '));
+    check('а телефон и мессенджеры есть — страница агента для того и нужна',
+      cardKeys.includes('phone') && cardKeys.includes('whatsapp'));
 
     // Агентство — только подтверждённое. То же правило, что у сертификата:
     // принадлежность к фирме агент заявляет сам.
@@ -1756,6 +1783,12 @@ export default {
     check('серия и тип дома на языке площадки',
       mhFull.includes('<serie>элитка</serie>')
       && mhFull.includes('<building-type>монолитный</building-type>'));
+    // Микрорайон площадки — это наш район. Отдельного поля в карточке
+    // нет, и значение берётся из того единственного, которое агент
+    // заполняет: иначе два поля разошлись бы в первую же правку.
+    check('микрорайон уходит в фид из нашего района',
+      mhFull.includes('<micro-district>Центр</micro-district>'));
+
     check('контакт MHouse называет имя и роль подающего',
       mhFull.includes('<owner-type>агент</owner-type>')
       && mhFull.includes('<name>Liberterra</name>'));
@@ -2137,10 +2170,15 @@ export default {
     await loginAs(db, anna);
     setEnv(env as unknown as Record<string, unknown>);
 
-    // Районы по городам. Вся ценность списка в правде расположения:
-    // местный должен узнать город с первого взгляда. Поэтому город
-    // попадает сюда, только когда районы назвал тот, кто город знает,
-    // а не тот, кто догадался.
+    // География: регион → город → район. Три уровня нужны не ради
+    // стройности, а потому что так спрашивает человек и потому что
+    // площадка задумана шире одной области.
+    check('регионы перечислены', regions().length > 1);
+    check('город знает свой регион', regionOf('Бишкек') === 'Чуйская область');
+    check('город вне словаря региона не выдумывает', regionOf('Ташкент') === null);
+    check('у региона есть города', citiesOf('Иссык-Кульская область').includes('Каракол'));
+    check('без региона города всех регионов', citiesOf(null).includes('Ош'));
+
     check('у Бишкека районы перечислены', zonesOf('Бишкек').length > 0);
     check('у города без списка его нет, и это не сбой', zonesOf('Ош').length === 0);
     check('пустой город районов не получает',
@@ -2151,11 +2189,16 @@ export default {
     const bishkek = zonesOf('Бишкек');
     check('в списке есть Центр — та же зона, что у объектов витрины',
       bishkek.includes('Центр'));
-    check('порядок районов с севера на юг, а не по алфавиту',
-      bishkek.indexOf('Тунгуч') < bishkek.indexOf('Центр')
-      && bishkek.indexOf('Центр') < bishkek.indexOf('Асанбай'));
-    check('списков ровно столько, сколько городов описали руками',
-      citiesWithZones().join() === 'Бишкек');
+    check('микрорайоны в списке есть, и они первые',
+      bishkek[0] === '3 микрорайон' && bishkek.includes('6 микрорайон'));
+
+    // Номер микрорайона пишут тремя способами, и каждый обязан найтись:
+    // человек не должен угадывать, как его записали в карточке.
+    check('«6 мкр», «6 м-н» и «6 микрорайон» — одно место',
+      zoneMatch('6 микрорайон', '6 мкр') && zoneMatch('6 микрорайон', '6 м-н')
+      && zoneMatch('6 микрорайон', '6микрорайон'));
+    check('дефисы и регистр не мешают', zoneMatch('Кок-Жар', 'кокжар'));
+    check('чужой район не находится', !zoneMatch('Асанбай', 'джал'));
 
     // Как сайт себя называет. Пока город один — он; городов несколько —
     // страна. Текст считается по каталогу, а не правится руками: иначе

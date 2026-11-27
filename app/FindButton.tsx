@@ -38,7 +38,7 @@ export function FindButton({ lang, deal }: { lang: Lang; deal: 'sale' | 'rent' }
       const fd = new FormData(form);
       const params = new URLSearchParams({ deal });
 
-      for (const key of ['kind', 'rooms', 'zone', 'from', 'to', 'q']) {
+      for (const key of ['kind', 'region', 'city', 'rooms', 'zone', 'from', 'to']) {
         const value = String(fd.get(key) ?? '').trim();
         if (value !== '') params.set(key, value);
       }

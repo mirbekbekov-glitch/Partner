@@ -5,8 +5,11 @@ import { useActionState, useRef, useState, useTransition } from 'react';
 import type { FormResult } from './form-actions';
 import { draftDescription } from './form-actions';
 import { PhotoUpload } from './PhotoUpload';
+import { MapPick } from './MapPick';
+import { Suggest } from '../../Suggest';
+import { citiesOf, zonesOf } from '@/lib/geo';
 import {
-  BUILDING_TYPE, COMMERCIAL_TYPE, DISTRICT, PARKING_TYPE, REGION,
+  BUILDING_TYPE, COMMERCIAL_TYPE, PARKING_TYPE, REGION,
   RENTAL_TERM, ROOM_LOCATION, SERIE,
 } from '@/lib/mhouse';
 
@@ -78,10 +81,13 @@ export function ObjectForm({
   action,
   draft,
   mode,
+  agentPhone,
 }: {
   action: (fd: FormData) => Promise<FormResult>;
   draft?: ObjectDraft;
   mode: 'create' | 'edit';
+  /** Свой номер из профиля: подставляется и сохраняется обратно в профиль. */
+  agentPhone: string | null;
 }) {
   const [state, formAction, pending] = useActionState<FormResult, FormData>(
     async (_prev, fd) => action(fd),
@@ -91,6 +97,10 @@ export function ObjectForm({
   // Описание — управляемое поле: черновик приходит с сервера и должен
   // оказаться в том же поле, которое агент тут же правит руками.
   const [description, setDescription] = useState(draft?.description ?? '');
+  // Город и район живут в состоянии, потому что связаны: подсказки
+  // района берутся от набранного города.
+  const [city, setCity] = useState(draft?.city ?? 'Бишкек');
+  const [zone, setZone] = useState(draft?.zone ?? '');
   // Вид и сделка живут в состоянии: набор полей площадки у квартиры,
   // участка и паркинга разный, и показывать все сразу значит просить
   // агента заполнять то, чего у его объекта нет.
@@ -168,6 +178,24 @@ export function ObjectForm({
         </div>
       </div>
 
+      {/* Телефон спрашивается здесь, а не в профиле, куда агент заходит
+          раз в жизнь: объявление без связи бессмысленно — покупатель
+          прочитал карточку и не может ничего спросить. Сохраняется он в
+          профиль: номер у агента один, и копия в каждой карточке дала бы
+          десять разных номеров одного человека. */}
+      <div className="grid2">
+        <div className="field">
+          <label className="key" htmlFor="agent_phone">Ваш телефон <span className="req">*</span></label>
+          <input id="agent_phone" name="agent_phone" type="tel" required
+                 defaultValue={agentPhone ?? ''} placeholder="+996 700 00 00 00"
+                 autoComplete="tel" />
+          <p className="key">
+            Покупатель увидит его в объявлении и позвонит вам напрямую.
+            Кнопки WhatsApp и Telegram включаются в профиле.
+          </p>
+        </div>
+      </div>
+
       <div className="grid2">
         <div className="field">
           <label className="key" htmlFor="city">Город</label>
@@ -175,13 +203,20 @@ export function ObjectForm({
               бишкекские, и заставлять агента печатать это каждый раз —
               лишняя работа ради редкого случая. Но поле на виду: объект
               из Оша иначе молча уехал бы в выгрузку как бишкекский. */}
-          <input id="city" name="city" type="text"
-                 defaultValue={draft?.city ?? 'Бишкек'} placeholder="Бишкек" />
+          <Suggest id="city" name="city" value={city} onChange={setCity}
+                   options={citiesOf(null)} placeholder="Бишкек" />
         </div>
         <div className="field">
-          <label className="key" htmlFor="zone">Зона</label>
-          <input id="zone" name="zone" type="text" defaultValue={draft?.zone ?? ''}
-                 placeholder="Центр" />
+          <label className="key" htmlFor="zone">Район</label>
+          {/* Подсказки идут от набранного города: районы Бишкека в
+              карточке каракольского объекта — чужая география. Писать
+              своё можно: словарь отстаёт от жизни, и новый жилмассив не
+              должен ждать, пока кто-то допишет файл. Но одно нажатие
+              приводит написание к общему, и объект находится в поиске
+              по району. */}
+          <Suggest id="zone" name="zone" value={zone} onChange={setZone}
+                   options={zonesOf(city.trim())} placeholder="Центр"
+                   hint="Такого района нет в списке — сохраним как есть" />
         </div>
       </div>
 
@@ -219,18 +254,7 @@ export function ObjectForm({
         зависит от типа объекта.
       </p>
 
-      <div className="grid2">
-        <div className="field">
-          <label className="key" htmlFor="latitude">Широта</label>
-          <input id="latitude" name="latitude" type="text" inputMode="decimal"
-                 defaultValue={draft?.latitude ?? ''} placeholder="42.819242" />
-        </div>
-        <div className="field">
-          <label className="key" htmlFor="longitude">Долгота</label>
-          <input id="longitude" name="longitude" type="text" inputMode="decimal"
-                 defaultValue={draft?.longitude ?? ''} placeholder="74.619628" />
-        </div>
-      </div>
+      <MapPick lat={draft?.latitude ?? null} lng={draft?.longitude ?? null} />
 
       <div className="grid2">
         <Pick name="region" label="Регион" values={REGION} value={draft?.region}
@@ -242,16 +266,24 @@ export function ObjectForm({
         </div>
       </div>
 
-      {/* Район и микрорайон площадка принимает только для Бишкека. */}
-      <div className="grid2">
-        <Pick name="district" label="Район Бишкека" values={DISTRICT}
-              value={draft?.district} />
-        <div className="field">
-          <label className="key" htmlFor="micro_district">Микрорайон</label>
-          <input id="micro_district" name="micro_district" type="text"
-                 defaultValue={draft?.micro_district ?? ''} placeholder="Асанбай" />
-        </div>
-      </div>
+      {/* Районов у объекта один: тот, что выше, — «Асанбай», «6
+          микрорайон». Его спрашивают один раз и по-человечески.
+
+          Площадка знает ещё два поля: микрорайон и административный
+          район (Ленинский, Октябрьский). Микрорайоном она называет то
+          же самое, что мы называем районом, — в выгрузку уходит наш.
+          Административный район у неё необязателен, а агенту он не
+          говорит ничего: квартиру ищут в Асанбае, а не в Свердловском
+          районе. Спрашивать ради поля, которое можно не заполнять, —
+          лишняя работа в каждой карточке.
+
+          Оба поля в базе остались: у объектов, где их успели заполнить
+          руками, значения сохраняются и уходят в выгрузку. Правка формы
+          их не стирает — в сохранение уходит весь набор полей площадки
+          целиком, и отсутствие поля в форме означало бы пустое
+          значение. */}
+      <input type="hidden" name="district" value={draft?.district ?? ''} />
+      <input type="hidden" name="micro_district" value={draft?.micro_district ?? ''} />
 
       <div className="grid2">
         {kind === 'flat' ? (

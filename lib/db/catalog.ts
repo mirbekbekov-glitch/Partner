@@ -94,6 +94,8 @@ export type CatalogQuery = {
   deal?: 'rent' | 'sale' | null;
   kind?: string | null;
   city?: string | null;
+  /** Города региона: фильтр по региону — это фильтр по его городам. */
+  cities?: string[] | null;
   zone?: string | null;
   rooms?: number | null;
   priceMin?: number | null;
@@ -151,6 +153,13 @@ function conditions(query: CatalogQuery): { clause: string; params: (string | nu
   if (query.deal) { where.push('o.deal_type = ?'); params.push(query.deal); }
   if (query.kind) { where.push('o.kind = ?'); params.push(query.kind); }
   if (query.city) { where.push('o.city = ?'); params.push(query.city); }
+  // Региона в базе нет и быть не должно: регион — это свойство города,
+  // а не объекта, и храни мы его в карточке, он разошёлся бы с городом
+  // в первый же день. Поэтому регион превращается в список городов.
+  else if (query.cities && query.cities.length > 0) {
+    where.push(`o.city in (${query.cities.map(() => '?').join(', ')})`);
+    params.push(...query.cities);
+  }
   if (query.zone) { where.push('o.zone = ?'); params.push(query.zone); }
   if (query.rooms) { where.push('o.rooms = ?'); params.push(query.rooms); }
 
@@ -263,11 +272,16 @@ export async function districts(): Promise<Array<{ id: string; name: string }>> 
 export async function catalogZoneCounts(
   deal?: 'rent' | 'sale' | null,
   city?: string | null,
+  cities?: string[] | null,
 ): Promise<Array<{ zone: string; n: number }>> {
   const params: (string | number)[] = [];
   const filters: string[] = [];
   if (deal) { filters.push('and o.deal_type = ?'); params.push(deal); }
   if (city) { filters.push('and o.city = ?'); params.push(city); }
+  else if (cities && cities.length > 0) {
+    filters.push(`and o.city in (${cities.map(() => '?').join(', ')})`);
+    params.push(...cities);
+  }
 
   return all<{ zone: string; n: number }>(
     `select o.zone as zone, count(*) as n from objects o
@@ -300,7 +314,22 @@ export async function catalogZoneCounts(
  * ведёт объект тот, у кого договор. Без мандата объект и не публикуется
  * (инвариант 1), так что пустой ответ здесь означает снятый объект.
  */
-export type CatalogAgent = {
+export type AgentContact = {
+  /**
+   * Телефон агента — ТЕПЕРЬ публичный.
+   *
+   * Раньше здесь его не было: звонок шёл в отдел продаж, чтобы объект не
+   * уводили мимо агентства. Владелец площадки решил иначе: покупатель
+   * говорит с тем, кто объект ведёт, а значит знает его. Прежний довод
+   * никуда не делся — он просто перевешен в пользу скорости ответа.
+   */
+  phone: string | null;
+  /** Мессенджеры — со слов агента: проверить их по номеру нельзя. */
+  whatsapp: number;
+  telegram_user: string | null;
+};
+
+export type CatalogAgent = AgentContact & {
   /**
    * Идентификатор нужен ссылке на страницу агента, и с её появлением он
    * перестал быть внутренним: он и так стоит в адресе `/agents/<id>`.
@@ -319,6 +348,7 @@ export type CatalogAgent = {
 export async function catalogAgent(objectId: string): Promise<CatalogAgent | null> {
   return one<CatalogAgent>(
     `select ag.id, ag.full_name, ag.avatar_key, ag.works_since,
+            ag.phone, ag.whatsapp, ag.telegram_user,
             case when ag.certificate_confirmed = 1 then ag.certificate_no end
               as certificate_no
        from objects o
@@ -337,9 +367,9 @@ export async function catalogAgent(objectId: string): Promise<CatalogAgent | nul
  * номер в реестре: принадлежность к фирме агент заявляет сам, и
  * непроверенное утверждение от имени агентства остаётся обманом.
  *
- * Телефона и почты здесь нет, как и на карточке объекта: звонок идёт в
- * отдел продаж. Это не экономия полей — иначе объект уводят мимо
- * агентства, и смысл витрины пропадает.
+ * Телефон здесь есть, а почты нет: по почте в недвижимости не отвечают,
+ * а вот звонок и сообщение в мессенджер — это и есть обращение. Почта
+ * остаётся внутренним полем, как и статус.
  */
 export type CatalogAgentCard = CatalogAgent & {
   id: string;
@@ -354,6 +384,7 @@ export type CatalogAgentCard = CatalogAgent & {
  */
 const AGENT_SELECT = `
   ag.id, ag.full_name, ag.avatar_key, ag.works_since,
+  ag.phone, ag.whatsapp, ag.telegram_user,
   case when ag.certificate_confirmed = 1 then ag.certificate_no end
     as certificate_no,
   case when ag.org_confirmed = 1 then org.name end as organization,
