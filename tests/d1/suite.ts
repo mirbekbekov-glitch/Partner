@@ -81,12 +81,15 @@ import { Conflict, Forbidden, Invalid, NotFound } from '@/lib/db/errors';
 import houseKgPage from '../fixtures/house-kg-search.html?raw';
 import houseKgRent from '../fixtures/house-kg-rent.html?raw';
 import {
-  bumpedAt, parsePrices, parseSearchPage, searchUrl, sellerOf, specsOf,
+  bumpedAt, parseListingPage, parsePrices, parseSearchPage, searchUrl, sellerOf,
+  specsOf,
 } from '@/lib/market/house-kg';
 import {
-  estimate, markGone, marketLookalikes, marketSize, observedRate, saveCards,
+  estimate, markGone, marketLookalikes, marketSize, observedRate, ownerLeads,
+  ownersWithoutDate, saveCards, setListingPage,
 } from '@/lib/db/market';
 import { addressOverlap, resemble, resembleAll } from '@/lib/market/duplicate';
+import { invitation, rank, type OwnerRow } from '@/lib/market/owners';
 import {
   awayFromMarket, median, quantile, rateFromPairs, valuate, type Comparable,
 } from '@/lib/market/valuation';
@@ -3252,6 +3255,149 @@ export default {
     });
     check('«сравнивать не с чем» отличается от «не нашлось»',
       noCompare.comparable === false && noCompare.found.length === 0);
+
+
+    // -----------------------------------------------------------------
+    // Поиск собственников
+    // -----------------------------------------------------------------
+
+    // Дата публикации берётся со страницы объявления: в выдаче написано,
+    // когда объявление ПОДНЯЛИ, а не когда подали. Поднятое сегодня
+    // может висеть с весны — и именно такой продавец устал продавать сам.
+    const listingHtml = '<script type="application/ld+json">'
+      + '{"@context":"https://schema.org","@type":"RealEstateListing",'
+      + '"datePosted":"2026-11-11T11:36:17",'
+      + '"about":{"geo":{"latitude":42.8251,"longitude":74.5832}}}</script>';
+    const parsedPage = parseListingPage(listingHtml);
+    check('дата публикации читается со страницы объявления',
+      parsedPage.postedAt === '2026-11-11T05:36:17.000Z',
+      String(parsedPage.postedAt));
+    check('координаты оттуда же',
+      parsedPage.latitude === 42.8251 && parsedPage.longitude === 74.5832);
+    check('страница без разметки не выдумывает дату',
+      parseListingPage('<html>пусто</html>').postedAt === null);
+
+    const ownerRow = (over: Partial<OwnerRow> = {}): OwnerRow => ({
+      id: crypto.randomUUID(), url: 'https://www.house.kg/details/o',
+      address: 'Чуй 120', rooms: 2, area: 60, priceUsd: 80000, priceKgs: null,
+      postedAt: null, firstSeenAt: new Date().toISOString(), bumped: false,
+      drops: 0, dropPercent: 0, ...over,
+    });
+
+    const nowMs = Date.UTC(2026, 10, 27, 12, 0, 0);
+    const longAgoIso = new Date(nowMs - 200 * 24 * 3600_000).toISOString();
+
+    // Свежее объявление без снижения — обычный продавец, полный надежд.
+    // Звонить ему не за чем, и в списке его быть не должно.
+    check('свежее объявление без признаков в список не идёт',
+      rank([ownerRow({ firstSeenAt: new Date(nowMs).toISOString() })], nowMs).length === 0);
+
+    const ownerOld = rank([ownerRow({ postedAt: longAgoIso })], nowMs)[0];
+    check('давний срок — признак, и он назван словами',
+      ownerOld?.signals.some((x) => x.text.includes('полугода')) === true,
+      JSON.stringify(ownerOld?.signals));
+    check('срок считается от публикации, а не от нашего обхода',
+      ownerOld?.daysFrom === 'публикация' && ownerOld?.days === 200,
+      JSON.stringify({ from: ownerOld?.daysFrom, days: ownerOld?.days }));
+
+    // Своей даты нет — считаем от первой встречи, НО говорим об этом:
+    // настоящий срок может быть больше.
+    const seenOnly = rank([ownerRow({ firstSeenAt: longAgoIso })], nowMs)[0];
+    check('без своей даты срок считается от обхода и это названо',
+      seenOnly?.daysFrom === 'наш обход' && seenOnly?.days === 200,
+      JSON.stringify({ from: seenOnly?.daysFrom, days: seenOnly?.days }));
+
+    const ownerDropped = rank([ownerRow({ drops: 2, dropPercent: 12 })], nowMs)[0];
+    check('снижение цены названо числом и количеством раз',
+      ownerDropped?.signals[0]?.text.includes('снижалась 2 раза, всего на 12%') === true,
+      JSON.stringify(ownerDropped?.signals));
+
+    // Уступка в 40% чаще означает, что объявление начиналось с фантазии,
+    // а не что продавец сговорчив. Поэтому вес ограничен.
+    const ownerHuge = rank([ownerRow({ drops: 1, dropPercent: 60 })], nowMs)[0];
+    const ownerModest = rank([ownerRow({ drops: 1, dropPercent: 20 })], nowMs)[0];
+    check('огромная уступка не перевешивает всё остальное',
+      ownerHuge?.score === ownerModest?.score,
+      JSON.stringify({ ownerHuge: ownerHuge?.score, ownerModest: ownerModest?.score }));
+
+    const ownerOrder = rank([
+      ownerRow({ id: 'слабый', bumped: true }),
+      ownerRow({ id: 'сильный', postedAt: longAgoIso, drops: 1, dropPercent: 10, bumped: true }),
+    ], nowMs);
+    check('сверху тот, у кого признаков больше',
+      ownerOrder[0]?.row.id === 'сильный',
+      ownerOrder.map((l) => `${l.row.id}:${l.score}`).join(' '));
+
+    // Черновик письма собирается ИЗ ФАКТОВ. Выдуманная в нём деталь —
+    // «вижу, вы давно продаёте» про объявление недельной давности —
+    // стоит сделки и репутации.
+    const letterOld = invitation(ownerOld!, 'Liberterra', 'Анна');
+    check('в письме стоит настоящий срок',
+      letterOld.includes('200 дн. назад') && letterOld.includes('Анна'),
+      letterOld.slice(0, 120));
+
+    const ownerFresh = rank([ownerRow({ drops: 1, dropPercent: 5 })], nowMs)[0];
+    const letterFresh = invitation(ownerFresh!, 'Liberterra', 'Анна');
+
+    // Черновик не навязывает агенту род: половина агентов — женщины, и
+    // «увидел» в письме за подписью Анны читается как чужой текст.
+    check('в черновике нет глаголов, навязывающих род',
+      !letterOld.includes('Увидел') && !letterOld.includes('Вижу'),
+      letterOld.slice(0, 140));
+    check('свежему объявлению не приписывается долгий срок',
+      !letterFresh.includes('дн. назад') && letterFresh.includes('Цену вы уже снижали'),
+      letterFresh.slice(0, 160));
+
+    // --- по настоящей базе -------------------------------------------
+
+    const seedOwner = async (sourceId: string, seller: string, posted: string | null) => {
+      const oid = crypto.randomUUID();
+      await db.prepare(
+        `insert into market_listings
+           (id, source, source_id, url, deal_type, kind, city, address, rooms, area,
+            price_usd_minor, price_kgs_minor, seller_kind, search_text, posted_at,
+            first_seen_at, last_seen_at)
+         values (?, 'house.kg', ?, 'https://www.house.kg/details/' || ?, 'sale', 'flat',
+                 'Каракол', 'Гагарина 7', 2, 60, ?, null, ?, 'гагарина', ?, ?, ?)`,
+      ).bind(oid, sourceId, sourceId, 50000_00, seller, posted, longAgoIso, iso()).run();
+      return oid;
+    };
+
+    const ownerId = await seedOwner('own-1', 'owner', null);
+    await seedOwner('ag-1', 'agency', null);
+
+    const queue = await ownersWithoutDate(10);
+    check('в очередь за датой идут только собственники',
+      queue.some((q) => q.id === ownerId) && queue.length >= 1
+      && !queue.some((q) => q.url.includes('ag-1')),
+      JSON.stringify(queue.map((q) => q.url)));
+
+    // Объявление, у которого даты нет на странице, не должно попадать в
+    // очередь каждую ночь и съедать весь проход.
+    await setListingPage(ownerId, { postedAt: null, latitude: null, longitude: null });
+    const queueAgain = await ownersWithoutDate(10);
+    check('объявление без даты не встаёт в очередь навсегда',
+      !queueAgain.some((q) => q.id === ownerId),
+      JSON.stringify(queueAgain.map((q) => q.url)));
+
+    // Снижение цены считается по НАШЕЙ истории.
+    await db.prepare(
+      `insert into market_prices (id, listing_id, price_usd_minor, price_kgs_minor, seen_at)
+       values (?, ?, ?, null, ?)`,
+    ).bind(crypto.randomUUID(), ownerId, 60000_00, longAgoIso).run();
+    await db.prepare(
+      `insert into market_prices (id, listing_id, price_usd_minor, price_kgs_minor, seen_at)
+       values (?, ?, ?, null, ?)`,
+    ).bind(crypto.randomUUID(), ownerId, 50000_00, iso()).run();
+
+    const karakol = await ownerLeads({ deal: 'sale', kind: 'flat', city: 'Каракол', zone: null });
+    check('в списке только собственники, агентств там нет',
+      karakol.length === 1, String(karakol.length));
+    check('снижение цены посчитано по нашей истории',
+      karakol[0]?.row.drops === 1 && karakol[0]?.row.dropPercent === 17,
+      JSON.stringify({ d: karakol[0]?.row.drops, p: karakol[0]?.row.dropPercent }));
+    check('«—» в дате не выдаётся за дату публикации',
+      karakol[0]?.daysFrom === 'наш обход', String(karakol[0]?.daysFrom));
 
     } catch (e) {
       // Падение посреди набора — это тоже результат, и он должен быть виден

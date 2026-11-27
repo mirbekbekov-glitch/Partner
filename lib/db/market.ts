@@ -1,5 +1,5 @@
 import 'server-only';
-import { all, batch, from_now, newId, now, one, stmt } from './sql';
+import { all, batch, from_now, newId, now, one, run, stmt } from './sql';
 import { searchText } from './normalize';
 import { MINOR } from './money';
 import type { DealType, Kind, MarketCard } from '@/lib/market/house-kg';
@@ -8,6 +8,7 @@ import {
   type Comparable, type Valuation, type Widening,
 } from '@/lib/market/valuation';
 import { resembleAll, type Resemblance } from '@/lib/market/duplicate';
+import { rank, type OwnerLead } from '@/lib/market/owners';
 
 /**
  * Индекс рынка: запись наблюдений за чужими объявлениями.
@@ -485,4 +486,127 @@ export async function marketLookalikes(ours: {
       rate,
     ),
   };
+}
+
+/**
+ * Кому из собственников ещё не известна дата публикации.
+ *
+ * Только собственники и только живые: дата нужна поиску собственников, а
+ * ходить за ней для каждого объявления значило бы сорокакратный трафик
+ * ради поля, которое нужно сотне строк из тысячи.
+ */
+export async function ownersWithoutDate(limit: number): Promise<Array<{ id: string; url: string }>> {
+  return all<{ id: string; url: string }>(
+    `select id, url from market_listings
+      where source = ? and seller_kind = 'owner'
+        and gone_at is null and posted_at is null
+      order by first_seen_at desc
+      limit ?`,
+    HOUSE_KG, limit,
+  );
+}
+
+/** Записать прочитанное со страницы объявления. */
+export async function setListingPage(
+  id: string,
+  page: { postedAt: string | null; latitude: number | null; longitude: number | null },
+): Promise<void> {
+  // Дата пишется даже пустая — иначе объявление, у которого её нет,
+  // попадало бы в очередь каждую ночь и съедало бы весь лимит прохода.
+  await run(
+    `update market_listings
+        set posted_at = coalesce(?, '—'), latitude = ?, longitude = ?
+      where id = ?`,
+    page.postedAt, page.latitude, page.longitude, id,
+  );
+}
+
+/** Фильтры списка собственников. */
+export type OwnerFilter = {
+  deal: DealType;
+  kind: Kind;
+  city: string;
+  zone: string | null;
+};
+
+/**
+ * Собственники, которым есть смысл звонить.
+ *
+ * Признаки готовности считает lib/market/owners.ts; здесь только сбор
+ * данных: сами объявления и их история цен.
+ */
+export async function ownerLeads(filter: OwnerFilter): Promise<OwnerLead[]> {
+  const rows = await all<{
+    id: string; url: string; address: string | null; rooms: number | null;
+    area: number | null; price_usd_minor: number | null; price_kgs_minor: number | null;
+    posted_at: string | null; first_seen_at: string; bumped: number; search_text: string;
+  }>(
+    `select id, url, address, rooms, area, price_usd_minor, price_kgs_minor,
+            posted_at, first_seen_at, bumped, search_text
+       from market_listings
+      where source = ? and deal_type = ? and kind = ? and city = ?
+        and seller_kind = 'owner' and gone_at is null
+      limit 500`,
+    HOUSE_KG, filter.deal, filter.kind, filter.city,
+  );
+
+  const zoneKey = filter.zone ? searchText(filter.zone) : '';
+  const picked = zoneKey === ''
+    ? rows
+    : rows.filter((r) => r.search_text.includes(zoneKey));
+
+  if (picked.length === 0) return [];
+
+  // История цен одним запросом на всех, а не запросом на строку.
+  const prices = new Map<string, number[]>();
+  const ids = picked.map((r) => r.id);
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const rowsPrices = await all<{ listing_id: string; usd: number | null; kgs: number | null }>(
+      `select listing_id, price_usd_minor as usd, price_kgs_minor as kgs
+         from market_prices
+        where listing_id in (${chunk.map(() => '?').join(', ')})
+        order by seen_at`,
+      ...chunk,
+    );
+    for (const p of rowsPrices) {
+      const value = p.usd ?? p.kgs;
+      if (value === null) continue;
+      const list = prices.get(p.listing_id) ?? [];
+      list.push(value);
+      prices.set(p.listing_id, list);
+    }
+  }
+
+  return rank(
+    picked.map((r) => {
+      const history = prices.get(r.id) ?? [];
+      let drops = 0;
+      for (let i = 1; i < history.length; i++) {
+        if (history[i] < history[i - 1]) drops++;
+      }
+      const first = history[0] ?? 0;
+      const last = history[history.length - 1] ?? 0;
+      const dropPercent = first > 0 && last < first
+        ? Math.round(((first - last) / first) * 100)
+        : 0;
+
+      return {
+        id: r.id,
+        url: r.url,
+        address: r.address,
+        rooms: r.rooms,
+        area: r.area,
+        priceUsd: r.price_usd_minor === null ? null : r.price_usd_minor / 100,
+        priceKgs: r.price_kgs_minor === null ? null : r.price_kgs_minor / 100,
+        // «—» означает «ходили, даты там нет»: такую не считаем.
+        postedAt: r.posted_at === '—' ? null : r.posted_at,
+        firstSeenAt: r.first_seen_at,
+        bumped: r.bumped === 1,
+        drops,
+        dropPercent,
+      };
+    }),
+    Date.now(),
+  );
 }

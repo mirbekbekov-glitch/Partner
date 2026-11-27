@@ -82,7 +82,7 @@ for (const file of readdirSync(schemaDir).filter((f) => /^\d+_.*\.sql$/.test(f))
 
 console.log('  идёт обход, это примерно минута…\n');
 const response = await mf.dispatchFetch('http://test/');
-const { report, rows, sample } = await response.json();
+const { report, rows, sample, dates } = await response.json();
 await mf.dispose();
 
 for (const s of report.sections) {
@@ -103,5 +103,10 @@ for (const r of rows) {
   );
 }
 console.log('\n  образец:', JSON.stringify(sample[0]));
-console.log(`\n  живых в индексе: ${report.live}, площадка ${report.unreachable ? 'НЕ ОТВЕТИЛА' : 'ответила'}`);
+if (dates?.length) {
+  console.log('\n  даты публикации у собственников:');
+  for (const d of dates) console.log(`    ${d.posted_at} — ${d.address ?? ''}`);
+}
+console.log(`\n  живых в индексе: ${report.live}, дат публикации получено: ${report.dated}`);
+console.log(`  площадка ${report.unreachable ? 'НЕ ОТВЕТИЛА' : 'ответила'}`);
 process.exit(report.unreachable || report.live === 0 ? 1 : 0);

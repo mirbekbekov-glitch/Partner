@@ -1,9 +1,12 @@
 import 'server-only';
 import {
-  SECTIONS, TOWNS, bumpedAt, fetchSearchPage, parseSearchPage, searchUrl,
-  type MarketCard,
+  SECTIONS, TOWNS, bumpedAt, fetchSearchPage, parseListingPage, parseSearchPage,
+  searchUrl, type MarketCard,
 } from './house-kg';
-import { markGone, marketSize, saveCards, type SectionReport } from '@/lib/db/market';
+import {
+  markGone, marketSize, ownersWithoutDate, saveCards, setListingPage,
+  type SectionReport,
+} from '@/lib/db/market';
 import { now } from '@/lib/db/sql';
 
 /**
@@ -27,6 +30,20 @@ import { now } from '@/lib/db/sql';
  * спешить некуда: прогон ночной, и секунда на страницу ничего не стоит.
  */
 
+/**
+ * Сколько страниц объявлений читаем за прогон ради даты публикации.
+ *
+ * Дата нужна только поиску собственников и берётся не из выдачи, а со
+ * страницы самого объявления: в выдаче написано, когда объявление
+ * ПОДНЯЛИ, а не когда подали. Разница решающая — поднятое сегодня может
+ * висеть с весны.
+ *
+ * Сорок за ночь, а не все сразу: это сорок лишних запросов к чужому
+ * сайту вдобавок к обходу выдачи. Очередь разбирается за несколько
+ * ночей, и спешить некуда — дата публикации не протухает.
+ */
+const LISTINGS_PER_RUN = 40;
+
 /** Сколько страниц читаем в разделе за прогон. */
 const PAGES_PER_SECTION = 5;
 
@@ -43,9 +60,35 @@ export type CrawlReport = {
   live: number;
   /** Сколько помечено исчезнувшими за всё время. */
   goneTotal: number;
+  /** Сколько объявлений собственников получили дату публикации. */
+  dated: number;
   /** Площадка не ответила ни на один запрос — обход ничего не сделал. */
   unreachable: boolean;
 };
+
+/**
+ * Дата публикации для собственников: отдельный проход по страницам
+ * объявлений.
+ *
+ * Идёт ПОСЛЕ обхода выдачи и только для тех, кто похож на собственника:
+ * остальным эта дата не нужна, а трафик чужого сайта не бесплатный.
+ */
+async function datePublications(limit: number): Promise<number> {
+  const queue = await ownersWithoutDate(limit);
+  let dated = 0;
+
+  for (const item of queue) {
+    await pause(PAUSE_MS);
+    const html = await fetchSearchPage(item.url);
+    if (html === null) continue;
+
+    const page = parseListingPage(html);
+    await setListingPage(item.id, page);
+    if (page.postedAt) dated++;
+  }
+
+  return dated;
+}
 
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -119,6 +162,11 @@ export async function crawlMarket(): Promise<CrawlReport> {
     }
   }
 
+  // Дата публикации — только если выдача вообще читалась. Когда
+  // площадка лежит, незачем долбиться к ней ещё сорок раз подряд.
+  const anyPages = sections.some((s) => s.pages > 0);
+  const dated = anyPages ? await datePublications(LISTINGS_PER_RUN) : 0;
+
   const size = await marketSize();
   return {
     startedAt,
@@ -128,6 +176,7 @@ export async function crawlMarket(): Promise<CrawlReport> {
     gone: sections.reduce((n, s) => n + s.gone, 0),
     live: size.live,
     goneTotal: size.gone,
+    dated,
     // Ни одна страница не прочиталась — значит площадка закрылась или
     // сменила адреса. Это отдельный ответ, а не «прогон прошёл, нашли 0»:
     // ноль по недоступности и ноль по пустому рынку лечатся по-разному.

@@ -7,6 +7,7 @@ import {
   Activity,
   Building2,
   Calculator,
+  PhoneCall,
   CalendarCheck,
   FileText,
   Handshake,
@@ -42,6 +43,7 @@ const ITEMS = [
   { href: '/cabinet/leads', label: 'По объектам', icon: Activity },
   { href: '/cabinet/requests', label: 'Заявки', icon: Inbox },
   { href: '/cabinet/assistant', label: 'Оценка', icon: Calculator },
+  { href: '/cabinet/owners', label: 'Собственники', icon: PhoneCall },
 ] as const;
 
 export function CabinetSidebar({

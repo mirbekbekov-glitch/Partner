@@ -33,6 +33,14 @@ export default {
       `select url, address, price_kgs_minor from market_listings limit 3`,
     );
 
-    return Response.json({ report, rows, sample });
+    // Что получил проход за датой публикации: это новая часть обхода,
+    // и смотреть на неё надо отдельно от выдачи.
+    const dates = await all<{ posted_at: string | null; address: string | null }>(
+      `select posted_at, address from market_listings
+        where seller_kind = 'owner' and posted_at is not null and posted_at <> '—'
+        order by posted_at limit 5`,
+    );
+
+    return Response.json({ report, rows, sample, dates });
   },
 };

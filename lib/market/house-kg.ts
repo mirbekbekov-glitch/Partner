@@ -509,3 +509,62 @@ export async function fetchSearchPage(url: string): Promise<string | null> {
     return null;
   }
 }
+
+/** Что берётся со страницы самого объявления, а не из выдачи поиска. */
+export type ListingPage = {
+  /** Когда объявление опубликовано. Главный сигнал «висит давно». */
+  postedAt: string | null;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+/**
+ * Разбор страницы объявления.
+ *
+ * ЗАЧЕМ ОТДЕЛЬНО ОТ ВЫДАЧИ. В выдаче поиска даты публикации нет: там
+ * написано «4 часа назад», и это когда объявление ПОДНЯЛИ, а не когда
+ * подали. Разница решающая: поднятое сегодня объявление может висеть с
+ * весны, и именно такой продавец устал продавать сам.
+ *
+ * Страница объявления отдаёт `datePosted` в своей же разметке для
+ * поисковиков — то есть площадка публикует эту дату намеренно.
+ *
+ * ТЕЛЕФОН ОТСЮДА НЕ БЕРЁТСЯ, хотя соблазн есть. Площадка его прячет
+ * («+996 500 …») и открывает по нажатию — это её решение о чужих личных
+ * данных, и обходить его ради удобства списка обзвона мы не станем.
+ * Агент открывает объявление и нажимает «показать», как сделал бы любой
+ * человек.
+ */
+export function parseListingPage(html: string): ListingPage {
+  const empty: ListingPage = { postedAt: null, latitude: null, longitude: null };
+
+  for (const m of html.matchAll(/type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)) {
+    let data: unknown;
+    try {
+      data = JSON.parse(m[1]);
+    } catch {
+      continue;
+    }
+
+    const node = data as {
+      '@type'?: string;
+      datePosted?: string;
+      about?: { geo?: { latitude?: number; longitude?: number } };
+    };
+    if (node['@type'] !== 'RealEstateListing') continue;
+
+    const posted = typeof node.datePosted === 'string' ? node.datePosted : null;
+    const geo = node.about?.geo;
+
+    return {
+      // Площадка пишет время без часового пояса. Считаем его бишкекским
+      // (UTC+6): это её время, и сдвигать его на UTC означало бы
+      // состарить объявление на шесть часов ни за что.
+      postedAt: posted ? new Date(`${posted}+06:00`).toISOString() : null,
+      latitude: typeof geo?.latitude === 'number' ? geo.latitude : null,
+      longitude: typeof geo?.longitude === 'number' ? geo.longitude : null,
+    };
+  }
+
+  return empty;
+}
