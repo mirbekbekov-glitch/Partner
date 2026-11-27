@@ -195,7 +195,7 @@ async function requireOwnContact(id: string): Promise<ContactRow> {
   if (!row) throw new NotFound('Контакт не найден');
 
   if (row.owner_agent_id !== agent.id && !(await isAdmin())) {
-    throw new Forbidden('Править контакт может тот, кто его ведёт, или админ');
+    throw new Forbidden('Редактировать контакт может тот, кто его ведёт, или администратор');
   }
   return row;
 }

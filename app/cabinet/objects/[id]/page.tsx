@@ -124,7 +124,7 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
       {canEdit === true ? (
         <div className="actions" style={{ marginBottom: 4 }}>
           <Link className="btn" href={`/cabinet/objects/${object.id}/edit`}>
-            Править объект
+            Редактировать
           </Link>
         </div>
       ) : null}
@@ -145,7 +145,7 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
               idValue={object.id}
               colleagues={(colleagues ?? []) as Colleague[]}
               what="объект"
-              warning="Объект и активный мандат перейдут коллеге — вместе с долей listing-агента в комиссии. Править его вы больше не сможете."
+              warning="Объект и активный мандат перейдут коллеге — вместе с долей listing-агента в комиссии. Редактировать его вы больше не сможете."
             />
           </div>
         </>
