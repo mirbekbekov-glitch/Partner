@@ -100,6 +100,9 @@ type Dict = {
   reqConsent: string; reqConsentHint: string;
   reqSend: string; reqSending: string; reqSent: string; reqSentNote: string;
   reqErrPhone: string; reqErrInput: string; reqErrMany: string; reqErrGeneric: string;
+  /** Бюджет ниже рынка: порог и на скольки объявлениях он стоит. */
+  reqLowBudget: (floor: string, basedOn: number) => string;
+  reqUseFloor: string;
   reqWhy1: string; reqWhy2: string; reqWhy3: string;
   // Типы недвижимости
   kinds: Record<string, string>;
@@ -211,6 +214,11 @@ const ru: Dict = {
   reqSentNote: 'Агент свяжется с вами в течение часа. Если найдём раньше — позвоним раньше.',
   reqErrPhone: 'Проверьте номер телефона: по нему с вами свяжутся.',
   reqErrInput: 'Проверьте заполненные поля.',
+  reqLowBudget: (floor, basedOn) =>
+    `По такой цене в этом районе нет ни одного варианта: самое дешёвое — ${floor}`
+    + ` (по ${basedOn} объявлениям в каталоге). Укажите хотя бы эту сумму —`
+    + ` так агент начнёт искать, а не объяснять, почему не находит.`,
+  reqUseFloor: 'Подставить эту сумму',
   reqErrMany: 'С этого номера сегодня уже несколько заявок. Позвоните нам напрямую.',
   reqErrGeneric: 'Не удалось отправить заявку. Попробуйте ещё раз.',
   reqWhy1: 'Отвечаем в течение часа',
@@ -317,6 +325,10 @@ const ky: Dict = {
   reqSentNote: 'Агент бир сааттын ичинде байланышат. Эртерээк тапсак — эртерээк чалабыз.',
   reqErrPhone: 'Телефон номерин текшериңиз: ушул номер аркылуу байланышабыз.',
   reqErrInput: 'Толтурулган талааларды текшериңиз.',
+  reqLowBudget: (floor, basedOn) =>
+    `Мындай баада бул районда бир дагы вариант жок: эң арзаны — ${floor}`
+    + ` (каталогдогу ${basedOn} жарнама боюнча).`,
+  reqUseFloor: 'Ушул сумманы коюу',
   reqErrMany: 'Бул номерден бүгүн бир нече арыз келди. Бизге түз чалыңыз.',
   reqErrGeneric: 'Арызды жөнөтүү мүмкүн болгон жок. Кайра аракет кылыңыз.',
   reqWhy1: 'Бир сааттын ичинде жооп беребиз',
@@ -423,6 +435,10 @@ const en: Dict = {
   reqSentNote: 'An agent will contact you within the hour. If we find something sooner, we call sooner.',
   reqErrPhone: 'Check the phone number — the agent will call you on it.',
   reqErrInput: 'Please check the fields you filled in.',
+  reqLowBudget: (floor, basedOn) =>
+    `There is nothing at that price in this district: the cheapest is ${floor}`
+    + ` (based on ${basedOn} listings in the catalogue).`,
+  reqUseFloor: 'Use this amount',
   reqErrMany: 'Several requests from this number today already. Please call us directly.',
   reqErrGeneric: 'The request could not be sent. Please try again.',
   reqWhy1: 'We answer within the hour',
@@ -529,6 +545,9 @@ const zh: Dict = {
   reqSentNote: '经纪人将在一小时内与您联系；若更早找到合适房源，会更早致电。',
   reqErrPhone: '请检查电话号码，经纪人将拨打此号码。',
   reqErrInput: '请检查已填写的内容。',
+  reqLowBudget: (floor, basedOn) =>
+    `该区域没有这个价位的房源，最低为 ${floor}（依据目录中的 ${basedOn} 条房源）。`,
+  reqUseFloor: '使用该金额',
   reqErrMany: '该号码今天已提交多次。请直接致电我们。',
   reqErrGeneric: '提交失败，请重试。',
   reqWhy1: '一小时内回复',

@@ -31,7 +31,7 @@ import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/acti
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import {
   catalogAgent, catalogAgentById, catalogAgents, catalogCities, catalogCount,
-  catalogCurrencies, catalogObject, catalogPage, catalogRate,
+  catalogCurrencies, catalogObject, catalogPage, catalogRate, priceFloor,
   catalogZoneCounts, catalogZones,
 } from '@/lib/db/catalog';
 import {
@@ -42,6 +42,7 @@ import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
 import { mhouseXml } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
+import { submitRequest } from '@/lib/db/requests';
 import { convert, parseNbkr } from '@/lib/fx';
 import { contactLinks, phoneDigits } from '@/lib/contact-links';
 import { refreshRates, usdRate } from '@/lib/db/fx';
@@ -82,7 +83,7 @@ import { commissionShares, commissionTotal } from '@/lib/db/commission';
 import { normalizePhone } from '@/lib/db/normalize';
 import { draftsFromCatalog, parseCsv } from '@/lib/catalog-csv';
 import { importCatalog, IMPORT_SOURCE } from '@/lib/db/catalog-import';
-import { Conflict, Forbidden, Invalid, NotFound } from '@/lib/db/errors';
+import { BudgetTooLow, Conflict, Forbidden, Invalid, NotFound } from '@/lib/db/errors';
 
 type Result = { name: string; ok: boolean; note?: string };
 const results: Result[] = [];
@@ -589,6 +590,110 @@ export default {
 
     check('номер приводится к международному виду',
       phoneDigits('0700 11 22 33') === '996700112233');
+
+    // -----------------------------------------------------------------
+    // Порог рынка: заявку ниже самого дешёвого объявления не принимаем
+    // -----------------------------------------------------------------
+    // Пять однокомнатных в Джале по 30 000–50 000 сом. Пять — ровно
+    // столько, сколько нужно, чтобы порог вообще появился.
+    await loginAs(db, anna);
+    const market: string[] = [];
+    for (const price of [30_000_00, 35_000_00, 40_000_00, 45_000_00, 50_000_00]) {
+      const o = await createObject({
+        kind: 'flat', deal_type: 'rent', address: `Джалская ${price}`,
+        zone: 'Джал', price_minor: price, currency: 'KGS',
+      });
+      await createMandate({ object_id: o.id, kind: 'non_exclusive' });
+      await publishObject(o.id);
+      market.push(o.id);
+    }
+
+    const floor = await priceFloor({ deal: 'rent', kind: 'flat', zone: 'Джал' });
+    check('порог равен самой дешёвой цене, а не средней',
+      floor?.floor_minor === 30_000_00, String(floor?.floor_minor));
+    check('и видно, по скольки объявлениям он посчитан',
+      floor?.based_on === 5, String(floor?.based_on));
+    check('валюта порога — валюта объявлений', floor?.currency === 'KGS');
+
+    // Мало данных — порога нет. Запрет по незнанию хуже отсутствия
+    // запрета: в этом срезе рынок нам неизвестен.
+    //
+    // Район с ТРЕМЯ объявлениями, а не с нулём: на нуле проверка прошла бы
+    // и без порога по числу — порога там нет просто потому, что нечего
+    // считать. Это показала мутация.
+    const thin: string[] = [];
+    for (const price of [60_000_00, 70_000_00, 80_000_00]) {
+      const o = await createObject({
+        kind: 'flat', deal_type: 'rent', address: `Тонкая ${price}`,
+        zone: 'Тонкий', price_minor: price, currency: 'KGS',
+      });
+      await createMandate({ object_id: o.id, kind: 'non_exclusive' });
+      await publishObject(o.id);
+      thin.push(o.id);
+    }
+    check('по трём объявлениям порога нет — выборка слишком мала',
+      (await priceFloor({ deal: 'rent', kind: 'flat', zone: 'Тонкий' })) === null);
+    check('и такая заявка проходит',
+      Boolean(await submitRequest({
+        phone: '0555 77 66 52', deal: 'rent', housing_type: 'flat',
+        district: 'Тонкий', budget_minor: 1_000_00, budget_currency: 'KGS',
+      })));
+    for (const id of thin) {
+      await db.prepare('delete from mandates where object_id = ?').bind(id).run();
+      await db.prepare('delete from objects where id = ?').bind(id).run();
+    }
+
+    check('и по виду жилья, которого в каталоге нет',
+      (await priceFloor({ deal: 'rent', kind: 'garage', zone: 'Джал' })) === null);
+
+    // Заявка ниже порога не принимается, и отказ несёт ЧИСЛА: форме нужен
+    // порог и число объявлений, а не фраза, из которой их не достать.
+    let low: unknown = null;
+    try {
+      await submitRequest({
+        phone: '0555 77 66 55', deal: 'rent', housing_type: 'flat',
+        district: 'Джал', budget_minor: 20_000_00, budget_currency: 'KGS',
+      });
+    } catch (e) { low = e; }
+
+    check('заявка с бюджетом ниже рынка отклонена', low instanceof BudgetTooLow);
+    check('и в отказе есть сам порог',
+      (low as BudgetTooLow)?.floor === 30_000, String((low as BudgetTooLow)?.floor));
+    check('и число объявлений, на которых он стоит',
+      (low as BudgetTooLow)?.basedOn === 5);
+
+    // А ровно по порогу — принимается: «дешевле нет» не значит «нет».
+    // Через try: если порог начнёт отсекать и равные, исключение оборвало
+    // бы прогон раньше этой строки, и красный прогон сказал бы «что-то
+    // упало» вместо «порог отсекает лишнее».
+    let atFloor: string | null = null;
+    let atFloorWhy: string | null = null;
+    try {
+      atFloor = await submitRequest({
+        phone: '0555 77 66 54', deal: 'rent', housing_type: 'flat',
+        district: 'Джал', budget_minor: 30_000_00, budget_currency: 'KGS',
+      });
+    } catch (e) { atFloorWhy = e instanceof Error ? e.message : String(e); }
+    check('заявка ровно по порогу принимается', Boolean(atFloor), atFloorWhy ?? '');
+
+    // Бюджет в другой валюте порогом не отсекается: сравнивать 200
+    // долларов с 30 000 сомов как числа нельзя, а курса у витрины может и
+    // не быть. Лучше принять заявку, чем отказать по неверному сравнению.
+    let otherMoney: string | null = null;
+    let otherWhy: string | null = null;
+    try {
+      otherMoney = await submitRequest({
+        phone: '0555 77 66 53', deal: 'rent', housing_type: 'flat',
+        district: 'Джал', budget_minor: 200_00, budget_currency: 'USD',
+      });
+    } catch (e) { otherWhy = e instanceof Error ? e.message : String(e); }
+    check('бюджет в другой валюте порогом не отсекается',
+      Boolean(otherMoney), otherWhy ?? '');
+
+    for (const id of market) {
+      await db.prepare('delete from mandates where object_id = ?').bind(id).run();
+      await db.prepare('delete from objects where id = ?').bind(id).run();
+    }
 
     check('курса в пустой базе нет', (await usdRate()) === null);
     check('и витрина его тоже не выдумывает', (await catalogRate()) === null);
