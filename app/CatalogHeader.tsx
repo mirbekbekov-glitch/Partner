@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import type { Money } from '@/lib/fx';
+import { MoneySwitch } from './MoneySwitch';
 import Image from 'next/image';
 import { AGENCY_NAME } from '@/lib/agency';
 import { t, type Lang } from '@/lib/i18n';
@@ -22,7 +24,11 @@ import logoDark from '../public/liberterra-dark.png';
  * белое. Исходный блок красный целиком и на чёрном даёт 3.6 : 1 — для
  * имени агентства мало.
  */
-export function CatalogHeader({ lang }: { lang: Lang }) {
+export function CatalogHeader({ lang, money }: {
+  lang: Lang;
+  /** Валюта показа. Пусто — курс неизвестен, и переключателя нет. */
+  money?: Money | null;
+}) {
   const d = t(lang);
   return (
     <header className="nav">
@@ -45,6 +51,9 @@ export function CatalogHeader({ lang }: { lang: Lang }) {
           <Link href={`/${lang}/request`} className="nav-link">{d.reqNav}</Link>
         </nav>
         <span className="spacer" />
+        {/* Переключатель валюты стоит рядом с языком: оба про то, КАК
+            показывать, а не про то, что искать. */}
+        {money ? <MoneySwitch value={money} label={d.moneySwitch} /> : null}
         <ThemeSwitch label={d.themeSwitch} />
         <LangSwitcher lang={lang} />
         <Link href="/login" className="enter">

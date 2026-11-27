@@ -29,7 +29,7 @@ import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/acti
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import {
   catalogAgent, catalogAgentById, catalogAgents, catalogCities, catalogCount,
-  catalogCurrencies, catalogObject, catalogPage,
+  catalogCurrencies, catalogObject, catalogPage, catalogRate,
   catalogZoneCounts, catalogZones,
 } from '@/lib/db/catalog';
 import {
@@ -41,7 +41,7 @@ import { feedXml, inFeed } from '@/lib/feed';
 import { mhouseXml } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
 import { convert, parseNbkr } from '@/lib/fx';
-import { usdRate } from '@/lib/db/fx';
+import { refreshRates, usdRate } from '@/lib/db/fx';
 import { GET as exportContacts } from '@/app/cabinet/contacts/export/route';
 import {
   catalogHref, hasAnyFilter, parseCatalogFilters,
@@ -536,6 +536,91 @@ export default {
     check('третья валюта без курса — пусто', convert(100, 'EUR', 'KGS', 87.45) === null);
 
     check('курса в пустой базе нет', (await usdRate()) === null);
+    check('и витрина его тоже не выдумывает', (await catalogRate()) === null);
+
+    // Курс записывается и читается витриной вместе с датой: без даты
+    // пересчёт нечестен — человек вправе знать, насколько он свежий.
+    await db.prepare(
+      `insert into fx_rates (code, som_per_unit, as_of, fetched_at)
+       values ('USD', 87.45, '2026-11-28', ?)`,
+    ).bind(iso()).run();
+    check('витрина отдаёт курс', (await catalogRate())?.som_per_unit === 87.45);
+    check('и дату, на которую он объявлен',
+      (await catalogRate())?.as_of === '2026-11-28');
+
+    // Нацбанк недоступен — прежний курс остаётся. Это главное свойство:
+    // сайт показывает вчерашний курс с его датой, а не ноль и не падение.
+    const kept = await refreshRates();
+    check('неудачное подтягивание не трогает прежний курс',
+      (await usdRate())?.som_per_unit === 87.45, `записано ${kept}`);
+
+    // -----------------------------------------------------------------
+    // Отбор и порядок по цене считают в выбранной валюте
+    // -----------------------------------------------------------------
+    // Два объекта: дешёвый в долларах и дорогой в сомах. Как ЧИСЛА они
+    // идут в обратном порядке — 2 000 меньше 80 000, — и именно на этом
+    // ломался фильтр, пока он сравнивал сырые числа.
+    await loginAs(db, anna);
+    const inUsd = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Долларовая 1',
+      price_minor: 2_000_00, currency: 'USD',
+    });
+    const inSom = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Сомовая 1',
+      price_minor: 80_000_00, currency: 'KGS',
+    });
+    for (const id of [inUsd.id, inSom.id]) {
+      await createMandate({ object_id: id, kind: 'non_exclusive' });
+      await publishObject(id);
+    }
+
+    const RATE = 87.45;  // 2 000 $ = 174 900 сом, то есть дороже 80 000 сом
+
+    const cheapFirst = (await catalogPage({
+      deal: 'sale', sort: 'cheap', money: 'KGS', rate: RATE, pageSize: 60,
+    })).items.map((i) => i.address);
+    check('сомовый объект дешевле долларового, и порядок это знает',
+      cheapFirst.indexOf('Сомовая 1') < cheapFirst.indexOf('Долларовая 1'),
+      cheapFirst.join(' | '));
+
+    // А без курса порядок прежний, по сырым числам: 2 000 < 80 000.
+    const noRate = (await catalogPage({
+      deal: 'sale', sort: 'cheap', pageSize: 60,
+    })).items.map((i) => i.address);
+    check('без курса сравниваются сырые числа, как было',
+      noRate.indexOf('Долларовая 1') < noRate.indexOf('Сомовая 1'),
+      noRate.join(' | '));
+
+    // Отбор: «до 100 000 сомов» должен взять сомовый и отбросить
+    // долларовый, который в сомах стоит 174 900.
+    const upTo = (await catalogPage({
+      deal: 'sale', priceMax: 100_000, money: 'KGS', rate: RATE, pageSize: 60,
+    })).items.map((i) => i.address);
+    check('«до 100 000 сомов» берёт сомовый объект', upTo.includes('Сомовая 1'));
+    check('и отбрасывает долларовый — он в сомах дороже',
+      !upTo.includes('Долларовая 1'), upTo.join(' | '));
+
+    // «До 3 000 долларов» — наоборот: долларовый проходит, сомовый
+    // (915 долларов) тоже; а «до 500 долларов» не берёт ни одного.
+    const upToUsd = (await catalogPage({
+      deal: 'sale', priceMax: 3_000, money: 'USD', rate: RATE, pageSize: 60,
+    })).items.map((i) => i.address);
+    check('«до 3 000 долларов» берёт оба',
+      upToUsd.includes('Долларовая 1') && upToUsd.includes('Сомовая 1'),
+      upToUsd.join(' | '));
+
+    const tiny = (await catalogPage({
+      deal: 'sale', priceMax: 500, money: 'USD', rate: RATE, pageSize: 60,
+    })).items.map((i) => i.address);
+    check('«до 500 долларов» не берёт ни одного',
+      !tiny.includes('Долларовая 1') && !tiny.includes('Сомовая 1'),
+      tiny.join(' | '));
+
+    // Прибираем: дальше считаются объекты, и два лишних собьют счётчики.
+    for (const id of [inUsd.id, inSom.id]) {
+      await db.prepare('delete from mandates where object_id = ?').bind(id).run();
+      await db.prepare('delete from objects where id = ?').bind(id).run();
+    }
 
     // -----------------------------------------------------------------
     // Выгрузка в CSV: файл не должен исполняться в Excel

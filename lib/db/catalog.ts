@@ -103,19 +103,53 @@ export type CatalogQuery = {
   q?: string | null;
   /** Объекты одного агента — для его публичной страницы. */
   agent?: string | null;
+  /**
+   * Валюта, в которой человек смотрит цены, и курс к сому.
+   *
+   * Нужны отбору и порядку: без них «цена до» и «сначала дешёвые»
+   * сравнивают числа разных валют. Пусто означает «курса нет» — тогда
+   * сравниваются сырые числа, как было.
+   */
+  money?: 'USD' | 'KGS' | null;
+  rate?: number | null;
   sort?: 'fresh' | 'cheap' | 'big';
   page?: number;
   pageSize?: number;
 };
 
+/**
+ * Цена объекта, приведённая к сомам, — для отбора и порядка.
+ *
+ * Зачем приведение. Цены хранятся в своей валюте, и сравнивать их числом
+ * нельзя: 80 000 сомов дешевле 2 000 долларов, но как числа — наоборот.
+ * Пока весь каталог был в долларах, это не было видно; с первым объектом
+ * в сомах «до 100 000» смешало бы несмешиваемое, а «сначала дешёвые»
+ * поставило бы дорогое вперёд.
+ *
+ * К сомам, а не к долларам, потому что сом — валюта страны: объект без
+ * курса (а курс бывает неизвестен) остаётся на своём месте, если он уже
+ * в сомах, и это чаще верно, чем наоборот.
+ *
+ * Курс приходит параметром. Нет курса — приведения нет, и сравниваются
+ * сырые числа: ровно то, что было до этого. Хуже не станет, а выдуманный
+ * курс был бы хуже.
+ */
+function priceInSom(rate: number | null): string {
+  if (!rate || rate <= 0) return 'o.price_minor';
+  return `(case when o.currency = 'USD' then o.price_minor * ${Number(rate)}
+                else o.price_minor end)`;
+}
+
 /** Поля сортировки. Имя колонки берётся отсюда, а не из строки запроса. */
-const SORTS: Record<string, string> = {
-  // «Свежие» — по дате подтверждения, а не публикации: объявление, которое
-  // агент подтвердил вчера, полезнее того, что висит с лета.
-  fresh: 'o.actual_at desc',
-  cheap: 'o.price_minor asc',
-  big: 'o.area desc',
-};
+function sorts(rate: number | null): Record<string, string> {
+  return {
+    // «Свежие» — по дате подтверждения, а не публикации: объявление, которое
+    // агент подтвердил вчера, полезнее того, что висит с лета.
+    fresh: 'o.actual_at desc',
+    cheap: `${priceInSom(rate)} asc`,
+    big: 'o.area desc',
+  };
+}
 
 /**
  * Разбор поискового запроса.
@@ -163,12 +197,20 @@ function conditions(query: CatalogQuery): { clause: string; params: (string | nu
   if (query.zone) { where.push('o.zone = ?'); params.push(query.zone); }
   if (query.rooms) { where.push('o.rooms = ?'); params.push(query.rooms); }
 
-  // Цена приходит в основных единицах — так её вводит человек в фильтре.
+  // Цена приходит в основных единицах — так её вводит человек в фильтре,
+  // и В ТОЙ ВАЛЮТЕ, которую он выбрал. Обе стороны сравнения приводятся к
+  // сомам: иначе «до 100 000» у человека в сомах отрезало бы долларовые
+  // объекты по их долларовому числу.
+  const rate = query.rate && query.rate > 0 ? query.rate : null;
+  const column = priceInSom(rate);
+  const toSom = (v: number) =>
+    rate && query.money === 'USD' ? v * 100 * rate : v * 100;
+
   if (query.priceMin != null) {
-    where.push('o.price_minor >= ?'); params.push(query.priceMin * 100);
+    where.push(`${column} >= ?`); params.push(toSom(query.priceMin));
   }
   if (query.priceMax != null) {
-    where.push('o.price_minor <= ?'); params.push(query.priceMax * 100);
+    where.push(`${column} <= ?`); params.push(toSom(query.priceMax));
   }
 
   // Объекты агента — через АКТИВНЫЙ мандат, как и везде в витрине: ведёт
@@ -193,7 +235,8 @@ function conditions(query: CatalogQuery): { clause: string; params: (string | nu
 /** Список объектов витрины. */
 export async function catalogPage(query: CatalogQuery = {}): Promise<CatalogPage> {
   const { clause, params } = conditions(query);
-  const order = SORTS[query.sort ?? 'fresh'] ?? SORTS.fresh;
+  const table = sorts(query.rate ?? null);
+  const order = table[query.sort ?? 'fresh'] ?? table.fresh!;
 
   const size = Math.min(Math.max(query.pageSize ?? 12, 1), 60);
   const page = Math.max(query.page ?? 1, 1);
@@ -431,6 +474,26 @@ export async function catalogAgentById(id: string): Promise<CatalogAgentCard | n
        left join organizations org on org.id = ag.organization_id
       where ag.id = ? and ${AGENT_VISIBLE}`,
     id,
+  );
+}
+
+/**
+ * Курс доллара для показа цен — через витрину, а не напрямую.
+ *
+ * Казалось бы, курс не тайна и читать его можно откуда угодно. Но правило
+ * «публичная часть ходит только в витрину» держится проверкой, и дыра в
+ * нём ради безобидного курса — это дыра. Завтра кто-то тем же приёмом
+ * прочитает из публичной страницы кабинетный модуль, и проверка промолчит,
+ * потому что однажды её уже обошли.
+ *
+ * Поэтому курс отдаётся отсюда. Состав тот же: сколько сомов за доллар и
+ * на какую дату — дата обязана дойти до человека вместе с числом.
+ */
+export type CatalogRate = { som_per_unit: number; as_of: string };
+
+export async function catalogRate(): Promise<CatalogRate | null> {
+  return one<CatalogRate>(
+    `select som_per_unit, as_of from fx_rates where code = 'USD'`,
   );
 }
 

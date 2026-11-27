@@ -1,15 +1,17 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import {
-  catalogCities, catalogCount, catalogCurrencies, catalogPage, catalogZoneCounts,
+  catalogCities, catalogCount, catalogCurrencies, catalogPage, catalogRate,
+  catalogZoneCounts,
 } from '@/lib/db/catalog';
 import { GEO, citiesOf, regionOf, zonesOf } from '@/lib/geo';
 import {
   CATALOG_PAGE_SIZE, parseCatalogFilters, catalogHref, sortHref, hasAnyFilter,
-  firstPhoto, daysSince, moneySign,
+  firstPhoto, daysSince, moneySign, priceView,
   SORTS, publicMoney, type CatalogFilters,
 } from '@/lib/catalog-params';
 import { thumbOf } from '@/lib/photo-url';
+import type { Money } from '@/lib/fx';
 import { t, kindName, freshWordIn, LANGS, isLang, type Lang, placeName } from '@/lib/i18n';
 import { CatalogHeader } from '../CatalogHeader';
 import { HeroArt } from '../HeroArt';
@@ -56,10 +58,12 @@ type Row = {
   actual_at: string;
 };
 
-function Search({ lang, f, deal, geo, currencies }: {
+function Search({ lang, f, deal, geo, currencies, money }: {
   lang: Lang; f: CatalogFilters; deal: 'sale' | 'rent'; geo: GeoData;
   /** Валюты каталога: одна — подписываем ею поле цены, несколько — нечем. */
   currencies: string[];
+  /** Выбранная валюта показа, если курс известен. */
+  money: Money | null;
 }) {
   const d = t(lang);
   const up = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
@@ -130,8 +134,13 @@ function Search({ lang, f, deal, geo, currencies }: {
             {/* Валюта в подписи, а не в подсказке: подсказка исчезает,
                 как только человек начинает набирать, и ровно тогда
                 вопрос «это доллары или сомы» и возникает. */}
+            {/* Валюта поля — выбранная человеком, если выбор возможен;
+                иначе единственная валюта каталога. Поле без валюты
+                оставляет гадать, вводить 800 или 70 000. */}
             <label htmlFor="to">
-              {d.priceTo}{currencies.length === 1 ? `, ${moneySign(lang, currencies[0]!)}` : ''}
+              {d.priceTo}
+              {money ? `, ${moneySign(lang, money)}`
+                : currencies.length === 1 ? `, ${moneySign(lang, currencies[0]!)}` : ''}
             </label>
             <input id="to" name="to" type="number" min={0} step={1000} placeholder={d.priceHint}
                    inputMode="numeric" defaultValue={f.priceMax ?? ''} />
@@ -195,6 +204,13 @@ export default async function Catalog({
   let rows: Row[] = [];
   let failed = false;
 
+  // Курс — до выборки: от него зависят и отбор по цене, и порядок.
+  // Нет курса — валюта показа не выбирается вовсе, и всё остаётся как
+  // было: цены в своей валюте, сравнение по сырым числам.
+  const fx = await catalogRate().catch(() => null);
+  const rate = fx?.som_per_unit ?? null;
+  const money: Money | null = rate ? (f.money ?? 'USD') : null;
+
   try {
     const page = await catalogPage({
       deal,
@@ -205,6 +221,8 @@ export default async function Catalog({
       rooms: f.rooms,
       priceMin: f.priceMin,
       priceMax: f.priceMax,
+      money,
+      rate,
       sort: f.sort,
       page: f.page,
       pageSize: CATALOG_PAGE_SIZE,
@@ -233,7 +251,7 @@ export default async function Catalog({
   const other: 'sale' | 'rent' = deal === 'sale' ? 'rent' : 'sale';
   const otherCount = failed || rows.length > 0 ? 0 : await catalogCount({
     deal: other, kind: f.kind, city: f.city, zone: f.zone, rooms: f.rooms,
-    priceMin: f.priceMin, priceMax: f.priceMax,
+    priceMin: f.priceMin, priceMax: f.priceMax, money, rate,
   }).catch(() => 0);
 
   // Валюта для подписи поля «цена до». Одна на весь каталог — подписываем
@@ -288,7 +306,7 @@ export default async function Catalog({
 
   return (
     <>
-      <CatalogHeader lang={lang} />
+      <CatalogHeader lang={lang} money={money} />
 
       <section className="hero">
         <HeroArt />
@@ -299,7 +317,8 @@ export default async function Catalog({
       </section>
 
       <div className="wrap">
-        <Search lang={lang} f={f} deal={deal} geo={geo} currencies={currencies} />
+        <Search lang={lang} f={f} deal={deal} geo={geo} currencies={currencies}
+                money={money} />
 
         {/* Районы строкой: самый частый первый шаг — «покажите, что есть
             в Асанбае». Это ссылки, а не украшение. */}
@@ -393,9 +412,17 @@ export default async function Catalog({
                   <div className="info">
                     <span className="price-row">
                       <span className="price num">
-                        {publicMoney(lang, o.price, o.currency)}
+                        {priceView(lang, o.price, o.currency, money, rate).main}
                         {o.deal_type === 'rent' ? <small>{d.perMonth}</small> : null}
                       </span>
+                      {/* Цена из объявления — рядом, мелко, и только
+                          когда крупное число получено пересчётом. */}
+                      {priceView(lang, o.price, o.currency, money, rate).note ? (
+                        <span className="price-orig">
+                          {priceView(lang, o.price, o.currency, money, rate).note}
+                          {' '}{d.priceFromAd}
+                        </span>
+                      ) : null}
                       {/* Отметка подтверждения — единственная, за которой есть
                           данные: её держит инвариант 5, а не маркетинг.
                           Галочка, а не точка: «сегодня» рядом с точкой не

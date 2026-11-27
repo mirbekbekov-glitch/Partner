@@ -1397,3 +1397,17 @@ a.agent-row:hover { background: var(--sunk); }
 .other-deal { margin: 0; font-size: 0.9375rem; }
 .other-deal a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .other-deal a:hover { text-decoration: underline; }
+
+/* Переключатель валюты: две кнопки в одной пилюле, как у языка. */
+.money-switch { display: inline-flex; border: 1px solid var(--line);
+  border-radius: var(--r-full); overflow: hidden; }
+.money-switch button { border: 0; background: transparent; color: var(--muted);
+  font: inherit; font-size: 0.8125rem; font-weight: 700; cursor: pointer;
+  padding: 7px 12px; transition: background .18s, color .18s; }
+.money-switch button:hover { color: var(--fg); }
+.money-switch button.on { background: var(--sunk); color: var(--fg); }
+/* Цена из объявления рядом с пересчитанной. Мелко и приглушённо: это
+   сноска к числу выше, а не второе число. */
+.price-orig { display: block; font-size: 0.8125rem; color: var(--muted);
+  margin: 2px 0 0; font-weight: 500; }
+.price-orig .key { display: block; font-size: 0.75rem; margin-top: 2px; }

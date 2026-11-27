@@ -1,8 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { catalogObject, catalogAgent } from '@/lib/db/catalog';
-import { allPhotos, firstPhoto, daysSince, publicMoney } from '@/lib/catalog-params';
+import { catalogObject, catalogAgent, catalogRate } from '@/lib/db/catalog';
+import {
+  allPhotos, firstPhoto, daysSince, publicMoney, priceView, parseCatalogFilters,
+} from '@/lib/catalog-params';
+import type { Money } from '@/lib/fx';
 import { t, kindName, freshWordIn, LOCALE, LANGS, isLang, type Lang } from '@/lib/i18n';
 import { AGENCY_PHONES } from '@/lib/agency';
 import { listingSchema } from '@/lib/listing-schema';
@@ -94,10 +97,18 @@ export async function generateMetadata(
 
 export default async function PublicObject({
   params,
+  searchParams,
 }: {
   params: Promise<{ lang: Lang; id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { lang, id } = await params;
+  // Валюта приходит тем же параметром, что и в каталоге: человек выбрал
+  // её там, перешёл сюда — и видит ту же.
+  const chosen = parseCatalogFilters(await searchParams).money;
+  const fx = await catalogRate().catch(() => null);
+  const rate = fx?.som_per_unit ?? null;
+  const money: Money | null = rate ? (chosen ?? 'USD') : null;
   const d = t(lang);
   const o = await load(id);
 
@@ -148,7 +159,7 @@ export default async function PublicObject({
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: schema }} />
-      <CatalogHeader lang={lang} />
+      <CatalogHeader lang={lang} money={money} />
       <div className="wrap">
         <Link className="back" href={`/${lang}`}>{d.toAll}</Link>
 
@@ -173,10 +184,20 @@ export default async function PublicObject({
                 {o.deal_type === 'sale' ? d.sale : d.rent} · {kindName(lang, o.kind)}
                 {o.zone ? ` · ${o.zone}` : ''}
               </p>
+              {/* В заголовке вкладки и в разметке для поисковика цена
+                  остаётся ИСХОДНОЙ — см. generateMetadata. Пересчёт живёт
+                  только здесь, на экране, и только с пометкой. */}
               <p className="price-big num">
-                {publicMoney(lang, o.price, o.currency)}
+                {priceView(lang, o.price, o.currency, money, rate).main}
                 {o.deal_type === 'rent' ? <small>{d.perMonth}</small> : null}
               </p>
+              {priceView(lang, o.price, o.currency, money, rate).note ? (
+                <p className="price-orig">
+                  {priceView(lang, o.price, o.currency, money, rate).note}
+                  {' '}{d.priceFromAd}
+                  {fx ? <span className="key">{d.rateNote(fx.as_of)}</span> : null}
+                </p>
+              ) : null}
             </div>
 
             <dl className="specs">

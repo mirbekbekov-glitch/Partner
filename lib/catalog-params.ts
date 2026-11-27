@@ -8,6 +8,7 @@
  * Всё живёт в строке запроса: ссылкой на подборку можно поделиться, а робот
  * поисковика видит те же страницы, что и человек.
  */
+import { convert, isMoney, type Money } from './fx';
 export const CATALOG_PAGE_SIZE = 12;
 
 export type CatalogSort = 'fresh' | 'cheap' | 'big';
@@ -31,6 +32,12 @@ export type CatalogFilters = {
   priceMax: number | null;
   sort: CatalogSort;
   page: number;
+  /**
+   * Валюта показа. Живёт в адресе вместе с остальными фильтрами, а не в
+   * cookie: ссылкой на подборку делятся, и получатель должен увидеть те
+   * же цены в той же валюте, что отправитель.
+   */
+  money: Money | null;
 };
 
 const DEALS = ['rent', 'sale'];
@@ -54,6 +61,7 @@ export function parseCatalogFilters(
     v && allowed.includes(v) ? v : null;
 
   return {
+    money: isMoney(one('cur')) ? one('cur') as Money : null,
     deal: pick(one('deal'), DEALS) as CatalogFilters['deal'],
     kind: pick(one('kind'), KINDS),
     region: one('region')?.trim() || null,
@@ -75,6 +83,7 @@ export function sortHref(lang: string, f: CatalogFilters, sort: CatalogSort) {
 /** Та же подборка, другая страница. */
 export function catalogHref(lang: string, f: CatalogFilters, page: number) {
   const p = new URLSearchParams();
+  if (f.money) p.set('cur', f.money);
   if (f.deal) p.set('deal', f.deal);
   if (f.kind) p.set('kind', f.kind);
   if (f.region) p.set('region', f.region);
@@ -195,8 +204,9 @@ export function daysSince(iso: string): number {
  * запятую, и «85 000» он читает хуже, чем «85,000». Пробел неразрывный,
  * иначе число ломается по строкам. Правило дизайн-системы: «1 500 000 сом».
  *
- * Валюту не пересчитываем. Курс — не наше дело: цену назвал собственник
- * в своей валюте, и пересчёт по вчерашнему курсу был бы ложью о цене.
+ * Сама по себе НЕ пересчитывает: цену назвал собственник в своей валюте,
+ * и подменить её другим числом нельзя. Пересчёт — дело priceView ниже, и
+ * он всегда помечен как пересчёт.
  */
 const SOM: Record<string, string> = { ru: 'сом', ky: 'сом', en: 'som', zh: '索姆' };
 
@@ -219,4 +229,43 @@ export function publicMoney(lang: string, v: number, currency: string): string {
   if (currency === 'USD') return `${n}\u00A0$`;
   if (currency === 'KGS') return `${n}\u00A0${SOM[lang] ?? 'KGS'}`;
   return `${n}\u00A0${currency}`;
+}
+
+/**
+ * Цена для показа в выбранной человеком валюте.
+ *
+ * Возвращает две строки. `main` — то, что стоит крупно; `note` — цена из
+ * объявления, когда `main` получена пересчётом, и пусто, когда пересчёта
+ * не было.
+ *
+ * Почему пересчёт ВСЕГДА помечен. Собственник назвал цену в своей валюте:
+ * 55 000 долларов — это обязательство, 4 810 000 сомов по сегодняшнему
+ * курсу — нет. Покажи второе как окончательное, и покупатель придёт с
+ * сомами на сделку, которая идёт в долларах, а виновато будет агентство.
+ * Поэтому у пересчитанного числа стоит «≈», а рядом — то, что написано в
+ * объявлении.
+ *
+ * Нет курса или валюта третья — пересчёта нет, показывается исходная
+ * цена. Это не обеднение: цена остаётся верной, просто не в той валюте,
+ * которую выбрали.
+ */
+export function priceView(
+  lang: string,
+  price: number,
+  currency: string,
+  money: Money | null,
+  somPerUsd: number | null,
+): { main: string; note: string | null } {
+  const original = publicMoney(lang, price, currency);
+  if (!money || currency === money) return { main: original, note: null };
+
+  const converted = convert(price, currency, money, somPerUsd);
+  if (converted === null) return { main: original, note: null };
+
+  // Округление до целого: доли сома и цента в цене квартиры — шум, а в
+  // пересчитанном числе ещё и ложная точность.
+  return {
+    main: `≈\u00A0${publicMoney(lang, Math.round(converted), money)}`,
+    note: original,
+  };
 }
