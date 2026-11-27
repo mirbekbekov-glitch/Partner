@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import {
-  catalogAgentCount, catalogCities, catalogCount, catalogCurrencies, catalogPage,
+  catalogCities, catalogCount, catalogCurrencies, catalogPage,
   catalogRate, catalogZoneCounts,
 } from '@/lib/db/catalog';
 import { GEO, citiesOf, regionOf, zonesOf } from '@/lib/geo';
@@ -254,14 +254,6 @@ export default async function Catalog({
     priceMin: f.priceMin, priceMax: f.priceMax, money, rate,
   }).catch(() => 0);
 
-  // Числа для первого экрана: весь каталог и все агенты, без фильтров.
-  // Фильтрованное число живёт над выдачей и меняется от нажатий; на
-  // первом экране нужно состояние дела, а не след чужого поиска.
-  const [catalogTotal, agentsTotal] = failed ? [0, 0] : await Promise.all([
-    catalogCount({}).catch(() => 0),
-    catalogAgentCount().catch(() => 0),
-  ]);
-
   // Валюта для подписи поля «цена до». Одна на весь каталог — подписываем
   // ею; несколько — подписывать нечем, и выбирать за человека нельзя.
   const currencies = failed ? [] : await catalogCurrencies();
@@ -321,13 +313,16 @@ export default async function Catalog({
         <div className="hero-in wrap">
           <span className="eyebrow">Liberterra · {placeName(cities, d)}</span>
           <h1>{d.heroTitle} <em>{d.heroEm}</em></h1>
-          <p className="lede">{d.heroLede}</p>
 
-          {/* Шаг назван прямо над кнопками. Сами кнопки говорят, ЧЕГО
-              хочет человек («снять или купить», «сдать или продать»), но
-              не говорят, ЧТО он сейчас сделает. Раньше слово «заявка»
-              пряталось в середине абзаца выше — человек доходил до
-              кнопок, не прочитав его. */}
+          {/* Единственный абзац первого экрана, и он про действие. Над
+              ним стояло ещё описание каталога — оно отодвигало кнопки, а
+              на телефоне вместе с числами внизу уводило пульт поиска за
+              сгиб. Про состав каталога человек узнаёт из самого
+              каталога, он сразу ниже.
+
+              Шаг назван прямо здесь: кнопки говорят, ЧЕГО хочет человек
+              («снять или купить», «сдать или продать»), но не говорят,
+              ЧТО он сейчас сделает. */}
           <p className="hero-call">{d.heroCall}</p>
 
           {/* Две стороны рынка, названные словами самого человека:
@@ -354,28 +349,6 @@ export default async function Catalog({
             </Link>
             <Link href={`/${lang}/request?side=own`} className="go-side">{d.heroOwn}</Link>
           </div>
-
-          {/* Числа показываются, только когда они есть. Пустой каталог,
-              объявивший «0 объектов», отговаривает лучше любого
-              конкурента — а молчание о числе не обманывает никого. */}
-          {catalogTotal > 0 ? (
-            <ul className="facts">
-              <li>
-                <b className="num">{catalogTotal}</b>
-                <span>{d.heroFactObjects(catalogTotal)}</span>
-              </li>
-              {agentsTotal > 0 ? (
-                <li>
-                  <b className="num">{agentsTotal}</b>
-                  <span>{d.heroFactAgents(agentsTotal)}</span>
-                </li>
-              ) : null}
-              <li>
-                <b>{d.heroFactSlaValue}</b>
-                <span>{d.heroFactSla}</span>
-              </li>
-            </ul>
-          ) : null}
         </div>
       </section>
 
