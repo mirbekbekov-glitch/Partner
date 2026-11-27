@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { objectList, type ObjectListItem } from '@/lib/db/cabinet';
 import { approvedColleagues } from '@/lib/db/agents';
 import { currentAgent } from '@/lib/db/session';
-import { PAGE_SIZE, parseFilters, money, day } from '@/lib/list-params';
+import { PAGE_SIZE, parseFilters, exportHref, money, day } from '@/lib/list-params';
 import { Pager } from '../Pager';
 import { SortTh } from '../SortTh';
 
@@ -61,7 +61,12 @@ export default async function ObjectsList({
     <>
       <div className="head">
         <h1>Объекты</h1>
-        <Link className="btn" href="/cabinet/objects/new">Новый объект</Link>
+        <span className="actions">
+          {/* Обычная ссылка, а не Link: ответ — файл, и клиентская
+              навигация ему только мешает. */}
+          <a className="btn ghostlink" href={exportHref(BASE, f)}>CSV</a>
+          <Link className="btn" href="/cabinet/objects/new">Новый объект</Link>
+        </span>
       </div>
       <p className="sub">Всего {count ?? 0}. Собственник виден тем, кому он положен.</p>
 

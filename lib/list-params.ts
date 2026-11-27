@@ -102,3 +102,13 @@ export function sortHref(base: string, f: Filters, col: string) {
   const dir: Dir = f.sort === col && f.dir === 'desc' ? 'asc' : 'desc';
   return pageHref(base, { ...f, sort: col, dir, page: 1 }, 1);
 }
+
+/**
+ * Ссылка на выгрузку с теми же условиями, что и на экране.
+ *
+ * Номер страницы не переносится намеренно: файл содержит весь список, а не
+ * ту страницу, с которой его попросили.
+ */
+export function exportHref(base: string, f: Filters) {
+  return pageHref(`${base}/export`, f, 1);
+}
