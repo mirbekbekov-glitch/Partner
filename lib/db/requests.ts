@@ -1,5 +1,5 @@
 import 'server-only';
-import { all, batch, flag, newId, now, one, stmt } from './sql';
+import { all, batch, flag, newId, now, one, run, stmt } from './sql';
 import { auditStmt } from './audit';
 import { isAdmin, requireAgent } from './session';
 import { normalizeName, normalizePhone } from './normalize';
@@ -518,4 +518,129 @@ export async function closeRequest(
   const row = await one<RequestRow>('select * from requests where id = ?', requestId);
   if (!row) throw new NotFound('Заявка не найдена');
   return row;
+}
+
+/**
+ * Заявки, по которым пора напомнить агенту.
+ *
+ * Зачем это вообще. Заявку взяли, сутки прошли, подходящего в каталоге
+ * нет — и дальше происходит худшее: ничего. Клиент ждёт, агент занят
+ * другим, заявка тихо стареет до «передумал». Разговор про бюджет
+ * состоится всё равно, но через неделю и уже с раздражением.
+ *
+ * Пишем АГЕНТУ, а не клиенту. Во-первых, канала к клиенту нет: у нас его
+ * телефон, а написать на телефон в Telegram нельзя, и WhatsApp для
+ * исходящих требует Business API. Во-вторых — и это важнее — «поднимите
+ * бюджет» от бота читается как «заплатите больше», а от человека, который
+ * уже говорил с клиентом, как совет. Нажимать на деньги должен тот, кто
+ * отвечает за результат.
+ *
+ * Что считается «нет вариантов»: ноль опубликованных объектов, подходящих
+ * под направление, вид жилья и бюджет заявки. Не «мало» и не «так себе» —
+ * ровно ноль, потому что это единственное, что можно утверждать.
+ *
+ * Условие по ответу агента НЕ ставится намеренно. Владелец площадки
+ * сказал прямо: напоминать надо, даже если агент связался, — звонок
+ * «здравствуйте, я взял вашу заявку» не приближает к результату, если
+ * показывать нечего.
+ */
+export type RequestNudge = {
+  request_id: string;
+  agent_id: string;
+  telegram_id: number;
+  body: string;
+};
+
+export async function idleRequests(idleMs = DAY_MS): Promise<RequestNudge[]> {
+  const since = new Date(Date.now() - idleMs).toISOString();
+
+  const rows = await all<{
+    id: string; name: string | null; phone: string;
+    deal: string | null; housing_type: string | null;
+    budget_minor: number | null; budget_currency: string;
+    district: string | null; agent_id: string; telegram_id: number;
+    taken_at: string;
+  }>(
+    `select r.id, r.name, r.phone, r.deal, r.housing_type,
+            r.budget_minor, r.budget_currency,
+            coalesce(d.name, r.district_other) as district,
+            r.agent_id, ag.telegram_id, r.taken_at
+       from requests r
+       join agents ag on ag.id = r.agent_id
+       left join districts d on d.id = r.district_id
+      where r.status = 'in_work'
+        and r.taken_at is not null
+        and r.taken_at < ?
+        and r.idle_notified_at is null
+        -- Заблокированному и неодобренному напоминать не о чем, и
+        -- непривязанному Telegram доставить нечем.
+        and ag.status = 'approved'
+        and ag.telegram_id is not null`,
+    since,
+  );
+
+  const nudges: RequestNudge[] = [];
+
+  for (const row of rows) {
+    // Сколько в каталоге подходящего ПРЯМО СЕЙЧАС. Считаем на каждую
+    // заявку отдельным запросом: заявок за сутки единицы, а один общий
+    // запрос с соединением по диапазонам читался бы вдвое хуже.
+    const fits = await one<{ n: number }>(
+      `select count(*) as n from objects o
+        where o.publication_state = 'published'
+          and (?1 is null or o.deal_type = ?1)
+          and (?2 is null or o.kind = ?2)
+          and (?3 is null or o.zone = ?3)
+          and (?4 is null or (o.currency = ?5 and o.price_minor <= ?4))`,
+      row.deal === 'rent' ? 'rent' : row.deal === 'buy' ? 'sale' : null,
+      row.housing_type, row.district,
+      row.budget_minor, row.budget_currency,
+    );
+
+    // Есть что показать — напоминать не о чем: агент сам разберётся.
+    if ((fits?.n ?? 0) > 0) continue;
+
+    const floor = row.deal
+      ? await priceFloor({
+          deal: row.deal === 'rent' ? 'rent' : 'sale',
+          kind: row.housing_type,
+          zone: row.district,
+        })
+      : null;
+
+    const who = row.name ? `${row.name}, ${row.phone}` : row.phone;
+    const budget = row.budget_minor
+      ? `${fromMinor(row.budget_minor)} ${row.budget_currency}`
+      : 'не указан';
+
+    nudges.push({
+      request_id: row.id,
+      agent_id: row.agent_id,
+      telegram_id: row.telegram_id,
+      body: [
+        `Заявке сутки, подходящего в каталоге нет.`,
+        `Клиент: ${who}`,
+        `Бюджет: ${budget}`,
+        row.district ? `Район: ${row.district}` : null,
+        floor && row.budget_minor && floor.currency === row.budget_currency
+          && row.budget_minor < floor.floor_minor
+          ? `Дешевле ${fromMinor(floor.floor_minor)} ${floor.currency} в этом`
+            + ` срезе нет ни одного объявления (по ${floor.based_on}).`
+            + ` Предложите поднять бюджет — иначе он упустит подходящее.`
+          : `Позвоните и уточните, что клиент готов двигать: цену, район или сроки.`,
+      ].filter(Boolean).join('\n'),
+    });
+  }
+
+  return nudges;
+}
+
+/**
+ * Отметить, что по заявке напомнили.
+ *
+ * Вызывается ПОСЛЕ доставки, а не до: иначе неудачная отправка пометила бы
+ * заявку как отработанную, и агент не узнал бы о ней никогда.
+ */
+export async function markRequestNudged(requestId: string): Promise<void> {
+  await run('update requests set idle_notified_at = ? where id = ?', now(), requestId);
 }
