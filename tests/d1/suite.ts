@@ -43,7 +43,6 @@ import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
 import { mhouseXml } from '@/lib/mhouse-feed';
 import { toCsv } from '@/lib/csv';
-import { submitRequest } from '@/lib/db/requests';
 import { convert, parseNbkr } from '@/lib/fx';
 import { contactLinks, phoneDigits } from '@/lib/contact-links';
 import { refreshRates, usdRate } from '@/lib/db/fx';
