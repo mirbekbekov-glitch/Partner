@@ -22,7 +22,9 @@ import {
   confirmActual, createObject, getObject, publishObject,
   updateObject, withdrawObject,
 } from '@/lib/db/objects';
-import { createMandate, expireMandates, terminateMandate } from '@/lib/db/mandates';
+import {
+  createMandate, expireMandates, setMandateTerms, terminateMandate,
+} from '@/lib/db/mandates';
 import { canSeeContact } from '@/lib/db/access';
 import { createRequirement, updateRequirement } from '@/lib/db/requirements';
 import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/activities';
@@ -154,6 +156,19 @@ export default {
 
     await throws('инв.1: второй активный мандат отклонён',
       () => createMandate({ object_id: obj.id, kind: 'exclusive' }), Conflict);
+
+    // Условия комиссии правятся на действующем договоре: их уточняют
+    // чаще, чем заключают договор заново, и расторгать ради этого
+    // мандат значило бы снимать объект с публикации.
+    const withTerms = await setMandateTerms(mandate.id, {
+      commission_rule: JSON.stringify({ kind: 'percent', value: 3 }),
+      partner_rate: 1.5,
+    });
+    check('условия комиссии правятся без расторжения договора',
+      withTerms.partner_rate === 1.5 && withTerms.status === 'active');
+
+    await throws('процент партнёра больше ста не принимается',
+      () => setMandateTerms(mandate.id, { partner_rate: 140 }), Invalid);
 
     // -----------------------------------------------------------------
     // Инвариант 5: даты

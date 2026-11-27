@@ -652,12 +652,22 @@ export async function activeMandateOf(objectId: string) {
   const base = commissionTotal(row.deal_type, row.price_minor, parseRule(row.commission_rule));
   const shares = commissionShares(base, { priceMinor: row.price_minor, rate: row.partner_rate });
 
+  // Процент комиссии для формы: в колонке лежит правило, а человек
+  // вводит процент. При аренде правило хранит долю месяца (0.5), а
+  // человек пишет проценты (50) — переводим здесь, в одном месте.
+  const rule = parseRule(row.commission_rule);
+  const commission_percent = rule === null ? null
+    : rule.kind === 'percent' ? rule.value
+    : rule.kind === 'months_share' ? Math.round(rule.value * 1000) / 10
+    : null;
+
   return {
     ...row,
     // Итог — тот, что сходится с долями: обещано партнёру больше нашей
     // комиссии, и итогом становится обещанное.
     commission_total: fromMinor(shares.total),
     partner_amount: fromMinor(shares.closing),
+    commission_percent,
   };
 }
 

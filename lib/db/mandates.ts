@@ -27,6 +27,8 @@ export type MandateRow = {
   valid_to: string | null;
   start_price_minor: number;
   commission_rule: string | null;
+  /** Процент от сделки, обещанный партнёру. Пусто — половина комиссии. */
+  partner_rate: number | null;
   listing_agent_id: string;
   contract_confirmed: number;
   document_url: string | null;
@@ -206,6 +208,57 @@ export async function terminateMandate(
     ...releaseStmts(mandate.object_id, at),
     auditStmt('mandates', mandateId, 'update', agent.id, {
       status: { from: 'active', to: 'terminated' },
+    }),
+  ]);
+
+  const row = await one<MandateRow>('select * from mandates where id = ?', mandateId);
+  if (!row) throw new NotFound('Мандат не найден');
+  return row;
+}
+
+/**
+ * Условия комиссии действующего договора.
+ *
+ * Отдельным действием, а не частью правки объекта: комиссия — условие
+ * ДОГОВОРА, и менять её вправе тот, кто договор заключил. Правка самого
+ * объекта (адрес, цена, снимки) открыта шире, и протаскивать через неё
+ * чужие деньги нельзя.
+ *
+ * Меняется на действующем договоре, а не на закрытой сделке: в закрытой
+ * сделке доли уже записаны суммами, и пересчитывать их задним числом
+ * значит переписывать историю.
+ */
+export async function setMandateTerms(
+  mandateId: string,
+  terms: { commission_rule?: string | null; partner_rate?: number | null },
+): Promise<MandateRow> {
+  const agent = await requireAgent();
+
+  const mandate = await one<MandateRow>(
+    'select * from mandates where id = ?', mandateId,
+  );
+  if (!mandate || mandate.status !== 'active') {
+    throw new NotFound('Активный мандат не найден');
+  }
+
+  if (mandate.listing_agent_id !== agent.id && !(await isAdmin())) {
+    throw new Forbidden('Условия комиссии меняет listing-агент договора или админ');
+  }
+
+  const rate = partnerRateValue(terms.partner_rate);
+  const at = now();
+
+  await batch([
+    stmt(
+      `update mandates set commission_rule = ?, partner_rate = ?, updated_at = ?
+        where id = ? and status = 'active'`,
+      terms.commission_rule ?? null, rate, at, mandateId,
+    ),
+    // В журнал — что изменилось, а не новое состояние целиком: по этой
+    // записи потом объясняют клиенту, почему доля стала другой.
+    auditStmt('mandates', mandateId, 'update', agent.id, {
+      commission_rule: { from: mandate.commission_rule, to: terms.commission_rule ?? null },
+      partner_rate: { from: mandate.partner_rate ?? null, to: rate },
     }),
   ]);
 
