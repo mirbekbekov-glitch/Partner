@@ -1108,19 +1108,113 @@ export default {
     ).bind(vera, newcomer.id).all<{ id: string; full_name: string }>();
 
     await db.prepare('update agents set full_name = ? where id = ?')
-      .bind('ядрин Коллега', vera).run();
+      .bind('Ядрин Коллега', vera).run();
     await db.prepare('update agents set full_name = ? where id = ?')
-      .bind('Абаев Коллега', newcomer.id).run();
+      .bind('абаев Коллега', newcomer.id).run();
 
     const names = (await approvedColleagues()).map((c) => c.full_name);
-    check('в списке коллег «Абаев» идёт раньше «ядрина»',
-      names.indexOf('Абаев Коллега') >= 0
-      && names.indexOf('Абаев Коллега') < names.indexOf('ядрин Коллега'),
+    check('в списке коллег строчный «абаев» идёт раньше заглавного «Ядрина»',
+      names.indexOf('абаев Коллега') >= 0 && names.indexOf('Ядрин Коллега') >= 0
+      && names.indexOf('абаев Коллега') < names.indexOf('Ядрин Коллега'),
       names.join(' | '));
 
-    for (const row of originals.results) {
-      await db.prepare('update agents set full_name = ? where id = ?')
-        .bind(row.full_name, row.id).run();
+    // Сопоставимое имя агента пишется в ТРЁХ местах, и на каждое своя
+    // проверка: иначе одно из трёх однажды отстанет, и список будет
+    // сортироваться по прежнему имени, а показывать новое.
+    const sortOf = async (id: string) => (await db
+      .prepare('select full_name, name_sort from agents where id = ?')
+      .bind(id).first<{ full_name: string; name_sort: string }>());
+
+    // Путь 1: заведение агента.
+    const freshAgent = await ensureAgentByEmail('sortirovka@example.kg', 'ЯДРИН Сорт');
+    check('у нового агента сопоставимое имя заполнено',
+      (await sortOf(freshAgent.id))?.name_sort === 'ядрин сорт',
+      String((await sortOf(freshAgent.id))?.name_sort));
+
+    // Путь 2: переименование при входе.
+    await ensureAgentByEmail('sortirovka@example.kg', 'АБАЕВ Сорт');
+    check('и после переименования при входе — тоже',
+      (await sortOf(freshAgent.id))?.name_sort === 'абаев сорт',
+      String((await sortOf(freshAgent.id))?.name_sort));
+
+    // Путь 3: правка профиля самим агентом.
+    await db.prepare(`update agents set status = 'approved' where id = ?`)
+      .bind(freshAgent.id).run();
+    await loginAs(db, freshAgent.id);
+    await updateProfile({ full_name: 'ВОРОНОВ Сорт' });
+    check('и после правки профиля — тоже',
+      (await sortOf(freshAgent.id))?.name_sort === 'воронов сорт',
+      String((await sortOf(freshAgent.id))?.name_sort));
+
+    // А теперь сам порядок: строчный агент не должен уезжать в конец.
+    // Переименовываются ТЕ, КТО ведёт потребности в списке, — Анна и
+    // Борис. Переименование кого-то другого проверку не затронуло бы, и
+    // она проходила бы на пустой выдаче: так и случилось в первой версии.
+    await loginAs(db, anna);
+    const leading = await db.prepare(
+      'select id, full_name, name_sort from agents where id in (?, ?)',
+    ).bind(anna, boris).all<{ id: string; full_name: string; name_sort: string }>();
+
+    // Пара снова выбрана так, чтобы побайтный порядок РАСХОДИЛСЯ с
+    // алфавитным: строчная «а» это U+0430, заглавная «Я» — U+042F. Пара
+    // «Абаев»/«ядрин» для этого не годится, там порядки совпадают — на
+    // ней мутация «сортировать по ag.full_name» прошла молча.
+    await db.prepare('update agents set full_name = ?, name_sort = ? where id = ?')
+      .bind('абаев Ведущий', 'абаев ведущий', anna).run();
+    await db.prepare('update agents set full_name = ?, name_sort = ? where id = ?')
+      .bind('Ядрин Ведущий', 'ядрин ведущий', boris).run();
+
+    const byAgent = (await requirementList({ sort: 'agent', dir: 'asc' }))
+      .rows.map((r) => r.agent_name);
+    const abaev = byAgent.indexOf('абаев Ведущий');
+    const yadrin = byAgent.indexOf('Ядрин Ведущий');
+    // Строго: без требования, чтобы ОБА были в списке, проверка проходила
+    // бы и на пустой выдаче — то есть не проверяла бы ничего.
+    check('оба ведущих есть в списке — значит проверка не пустая',
+      abaev >= 0 && yadrin >= 0, `порядок: ${byAgent.join(' | ')}`);
+    check('и строчный «абаев» идёт раньше заглавного «Ядрина»',
+      abaev >= 0 && yadrin >= 0 && abaev < yadrin,
+      `порядок: ${byAgent.join(' | ')}`);
+
+    // То же для списка объектов: там колонка «ведёт» это отдельный
+    // подзапрос, и свой порядок у него тоже свой — без проверки мутация
+    // «сортировать по responsible_name» проходила бы молча.
+    //
+    // Объект Бориса нужен именно здесь: до этого места все объекты ведёт
+    // Анна, и список был из одного имени — проверка проходила бы на
+    // пустом сравнении.
+    // Статус Бориса к этому месту уже менялся предыдущими блоками, и
+    // неодобренный агент объект не заведёт. Возвращаем как было сразу
+    // после — иначе сломается то, что идёт дальше.
+    const borisStatus = await db.prepare('select status from agents where id = ?')
+      .bind(boris).first<{ status: string }>();
+    await db.prepare(`update agents set status = 'approved' where id = ?`)
+      .bind(boris).run();
+
+    await loginAs(db, boris);
+    const borisObject = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Сортировочная 1',
+      price_minor: 3_300_000,
+    });
+    await createMandate({ object_id: borisObject.id, kind: 'non_exclusive' });
+
+    await db.prepare('update agents set status = ? where id = ?')
+      .bind(borisStatus?.status ?? 'approved', boris).run();
+    await loginAs(db, anna);
+
+    const byLeader = (await objectList({ sort: 'agent', dir: 'asc' }))
+      .rows.map((o) => o.responsible_name);
+    const abaevObj = byLeader.indexOf('абаев Ведущий');
+    const yadrinObj = byLeader.indexOf('Ядрин Ведущий');
+    check('оба ведущих есть в списке объектов — проверка не пустая',
+      abaevObj >= 0 && yadrinObj >= 0, `порядок: ${byLeader.join(' | ')}`);
+    check('и в объектах строчный «абаев» идёт раньше',
+      abaevObj >= 0 && yadrinObj >= 0 && abaevObj < yadrinObj,
+      `порядок: ${byLeader.join(' | ')}`);
+
+    for (const row of [...originals.results, ...leading.results]) {
+      await db.prepare('update agents set full_name = ?, name_sort = ? where id = ?')
+        .bind(row.full_name, row.full_name.toLowerCase(), row.id).run();
     }
 
     // Имя и агентство — и больше ничего. Список видит любой агент, а

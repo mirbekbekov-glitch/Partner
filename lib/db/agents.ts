@@ -2,7 +2,7 @@ import 'server-only';
 import { all, batch, flag, newId, now, one, stmt } from './sql';
 import { auditStmt } from './audit';
 import { requireAdmin, requireAgent, requireSelf, type Agent } from './session';
-import { normalizeName } from './normalize';
+import { normalizeName, searchText } from './normalize';
 import { Conflict, Forbidden, Invalid, NotFound } from './errors';
 
 /**
@@ -116,8 +116,9 @@ export async function ensureAgentByEmail(
     const name = (fullName ?? '').trim();
     if (name && name !== existing.full_name) {
       await batch([
-        stmt('update agents set full_name = ?, updated_at = ? where id = ?',
-          name, at, existing.id),
+        // name_sort рядом с full_name: порядок в списках берётся из неё.
+        stmt('update agents set full_name = ?, name_sort = ?, updated_at = ? where id = ?',
+          name, searchText(name), at, existing.id),
         auditStmt('agents', existing.id, 'update', existing.id,
           { full_name: { from: existing.full_name, to: name } }),
       ]);
@@ -133,9 +134,9 @@ export async function ensureAgentByEmail(
   await batch([
     stmt(
       `insert into agents (id, email, full_name, role, status, focus,
-                           created_at, updated_at)
-       values (?, ?, ?, 'agent', 'pending', 'both', ?, ?)`,
-      id, clean, name, at, at,
+                           name_sort, created_at, updated_at)
+       values (?, ?, ?, 'agent', 'pending', 'both', ?, ?, ?)`,
+      id, clean, name, searchText(name), at, at,
     ),
     auditStmt('agents', id, 'insert', null, { email: clean }),
   ]);
@@ -170,6 +171,9 @@ export async function updateProfile(
     const name = patch.full_name.trim();
     if (!name) throw new Invalid('Имя обязательно');
     next.full_name = name;
+    // В том же наборе колонок: иначе список сортировался бы по прежнему
+    // имени, а показывал новое.
+    next.name_sort = searchText(name);
   }
   if (patch.phone !== undefined) next.phone = (patch.phone ?? '').trim() || null;
   if (patch.focus !== undefined) next.focus = patch.focus;

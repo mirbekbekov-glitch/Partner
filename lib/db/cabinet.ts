@@ -364,6 +364,9 @@ export async function objectList(query: {
             la.full_name as listing_agent_name,
             org.name as organization_name,
             ra.full_name as responsible_name,
+            -- Порядок по сопоставимому виду, а не по самому имени: см.
+            -- пояснение к orderBy.
+            ra.name_sort as responsible_sort,
             org.name as responsible_org_name,
             o.price_minor,
             (select count(*) from matches mt where mt.object_id = o.id)
@@ -392,7 +395,7 @@ export async function objectList(query: {
         state: 'o.publication_state',
         price: 'o.price_minor',
         matches: 'matches_count',
-        agent: 'responsible_name',
+        agent: 'responsible_sort',
         actual: 'o.actual_at',
       }, 'o.actual_at desc', query.sort, query.dir)}
       ${limitOffset(query.page, query.perPage)}`,
@@ -775,7 +778,7 @@ export async function requirementList(query: {
         budget: 'r.budget_max_minor',
         deal: 'r.deal_type',
         status: 'r.status',
-        agent: 'ag.full_name',
+        agent: 'ag.name_sort',
         matches: 'matches_count',
         showings: 'showings_count',
         deadline: 'r.deadline',
