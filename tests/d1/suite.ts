@@ -29,7 +29,10 @@ import { canSeeContact } from '@/lib/db/access';
 import { createRequirement, updateRequirement } from '@/lib/db/requirements';
 import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
-import { requestCounts, requestFeed, submitRequest } from '@/lib/db/requests';
+import {
+  idleRequests, markRequestNudged, requestCounts, requestFeed, submitRequest,
+  takeRequest,
+} from '@/lib/db/requests';
 import {
   catalogAgent, catalogAgentById, catalogAgents, catalogCities, catalogCount,
   catalogCurrencies, catalogObject, catalogPage, catalogRate, priceFloor,
@@ -709,6 +712,82 @@ export default {
       await db.prepare('delete from mandates where object_id = ?').bind(id).run();
       await db.prepare('delete from objects where id = ?').bind(id).run();
     }
+
+    // -----------------------------------------------------------------
+    // Застоявшаяся заявка: бот пишет агенту, который её взял
+    // -----------------------------------------------------------------
+    await loginAs(db, anna);
+    // Без привязанного Telegram доставлять нечем, и агент в выборку не
+    // попадает вовсе. Привязываем на время этой проверки и снимаем в
+    // конце — ниже на этом стоит отдельная строка.
+    await db.prepare('update agents set telegram_id = ? where id = ?')
+      .bind(700100200, anna).run();
+
+    const idleReq = await submitRequest({
+      phone: '0555 33 22 11', name: 'Айбек', deal: 'rent', housing_type: 'flat',
+      district: 'Джал', budget_minor: 15_000_00, budget_currency: 'KGS',
+    });
+    await takeRequest(idleReq);
+
+    // Только что взятая заявка напоминания не даёт: сутки ещё не прошли.
+    check('свежая заявка в напоминания не идёт',
+      !(await idleRequests()).some((n) => n.request_id === idleReq));
+
+    // Отматываем взятие на двое суток назад.
+    await db.prepare('update requests set taken_at = ? where id = ?')
+      .bind(new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(), idleReq).run();
+
+    const nudges = await idleRequests();
+    const mine3 = nudges.find((n) => n.request_id === idleReq);
+    check('застоявшаяся заявка даёт напоминание', Boolean(mine3));
+    check('и оно адресовано тому, кто её взял', mine3?.agent_id === anna);
+    check('в тексте есть клиент', mine3?.body.includes('Айбек') === true, mine3?.body);
+    check('и бюджет', mine3?.body.includes('15000') === true, mine3?.body);
+
+    // Напоминание уходит ОДИН раз: отметка ставится после доставки.
+    await markRequestNudged(idleReq);
+    check('после отметки напоминание не повторяется',
+      !(await idleRequests()).some((n) => n.request_id === idleReq));
+
+    // Если в каталоге есть подходящее — напоминать не о чем.
+    //
+    // Объект заводится ЗДЕСЬ, а не предполагается: первая версия
+    // проверки опиралась на то, что в каталоге «наверняка что-то есть»
+    // — и упала, потому что подходящего там не было. Проверка, стоящая
+    // на допущении о чужих данных, проверяет не то, что обещает.
+    const forHim = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Подходящая 1',
+      zone: 'Центр', price_minor: 500_00, currency: 'USD',
+    });
+    await createMandate({ object_id: forHim.id, kind: 'non_exclusive' });
+    await publishObject(forHim.id);
+
+    const matchable = await submitRequest({
+      phone: '0555 33 22 10', deal: 'rent', housing_type: 'flat',
+      district: 'Центр', budget_minor: 1_000_00, budget_currency: 'USD',
+    });
+    await takeRequest(matchable);
+    await db.prepare('update requests set taken_at = ? where id = ?')
+      .bind(new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(), matchable).run();
+    check('по заявке с подходящим вариантом напоминания нет',
+      !(await idleRequests()).some((n) => n.request_id === matchable),
+      'в каталоге есть аренда в Центре дешевле 1000 $');
+
+    await db.prepare('delete from mandates where object_id = ?').bind(forHim.id).run();
+    await db.prepare('delete from objects where id = ?').bind(forHim.id).run();
+
+    // Агенту без Telegram доставить нечем — в список он не попадает вовсе,
+    // а не попадает и падает при отправке.
+    await db.prepare('update agents set telegram_id = null where id = ?').bind(anna).run();
+    const noTg = await submitRequest({
+      phone: '0555 33 22 12', deal: 'rent', housing_type: 'flat',
+      district: 'Джал', budget_minor: 15_000_00, budget_currency: 'KGS',
+    });
+    await takeRequest(noTg);
+    await db.prepare('update requests set taken_at = ? where id = ?')
+      .bind(new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(), noTg).run();
+    check('агенту без Telegram напоминание не собирается',
+      !(await idleRequests()).some((n) => n.request_id === noTg));
 
     check('курса в пустой базе нет', (await usdRate()) === null);
     check('и витрина его тоже не выдумывает', (await catalogRate()) === null);

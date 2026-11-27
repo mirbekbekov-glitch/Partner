@@ -1,6 +1,7 @@
 import {
   claimNotifications, enqueueDueReminders, markNotification,
 } from '@/lib/db/notifications';
+import { idleRequests, markRequestNudged } from '@/lib/db/requests';
 import { sweepExpired } from '@/lib/db/session';
 import { expireMandates } from '@/lib/db/mandates';
 import { denyCron } from '@/lib/cron-auth';
@@ -121,6 +122,30 @@ export async function GET(request: Request) {
     await markNotification(row.id, error === null, error);
   }
 
+  // Застоявшиеся заявки. Своей очереди у них нет — она жёстко привязана к
+  // активностям, — но доставка общая: тот же sendTelegram, что и выше.
+  // Второй копии отправки здесь не появилось, и появляться ей незачем.
+  let nudged = 0;
+  let nudgeFailed = 0;
+
+  try {
+    for (const nudge of await idleRequests()) {
+      const error = await sendTelegram(nudge.telegram_id, nudge.body);
+      if (error) {
+        nudgeFailed++;
+        reasons[error] = (reasons[error] ?? 0) + 1;
+        // Отметку НЕ ставим: неудачная отправка не должна закрывать
+        // заявку от следующего прогона.
+        continue;
+      }
+      await markRequestNudged(nudge.request_id);
+      nudged++;
+    }
+  } catch (e) {
+    reasons[e instanceof Error ? e.message : 'заявки не проверены'] =
+      (reasons['заявки не проверены'] ?? 0) + 1;
+  }
+
   return Response.json({
     expired_mandates: expired,
     swept,
@@ -128,6 +153,8 @@ export async function GET(request: Request) {
     claimed: rows.length,
     sent,
     failed,
+    nudged,
+    nudge_failed: nudgeFailed,
     reasons,
   });
 }
