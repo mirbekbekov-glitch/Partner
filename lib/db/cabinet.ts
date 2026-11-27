@@ -6,6 +6,7 @@ import { commissionShares, commissionTotal, parseRule } from './commission';
 import { contactVisible, dealParty, objectEditable } from './visibility';
 import { searchText } from './normalize';
 import { PAGE_SIZE } from '../list-params';
+import { looksLikeSameName } from '../contact-match';
 
 /**
  * Запросы кабинета: списки и карточки.
@@ -420,10 +421,48 @@ export async function contactPhoneList(contactId: string) {
   );
 }
 
-/** Пара дубликатов для конкретной записи. */
+/**
+ * Кандидаты в дубликаты для конкретной записи.
+ *
+ * Сравнение живёт в `looksLikeSameName`, а не в запросе, и это не вопрос
+ * удобства. `lower()` в SQLite не трогает кириллицу — проверено запросом
+ * к боевой базе, `lower('ОРОЗОВ Нурлан')` возвращает строку как есть, —
+ * поэтому прежнее `lower(a.name) = lower(b.name)` для русских имён
+ * сравнивало С УЧЁТОМ регистра и одного человека, записанного капсом,
+ * дубликатом не считало. Плюс «Орозов Н.» на SQL не выразить вовсе.
+ *
+ * Цена решения: имена своих контактов читаются целиком. Предел в тысячу
+ * назван прямо, а не подразумевается: на масштабе агентства этого с
+ * запасом хватает, а молчаливое усечение означало бы, что дубликат
+ * иногда не находится и никто не знает почему.
+ */
+const DUPLICATE_SCAN_LIMIT = 1000;
+
 export async function duplicatesOf(contactId: string) {
   const me = await asker();
 
+  const self = await one<{ name: string }>(
+    'select name from contacts where id = ? and owner_agent_id = ?',
+    contactId, me.id,
+  );
+  if (!self) return [];
+
+  const mine = await all<{ id: string; name: string }>(
+    `select id, name from contacts
+      where owner_agent_id = ?1 and id <> ?2
+      order by created_at limit ${DUPLICATE_SCAN_LIMIT}`,
+    me.id, contactId,
+  );
+
+  const hits = mine.filter((c) => looksLikeSameName(self.name, c.name)).slice(0, 20);
+  if (hits.length === 0) return [];
+
+  // Владелец проверяется и в выборке имён выше, и в запросе ниже. Это
+  // намеренный дубль: снятие одной из двух проверок прогон не валит — и
+  // это проверено мутацией, — но каждая из них стоит на пути к чужому
+  // телефону, который подтягивается следующим запросом. Одна проверка
+  // здесь была бы ровно одной опечаткой до утечки.
+  const marks = hits.map(() => '?').join(', ');
   return all<{
     other_id: string; other_name: string;
     other_phones: string | null; other_requirements: number;
@@ -433,11 +472,10 @@ export async function duplicatesOf(contactId: string) {
               where cp.contact_id = b.id) as other_phones,
             (select count(*) from requirements r where r.contact_id = b.id)
               as other_requirements
-       from contacts a join contacts b
-         on lower(trim(a.name)) = lower(trim(b.name)) and a.id <> b.id
-      where a.id = ?2 and a.owner_agent_id = ?1 and b.owner_agent_id = ?1
-      limit 20`,
-    me.id, contactId,
+       from contacts b
+      where b.id in (${marks}) and b.owner_agent_id = ?
+      order by b.created_at`,
+    ...hits.map((c) => c.id), me.id,
   );
 }
 

@@ -16,7 +16,8 @@ import { SESSION_COOKIE, currentAgent, endSession, sessionAgent } from '@/lib/db
 import { completeLogin, requestLogin, revokePendingLinks } from '@/lib/db/login';
 import { inviteAgent } from '@/lib/db/invites';
 import { approvedColleagues } from '@/lib/db/agents';
-import { myActivities } from '@/lib/db/cabinet';
+import { duplicatesOf, myActivities } from '@/lib/db/cabinet';
+import { looksLikeSameName, nameKey } from '@/lib/contact-match';
 import { outbox, tokenFromLastLetter } from './stubs/email';
 import {
   confirmActual, createObject, getObject, publishObject,
@@ -235,6 +236,71 @@ export default {
     await throws('второй контакт с тем же номером отклонён',
       () => createContact({ name: 'Иван ещё раз', phone: '+996 555 10 20 30' }),
       Conflict);
+
+    // -----------------------------------------------------------------
+    // Поиск дубликатов: правило имени
+    // -----------------------------------------------------------------
+    // Чистое правило — без базы. Здесь дешевле всего перечислить случаи.
+    const sameName: Array<[string, string]> = [
+      ['Орозов Нурлан', 'орозов нурлан'],
+      // Главный случай: lower() в SQLite кириллицу НЕ приводит, поэтому
+      // прежнее сравнение в запросе этих двоих дубликатами не считало.
+      ['ОРОЗОВ НУРЛАН', 'Орозов Нурлан'],
+      ['Орозов  Нурлан ', 'Орозов Нурлан'],
+      ['Орозов Нурлан', 'Орозов Н.'],
+      ['Орозов Н.', 'Орозов Нурлан Азаматович'],
+      ['Этажи', 'ЭТАЖИ'],
+    ];
+    for (const [a, b] of sameName) {
+      check(`«${a}» и «${b}» — одно лицо`, looksLikeSameName(a, b));
+      check(`и наоборот: «${b}» и «${a}»`, looksLikeSameName(b, a));
+    }
+
+    const otherName: Array<[string, string]> = [
+      ['Орозов Нурлан', 'Орозов Азамат'],
+      ['Орозов Нурлан', 'Асанов Нурлан'],
+      // Однофамильцев больше, чем тёзок, а объединение необратимо:
+      // присоединённая запись удаляется. Лучше не предложить, чем склеить.
+      ['Орозов', 'Орозов Нурлан'],
+      ['Орозов Нурлан Азаматович', 'Орозов Нурлан Асанович'],
+      ['', 'Орозов Нурлан'],
+    ];
+    for (const [a, b] of otherName) {
+      check(`«${a}» и «${b}» — разные`, !looksLikeSameName(a, b));
+      check(`и наоборот тоже разные: «${b}» и «${a}»`, !looksLikeSameName(b, a));
+    }
+
+    // Две пустые строки равны друг другу, и без отдельной проверки на
+    // пустоту правило сочло бы их одним лицом. В базе имя пустым быть не
+    // может (есть ограничение), но правило отвечает и на то, что в базу
+    // ещё не попало — например, на ввод в форме.
+    check('две пустые строки — не одно лицо', !looksLikeSameName('', ''));
+    check('и пробелы с точками тоже', !looksLikeSameName('  ', ' . '));
+
+    check('приведение имени схлопывает регистр, пробелы и точки',
+      nameKey('  ОРОЗОВ   Н. ') === 'орозов н', `получилось «${nameKey('  ОРОЗОВ   Н. ')}»`);
+
+    // А теперь то же через базу: кандидаты для конкретной записи.
+    const capsDupe = await createContact({ name: 'ИВАН', phone: '0555 10 20 31' });
+    const initials = await createContact({ name: 'Иван И.', phone: '0555 10 20 32' });
+    await createContact({ name: 'Пётр Петров', phone: '0555 10 20 33' });
+
+    const candidates = await duplicatesOf(ivan.id);
+    const ids = candidates.map((c) => c.other_id);
+    check('капсом записанный тот же человек попадает в кандидаты',
+      ids.includes(capsDupe.id));
+    check('а однофамилец с другим именем — нет',
+      !candidates.some((c) => c.other_name === 'Пётр Петров'));
+    // «Иван» — одно слово, «Иван И.» — два: по правилу это НЕ совпадение.
+    check('и «Иван» с «Иван И.» не склеиваются',
+      !ids.includes(initials.id));
+
+    // Чужие записи в кандидаты не идут даже при полном совпадении имени.
+    await loginAs(db, boris);
+    const hisIvan = await createContact({ name: 'Иван', phone: '0555 10 20 34' });
+    await loginAs(db, anna);
+    check('чужой контакт с тем же именем в кандидаты не попадает',
+      !(await duplicatesOf(ivan.id)).some((c) => c.other_id === hisIvan.id));
 
     // -----------------------------------------------------------------
     // Объединение: порядок шагов и потеря данных
@@ -817,8 +883,11 @@ export default {
     const inviteHours = inviteTtl
       ? (Date.parse(inviteTtl.expires_at) - Date.parse(inviteTtl.created_at)) / 3_600_000
       : 0;
+    // Округление, а не точное равенство: created_at и expires_at ставятся
+    // на соседних миллисекундах, и разница выходит 24.0000003 — проверка
+    // на === проходила случайно и однажды упала бы без причины.
     check('ссылка живёт сутки, а не пятнадцать минут',
-      inviteHours === 24, `получилось ${inviteHours} ч`);
+      Math.round(inviteHours) === 24, `получилось ${inviteHours} ч`);
 
     // Самое важное: по ссылке действительно входят, и ровно один раз.
     resetCookies();
