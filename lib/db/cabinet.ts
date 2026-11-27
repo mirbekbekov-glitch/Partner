@@ -61,6 +61,14 @@ export type Page<T> = { rows: T[]; total: number };
  * Колонки, закрытые инвариантом 4 (имя собственника, имя клиента), в
  * списки не входят намеренно: порядок строк выдал бы то, что скрыто в
  * самой ячейке.
+ *
+ * ТЕКСТОВЫЕ колонки сортируются по нормализованному виду, а не по самому
+ * тексту. Причина та же, что у поиска: SQLite сравнивает строки побайтно,
+ * и для кириллицы это значит, что ВСЕ заглавные идут перед всеми
+ * строчными. Проверено запросом к боевой базе: «Абрамов, Орозов, Яковлев,
+ * абрамов, яковлев» — то есть контакт, записанный строчными, уезжает в
+ * конец списка после «Яковлева». `collate nocase` не помогает: он тоже
+ * знает только латиницу.
  */
 function orderBy(
   columns: Record<string, string>,
@@ -162,7 +170,8 @@ export async function contactList(
        left join agents ag on ag.id = c.owner_agent_id
       where ${visible.sql} ${filter}
       ${orderBy({
-        name: 'c.name',
+        // По нормализованной колонке: см. пояснение к orderBy.
+        name: 'c.search_text',
         objects: 'objects_count',
         requirements: 'requirements_count',
         source: 'c.source',
@@ -378,7 +387,7 @@ export async function objectList(query: {
        left join organizations org on org.id = ra.organization_id
       where ${where.join(' and ')}
       ${orderBy({
-        address: 'o.address',
+        address: 'o.search_text',
         deal: 'o.deal_type',
         state: 'o.publication_state',
         price: 'o.price_minor',
@@ -967,7 +976,7 @@ export async function dealList(
        left join agents ca on ca.id = d.closing_agent_id
       where ${party.sql}
       ${orderBy({
-        address: 'o.address',
+        address: 'o.search_text',
         status: 'd.status',
         price: 'coalesce(d.final_price_minor, o.price_minor)',
         created: 'd.created_at',

@@ -419,6 +419,33 @@ export default {
     check('и по прежнему имени больше нет',
       !(await contactList('иван')).rows.some((c) => c.id === capsDupe.id));
 
+    // Порядок списка: SQLite сравнивает побайтно, и для кириллицы это
+    // значит, что все заглавные идут перед всеми строчными. Проверено
+    // запросом к боевой базе: «Абрамов, Орозов, Яковлев, абрамов,
+    // яковлев». Значит контакт, записанный строчными, уезжал в конец.
+    // Пара выбрана так, чтобы побайтный порядок РАСХОДИЛСЯ с алфавитным:
+    // строчная «а» это U+0430, заглавная «Я» — U+042F, то есть побайтно
+    // «Яковлев» идёт ПЕРЕД «абрамов», хотя по алфавиту наоборот. Пара
+    // «Абрамов»/«яблоков» для этого не годится: там оба порядка совпадают,
+    // и проверка проходила бы на сломанной сортировке — проверено
+    // мутацией, она так и прошла.
+    await createContact({ name: 'абрамов Клиент', phone: '0555 10 20 38' });
+    await createContact({ name: 'Яковлев Клиент', phone: '0555 10 20 39' });
+
+    const order = (await contactList(null, 'name', 'asc')).rows.map((c) => c.name);
+    const abramov = order.indexOf('абрамов Клиент');
+    const yakovlev = order.indexOf('Яковлев Клиент');
+    check('строчный «абрамов» идёт раньше заглавного «Яковлева»',
+      abramov >= 0 && yakovlev >= 0 && abramov < yakovlev,
+      `порядок: ${order.join(' | ')}`);
+
+    // И наоборот — иначе проверка проходила бы на любом устойчивом
+    // порядке, хоть бы и на обратном.
+    const desc = (await contactList(null, 'name', 'desc')).rows.map((c) => c.name);
+    check('а в обратном порядке — позже',
+      desc.indexOf('Яковлев Клиент') < desc.indexOf('абрамов Клиент'),
+      `порядок: ${desc.join(' | ')}`);
+
     // Следующий блок рассчитывает на вход Бориса — возвращаем как было.
     await loginAs(db, boris);
 
@@ -1071,6 +1098,31 @@ export default {
     check('список коллег отдаёт одобренных', colleagues.some((c) => c.id === vera));
     check('и не предлагает передать самому себе',
       !colleagues.some((c) => c.id === anna));
+
+    // Маленькие списки сортируются в коде, через localeCompare. Имена
+    // подменяются на ту же расходящуюся пару и возвращаются обратно:
+    // настоящие имена агентов нужны другим проверкам.
+    await loginAs(db, anna);
+    const originals = await db.prepare(
+      `select id, full_name from agents where id in (?, ?)`,
+    ).bind(vera, newcomer.id).all<{ id: string; full_name: string }>();
+
+    await db.prepare('update agents set full_name = ? where id = ?')
+      .bind('ядрин Коллега', vera).run();
+    await db.prepare('update agents set full_name = ? where id = ?')
+      .bind('Абаев Коллега', newcomer.id).run();
+
+    const names = (await approvedColleagues()).map((c) => c.full_name);
+    check('в списке коллег «Абаев» идёт раньше «ядрина»',
+      names.indexOf('Абаев Коллега') >= 0
+      && names.indexOf('Абаев Коллега') < names.indexOf('ядрин Коллега'),
+      names.join(' | '));
+
+    for (const row of originals.results) {
+      await db.prepare('update agents set full_name = ? where id = ?')
+        .bind(row.full_name, row.id).run();
+    }
+
     // Имя и агентство — и больше ничего. Список видит любой агент, а
     // телефоны коллег в выпадающем списке не нужны никому.
     const colleagueKeys = Object.keys(colleagues[0] ?? {}).sort().join(',');
