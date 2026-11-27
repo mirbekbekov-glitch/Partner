@@ -209,7 +209,8 @@ export default async function PublicObject({
               <Tour360
                 title={d.tourTitle}
                 rooms={o.panoramas.map((p) => ({
-                  url: p.url, room: p.room, w: p.w, h: p.h,
+                  key: p.key, url: p.url, room: p.room, w: p.w, h: p.h,
+                  links: p.links ?? [],
                 }))}
               />
             ) : null}
