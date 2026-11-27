@@ -132,6 +132,12 @@ type Dict = {
   /** Третий режим наверху и его подписи. */
   tabDaily: string; forDaily: string; perDay: string;
   alsoShort: string; alsoShortHint: string;
+  /* Карта витрины. */
+  mapNav: string; mapTitle: string; mapLead: string; mapMove: string;
+  mapEmpty: string; mapLoading: string;
+  mapPartial: (shown: number, total: number) => string;
+  /* Сокращения чисел на булавке. */
+  mln: string; thd: string; somShort: string;
 };
 
 const plural = (n: number, one: string, few: string, many: string) => {
@@ -292,6 +298,14 @@ const ru: Dict = {
   pitchStep3: 'Вам приносят варианты', pitchStep3Note: 'Появится позже — позвоним, заявка остаётся в работе',
   themeSwitch: 'Светлая или тёмная тема',
   tabDaily: 'Посуточно',
+  mapNav: 'Карта',
+  mapTitle: 'Каталог на карте',
+  mapLead: 'Объекты Liberterra на карте Бишкека: цена прямо на булавке.',
+  mapMove: 'Искать при перемещении карты',
+  mapEmpty: 'В этой части карты ничего нет. Отодвиньте или снимите фильтры.',
+  mapLoading: 'Ищем…',
+  mapPartial: (shown, total) => `Показаны ${shown} из ${total} — приблизьте карту или сузьте поиск.`,
+  mln: ' млн', thd: ' тыс.', somShort: ' с',
   alsoShort: 'Показать и краткосрочную сдачу',
   alsoShortHint: 'Квартиры, хостелы и рабочие места, которые сдают меньше чем на месяц.',
   forDaily: 'Посуточно',
@@ -445,6 +459,14 @@ const ky: Dict = {
   pitchStep3: 'Сизге варианттар келет', pitchStep3Note: 'Кийин пайда болсо — чалабыз, арыз иште калат',
   themeSwitch: 'Жарык же караңгы тема',
   tabDaily: 'Суткасына',
+  mapNav: 'Карта',
+  mapTitle: 'Картадагы каталог',
+  mapLead: 'Liberterra объекттери Бишкектин картасында: баасы түздөн-түз белгиде.',
+  mapMove: 'Картаны жылдырганда издөө',
+  mapEmpty: 'Картанын бул бөлүгүндө эч нерсе жок. Жылдырыңыз же чыпкаларды алып салыңыз.',
+  mapLoading: 'Издеп жатабыз…',
+  mapPartial: (shown, total) => `${total} ичинен ${shown} көрсөтүлдү — картаны жакындатыңыз.`,
+  mln: ' млн', thd: ' миң', somShort: ' с',
   alsoShort: 'Кыска мөөнөттүү ижараны да көрсөтүү',
   alsoShortHint: 'Бир айдан аз мөөнөткө берилген батирлер, хостелдер жана иш орундар.',
   forDaily: 'Суткасына',
@@ -598,6 +620,14 @@ const en: Dict = {
   pitchStep3: 'They bring you options', pitchStep3Note: 'If it appears later, we call: the request stays open',
   themeSwitch: 'Light or dark theme',
   tabDaily: 'Daily',
+  mapNav: 'Map',
+  mapTitle: 'Catalogue on the map',
+  mapLead: 'Liberterra listings on the map of Bishkek, price right on the pin.',
+  mapMove: 'Search as I move the map',
+  mapEmpty: 'Nothing in this part of the map. Pan out or clear the filters.',
+  mapLoading: 'Searching…',
+  mapPartial: (shown, total) => `Showing ${shown} of ${total} — zoom in or narrow the search.`,
+  mln: 'M', thd: 'K', somShort: ' som',
   alsoShort: 'Include short lets',
   alsoShortHint: 'Flats, hostels and desks let for less than a month.',
   forDaily: 'By the day',
@@ -750,6 +780,14 @@ const zh: Dict = {
   pitchStep3: '他们为您带来房源', pitchStep3Note: '日后出现也会致电：需求一直有效',
   themeSwitch: '浅色或深色主题',
   tabDaily: '日租',
+  mapNav: '地图',
+  mapTitle: '地图找房',
+  mapLead: 'Liberterra 房源在比什凯克地图上，价格直接标在图钉上。',
+  mapMove: '移动地图时搜索',
+  mapEmpty: '这一片没有房源。请移动地图或清除筛选。',
+  mapLoading: '搜索中…',
+  mapPartial: (shown, total) => `已显示 ${total} 套中的 ${shown} 套，请放大或缩小筛选范围。`,
+  mln: '百万', thd: '千', somShort: '索姆',
   alsoShort: '同时显示短租',
   alsoShortHint: '按不足一个月出租的公寓、青旅和工位。',
   forDaily: '日租',

@@ -325,6 +325,96 @@ export async function catalogPage(query: CatalogQuery = {}): Promise<CatalogPage
 }
 
 /**
+ * Точка на карте: ровно то, что нужно булавке, и ничего больше.
+ *
+ * Отдельный состав колонок, а не CatalogRow целиком. На карту уходит до
+ * пятисот объектов разом, и тянуть на каждый описание с фотографиями
+ * значило бы гонять мегабайты ради того, что не показывается. Булавке
+ * нужны место, цена и то, по чему человек узнает объявление в списке.
+ */
+export type MapPoint = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  price: number;
+  currency: string;
+  deal_type: 'rent' | 'sale';
+  kind: string;
+  subkind: string | null;
+  address: string;
+  rooms: number | null;
+  area: number | null;
+};
+
+/**
+ * Сколько точек отдаём за раз.
+ *
+ * Это не «сколько есть», а «сколько влезает в карту». Пятьсот булавок
+ * Leaflet рисует без запинки, пять тысяч — вешают вкладку на слабом
+ * телефоне. Когда найденного больше, карта честно говорит, что показана
+ * часть, и предлагает сузить — а не отдаёт случайные пятьсот молча.
+ */
+export const MAP_LIMIT = 500;
+
+/** Видимый кусок карты: юг, запад, север, восток. */
+export type BBox = { south: number; west: number; north: number; east: number };
+
+/**
+ * Объекты в видимой части карты.
+ *
+ * Условия те же, что у выдачи, — та же conditions(): карта и список
+ * обязаны показывать одно и то же, иначе человек видит булавку, которой
+ * нет в списке, и не понимает, которая из двух частей врёт.
+ *
+ * Объекты без координат в выдачу карты не попадают вовсе: поставить их
+ * некуда. Это не потеря — в списке они есть, — но на карте их нет, и
+ * страница об этом говорит прямо.
+ *
+ * Границы приходят из браузера, то есть снаружи: они сверяются как
+ * числа и уходят параметрами. Перевёрнутые местами границы меняются
+ * местами — карту можно протащить через край, и браузер пришлёт их
+ * задом наперёд.
+ */
+export async function catalogPoints(
+  query: CatalogQuery = {},
+  bbox?: BBox | null,
+): Promise<{ points: MapPoint[]; total: number; shown: number }> {
+  const { clause, params } = conditions(query);
+  const where = [clause, 'o.latitude is not null', 'o.longitude is not null'];
+  const args = [...params];
+
+  if (bbox) {
+    const south = Math.min(bbox.south, bbox.north);
+    const north = Math.max(bbox.south, bbox.north);
+    const west = Math.min(bbox.west, bbox.east);
+    const east = Math.max(bbox.west, bbox.east);
+    where.push('o.latitude between ? and ?', 'o.longitude between ? and ?');
+    args.push(south, north, west, east);
+  }
+
+  const joined = where.join(' and ');
+
+  const counted = await one<{ n: number }>(
+    `select count(*) as n from objects o where ${joined}`, ...args,
+  );
+
+  const rows = await all<Omit<MapPoint, 'price'> & { price_minor: number }>(
+    `select o.id, o.latitude, o.longitude, o.price_minor, o.currency,
+            o.deal_type, o.kind, o.subkind, o.address, o.rooms, o.area
+       from objects o where ${joined}
+      order by o.actual_at desc limit ?`,
+    ...args, MAP_LIMIT,
+  );
+
+  const points = rows.map(({ price_minor, ...rest }) => ({
+    ...rest,
+    price: fromMinor(price_minor) ?? 0,
+  }));
+
+  return { points, total: counted?.n ?? 0, shown: points.length };
+}
+
+/**
  * Сколько объектов найдётся по этим условиям.
  *
  * Отдельно от catalogPage(), потому что считает ТЕ ЖЕ условия, но не тянет

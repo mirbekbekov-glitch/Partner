@@ -54,6 +54,10 @@ export function CatalogHeader({ lang, money }: {
             отдельной строкой целиком — иначе один из разделов остаётся
             наверху, а второй висит внизу один. */}
         <nav className="nav-sections">
+          {/* Карта первой: она не «ещё один раздел», а второй способ
+              смотреть тот же каталог, и человек, думающий местом, ищет
+              её глазами сразу под знаком. */}
+          <Link href={`/${lang}/map`} className="nav-link">{d.mapNav}</Link>
           <Link href={`/${lang}/agents`} className="nav-link">{d.agentsNav}</Link>
           <Link href={`/${lang}/request`} className="nav-link">{d.reqNav}</Link>
           {/* Путь собственника. Раньше его не было: человек с квартирой

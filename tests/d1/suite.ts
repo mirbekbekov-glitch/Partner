@@ -37,6 +37,7 @@ import {
   catalogAgent, catalogAgentById, catalogAgents, catalogCities, catalogCount,
   catalogCurrencies, catalogObject, catalogPage, catalogRate, priceFloor,
   catalogZoneCounts, catalogZones,
+  catalogPoints, MAP_LIMIT,
 } from '@/lib/db/catalog';
 import {
   deleteAvatar, deletePhoto, listPhotos, photoKey, photoUrl,
@@ -52,6 +53,7 @@ import { toCsv } from '@/lib/csv';
 import { convert, parseNbkr } from '@/lib/fx';
 import { contactLinks, phoneDigits } from '@/lib/contact-links';
 import { coarseOf, isSpaceType, OBJECT_TYPES, SPACE_TYPES } from '@/lib/space-types';
+import { cluster, middle, shortPrice } from '@/lib/map-cluster';
 import {
   COMMERCIAL_TYPE, RENTAL_TERM, commercialCode, mhouseCommercial, mhouseTerm,
 } from '@/lib/mhouse';
@@ -3066,6 +3068,116 @@ export default {
           return word !== null
             && RENTAL_TERM.includes(word as (typeof RENTAL_TERM)[number]);
         }));
+
+    // -----------------------------------------------------------------
+    // Карта: точки в видимой части, сгущения, короткая цена
+    // -----------------------------------------------------------------
+    // Объект без координат поставить некуда — на карте его нет, и это
+    // не потеря: в списке он остаётся.
+    const onMap = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Картовая 1',
+      price_minor: 500_000, rooms: 2,
+      latitude: 42.8746, longitude: 74.6122,
+      term_days_min: 365,
+    });
+    await createMandate({ object_id: onMap.id, kind: 'non_exclusive' });
+    await publishObject(onMap.id);
+
+    const far = await createObject({
+      kind: 'flat', deal_type: 'rent', address: 'Далёкая 2',
+      price_minor: 600_000, rooms: 3,
+      latitude: 40.5283, longitude: 72.7985, term_days_min: 365,
+    });
+    await createMandate({ object_id: far.id, kind: 'non_exclusive' });
+    await publishObject(far.id);
+
+    const mapAll = await catalogPoints({ deal: 'rent' });
+    check('объект с координатами попадает на карту',
+      mapAll.points.some((p) => p.id === onMap.id));
+    check('объект без координат на карту не попадает',
+      !mapAll.points.some((p) => p.id === noTerm.id));
+
+    // Рамка — главное в карте: двинул — выдача другая.
+    const inFrame = await catalogPoints({ deal: 'rent' }, {
+      south: 42.8, west: 74.5, north: 42.95, east: 74.7,
+    });
+    check('в рамке Бишкека свой объект есть',
+      inFrame.points.some((p) => p.id === onMap.id));
+    check('а ошский в неё не попадает',
+      !inFrame.points.some((p) => p.id === far.id), String(inFrame.shown));
+
+    // Перевёрнутую рамку браузер присылает, протащив карту через край.
+    const flipped = await catalogPoints({ deal: 'rent' }, {
+      south: 42.95, west: 74.7, north: 42.8, east: 74.5,
+    });
+    check('перевёрнутая рамка понимается так же',
+      flipped.points.some((p) => p.id === onMap.id)
+      && !flipped.points.some((p) => p.id === far.id));
+
+    // Карта и список обязаны показывать одно: условия у них общие.
+    const dailyMap = await catalogPoints({ deal: 'daily' });
+    check('посуточная карта не показывает годовую аренду',
+      !dailyMap.points.some((p) => p.id === onMap.id));
+
+    // На точке нет ни агента, ни собственника, ни комиссии — состав
+    // колонок задан отдельно и узко.
+    const sample = mapAll.points.find((p) => p.id === onMap.id)!;
+    check('на точке карты только публичные поля',
+      Object.keys(sample).sort().join(',')
+        === 'address,area,currency,deal_type,id,kind,latitude,longitude,'
+         + 'price,rooms,subkind',
+      Object.keys(sample).sort().join(','));
+
+    // Отдаём не больше потолка, и говорим, сколько всего: молчаливые
+    // пятьсот случайных булавок выглядели бы как весь рынок.
+    check('потолок точек объявлен и невелик', MAP_LIMIT > 0 && MAP_LIMIT <= 1000);
+    check('отданных не больше потолка', mapAll.shown <= MAP_LIMIT);
+    check('всего считается отдельно от отданных', mapAll.total >= mapAll.shown);
+
+    await withdrawObject(onMap.id);
+    await withdrawObject(far.id);
+
+    // Сгущения: сетка по экрану. Две точки в одной клетке — один кружок,
+    // далёкая — своя булавка.
+    // Четвёртая точка — прямо под первой: тот же столбец, другая строка.
+    // Без неё сетка, считающая только по горизонтали, прошла бы
+    // проверку, а на экране слепила бы в один кружок весь проспект.
+    const grid = cluster(
+      [{ id: 'a', x: 10, y: 10 }, { id: 'b', x: 20, y: 20 },
+       { id: 'c', x: 400, y: 10 }, { id: 'd', x: 10, y: 400 }],
+      (p) => p,
+      64,
+    );
+    check('близкие точки собираются в одну клетку', grid.length === 3,
+      String(grid.length));
+    check('в ближней клетке две точки',
+      grid.find((c) => c.items.length === 2)?.items.length === 2);
+    check('точка под первой — в своей клетке, а не в её',
+      grid.find((c) => c.items.some((i) => i.id === 'd'))?.items.length === 1);
+    // Порядок клеток повторяет порядок точек: иначе булавки прыгали бы
+    // при каждой перерисовке, хотя карта стоит.
+    check('порядок клеток идёт от порядка точек', grid[0]!.items[0]!.id === 'a');
+    // Клетка в ноль пикселей — деление на ноль и клетка на каждую точку.
+    check('нулевая клетка не ломает сетку',
+      cluster([{ id: 'a', x: 1, y: 1 }], (p) => p, 0).length === 1);
+
+    check('центр сгущения — середина точек',
+      middle([{ latitude: 42, longitude: 74 }, { latitude: 44, longitude: 76 }])
+        .join(',') === '43,75');
+
+    // Короткая цена: на булавке помещается только она.
+    const units = { mln: ' млн', thd: ' тыс.', som: ' с' };
+    check('миллионы сокращаются', shortPrice(7_345_800, 'KGS', units) === '7.3 млн с');
+    check('тысячи тоже', shortPrice(84_000, 'USD', units) === '$84 тыс.');
+    check('мелкое остаётся как есть', shortPrice(450, 'USD', units) === '$450');
+    // Без знака валюты «84 тыс.» читается как сомы — и это разница в
+    // восемьдесят семь раз.
+    check('доллар на булавке помечен',
+      shortPrice(84_000, 'USD', units).startsWith('$')
+      && !shortPrice(84_000, 'KGS', units).startsWith('$'));
+    // Сокращения приходят словарём, а не вписаны в код.
+    check('сокращения берутся из словаря',
+      shortPrice(2_000_000, 'USD', { mln: 'M', thd: 'K', som: '' }) === '$2.0M');
 
     await withdrawObject(bothWays.id);
     await withdrawObject(hostel.id);
