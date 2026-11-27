@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import { cabinetCounters, myActivities, leadFeed, recentActivity } from '@/lib/db/cabinet';
+import {
+  cabinetCounters, myActivities, myActivityCounts, leadFeed, recentActivity,
+} from '@/lib/db/cabinet';
 import { KIND_RU } from '@/lib/activity-kinds';
 
 export const metadata = { title: 'Кабинет' };
@@ -29,13 +31,23 @@ export default async function CabinetHome() {
   // Числа — одним запросом, а три списка — параллельно с ними и друг с
   // другом: последовательно это было бы четыре раза по кругу до первой
   // отрисовки.
-  const [n, tasks, leads, recent] = await Promise.all([
+  const [n, overdueTasks, dueTasks, taskCounts, leads, recent] = await Promise.all([
     cabinetCounters(),
-    myActivities(),
+    // В выжимку идут сначала просроченные, потом ближайшие по сроку:
+    // список дел разложен по вкладкам, а на главной важна срочность, а не
+    // вкладка. Пять строк — больше в выжимку и не помещается.
+    myActivities('overdue', 1, 5),
+    myActivities('due', 1, 5),
+    myActivityCounts(),
     // Со страницей: leadFeed теперь отдаёт срез со счётчиком, а не массив.
     leadFeed('new', 1),
     recentActivity(),
   ]);
+
+  const tasks = [...overdueTasks.rows, ...dueTasks.rows].slice(0, 5);
+  // Всего незакрытых — из базы, а не длина выжимки: «и ещё N» должно
+  // считать все задачи, включая те, что без срока.
+  const tasksTotal = taskCounts.overdue + taskCounts.due + taskCounts.nodate;
 
   const objects = n?.objects ?? 0;
   const published = n?.published ?? 0;
@@ -129,14 +141,14 @@ export default async function CabinetHome() {
             <h2>Задачи</h2>
             <Link className="key" href="/cabinet/activities">все задачи →</Link>
           </div>
-          {tasks.length === 0 ? (
+          {tasksTotal === 0 ? (
             <p className="key">
               Незакрытых задач нет. Звонок, показ или задача записывается на
               карточке объекта, потребности или сделки.
             </p>
           ) : (
             <ul className="digest">
-              {tasks.slice(0, 5).map((a) => (
+              {tasks.map((a) => (
                 <li key={a.id}>
                   <div className="row">
                     <span className="tag">{KIND_RU[a.kind] ?? a.kind}</span>
@@ -157,8 +169,8 @@ export default async function CabinetHome() {
               ))}
             </ul>
           )}
-          {tasks.length > 5 ? (
-            <p className="key">и ещё {tasks.length - 5}</p>
+          {tasksTotal > tasks.length ? (
+            <p className="key">и ещё {tasksTotal - tasks.length}</p>
           ) : null}
         </section>
 
