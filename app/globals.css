@@ -1516,10 +1516,7 @@ a.agent-row { text-decoration: none; color: inherit; border-radius: var(--r-md);
   transition: background .18s; }
 a.agent-row:hover { background: var(--sunk); }
 
-/* === Виртуальный тур ============================================= */
-/* Высота в пикселях с потолком по доле экрана: панораму разглядывают,
-   а не просматривают мельком, и окно в двести точек бессмысленно. Но и
-   на весь экран нельзя — со страницы объявления тогда исчезает цена. */
+/* === Виртуальный тур ===================================================== */
 /* Бейдж тура на карточке каталога: тише метки сделки — он сообщает
    о дополнении, а не о главном. */
 .flag.tourflag { background: var(--ink); color: var(--on-ink); }
@@ -1535,7 +1532,10 @@ a.agent-row:hover { background: var(--sunk); }
 .tour-room:hover { border-color: var(--accent); }
 .tour-room[aria-current='true'] { background: var(--accent); border-color: var(--accent);
   color: var(--accent-fg); }
-/* Два класса в селекторе не для красоты: просмотрщик приносит свой
+/* Высота в пикселях с потолком по доле экрана: панораму разглядывают,
+   а не просматривают мельком, и окно в двести точек бессмысленно. Но и
+   на весь экран нельзя — со страницы объявления тогда исчезает цена.
+   Два класса в селекторе не для красоты: просмотрщик приносит свой
    .pnlm-container с height: 100%, грузится он позже наших стилей и с
    одной и той же силой побеждает — окно схлопывается в два пикселя. */
 .tour .tour-box { height: min(62vh, 520px); border-radius: var(--r-lg);
@@ -1546,7 +1546,7 @@ a.agent-row:hover { background: var(--sunk); }
 @media (max-width: 680px) {
   .tour .tour-box { height: 56vh; }
 }
-=======
+
 /* Пустая выдача: карточка с выходом, а не строка в пустоте. */
 .none-card { grid-column: 1 / -1; background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--r-lg); padding: 32px 28px; text-align: center;
