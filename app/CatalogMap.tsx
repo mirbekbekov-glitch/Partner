@@ -41,6 +41,7 @@ type Dict = {
   loading: string;
   roomsShort: string;
   sqm: string;
+  mapFix: string;
   mln: string;
   thd: string;
   som: string;
@@ -77,7 +78,7 @@ function pin(
 }
 
 export function CatalogMap({
-  lang, points, total, shown, query, d,
+  lang, points, total, shown, query, tiles, d,
 }: {
   lang: Lang;
   points: MapPoint[];
@@ -85,6 +86,8 @@ export function CatalogMap({
   shown: number;
   /** Строка фильтров без границ карты: их дописывает сама карта. */
   query: string;
+  /** Откуда плитки и чьей подписью. Приходит настройкой, а не вшит. */
+  tiles: { url: string; attribution: string };
   d: Dict;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -147,9 +150,9 @@ export function CatalogMap({
       // которого мы не делали. Ссылка на OpenStreetMap остаётся: её
       // требует лицензия карты, а значок — нет.
       m.attributionControl.setPrefix(false);
-      mod.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      mod.tileLayer(tiles.url, {
         maxZoom: 19,
-        attribution: '© OpenStreetMap',
+        attribution: tiles.attribution,
       }).addTo(m);
 
       layer.current = mod.layerGroup().addTo(m);
@@ -246,6 +249,12 @@ export function CatalogMap({
           {state.shown < state.total ? (
             <p className="key">{d.partial(state.shown, state.total)}</p>
           ) : null}
+          {/* Ошибку в самой карте — не в объявлении — правят в
+              OpenStreetMap, и ссылку на это просит их же политика.
+              Нам она тоже на руку: пропавшая улица чинится там
+              навсегда, а не обходится у нас подпоркой. */}
+          <a className="key map-fix" href="https://www.openstreetmap.org/fixthemap"
+             target="_blank" rel="noreferrer">{d.mapFix}</a>
         </div>
 
         <div className="map-list">

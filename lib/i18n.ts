@@ -136,6 +136,7 @@ type Dict = {
   mapNav: string; mapTitle: string; mapLead: string; mapMove: string;
   mapEmpty: string; mapLoading: string;
   mapPartial: (shown: number, total: number) => string;
+  mapFix: string;
   /* Сокращения чисел на булавке. */
   mln: string; thd: string; somShort: string;
 };
@@ -305,6 +306,7 @@ const ru: Dict = {
   mapEmpty: 'В этой части карты ничего нет. Отодвиньте или снимите фильтры.',
   mapLoading: 'Ищем…',
   mapPartial: (shown, total) => `Показаны ${shown} из ${total} — приблизьте карту или сузьте поиск.`,
+  mapFix: 'Ошибка на карте? Сообщите в OpenStreetMap',
   mln: ' млн', thd: ' тыс.', somShort: ' с',
   alsoShort: 'Показать и краткосрочную сдачу',
   alsoShortHint: 'Квартиры, хостелы и рабочие места, которые сдают меньше чем на месяц.',
@@ -466,6 +468,7 @@ const ky: Dict = {
   mapEmpty: 'Картанын бул бөлүгүндө эч нерсе жок. Жылдырыңыз же чыпкаларды алып салыңыз.',
   mapLoading: 'Издеп жатабыз…',
   mapPartial: (shown, total) => `${total} ичинен ${shown} көрсөтүлдү — картаны жакындатыңыз.`,
+  mapFix: 'Картада ката барбы? OpenStreetMap’ке билдириңиз',
   mln: ' млн', thd: ' миң', somShort: ' с',
   alsoShort: 'Кыска мөөнөттүү ижараны да көрсөтүү',
   alsoShortHint: 'Бир айдан аз мөөнөткө берилген батирлер, хостелдер жана иш орундар.',
@@ -627,6 +630,7 @@ const en: Dict = {
   mapEmpty: 'Nothing in this part of the map. Pan out or clear the filters.',
   mapLoading: 'Searching…',
   mapPartial: (shown, total) => `Showing ${shown} of ${total} — zoom in or narrow the search.`,
+  mapFix: 'Something wrong on the map? Tell OpenStreetMap',
   mln: 'M', thd: 'K', somShort: ' som',
   alsoShort: 'Include short lets',
   alsoShortHint: 'Flats, hostels and desks let for less than a month.',
@@ -787,6 +791,7 @@ const zh: Dict = {
   mapEmpty: '这一片没有房源。请移动地图或清除筛选。',
   mapLoading: '搜索中…',
   mapPartial: (shown, total) => `已显示 ${total} 套中的 ${shown} 套，请放大或缩小筛选范围。`,
+  mapFix: '地图有误？请告知 OpenStreetMap',
   mln: '百万', thd: '千', somShort: '索姆',
   alsoShort: '同时显示短租',
   alsoShortHint: '按不足一个月出租的公寓、青旅和工位。',

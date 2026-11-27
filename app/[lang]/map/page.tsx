@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { catalogPoints } from '@/lib/db/catalog';
+import { tileSource } from '@/lib/map-tiles';
 import { parseCatalogFilters } from '@/lib/catalog-params';
 import { citiesOf } from '@/lib/geo';
 import { t, LANGS, type Lang } from '@/lib/i18n';
@@ -100,6 +101,7 @@ export default async function MapPage({
           total={found.total}
           shown={found.shown}
           query={query.toString()}
+          tiles={tileSource()}
           d={{
             moveSearch: d.mapMove,
             found: d.objectsCount,
@@ -108,6 +110,7 @@ export default async function MapPage({
             loading: d.mapLoading,
             roomsShort: d.roomsShort,
             sqm: d.sqm,
+            mapFix: d.mapFix,
             mln: d.mln,
             thd: d.thd,
             som: d.somShort,

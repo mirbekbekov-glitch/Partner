@@ -55,6 +55,7 @@ import { convert, parseNbkr } from '@/lib/fx';
 import { contactLinks, phoneDigits } from '@/lib/contact-links';
 import { coarseOf, isSpaceType, OBJECT_TYPES, SPACE_TYPES } from '@/lib/space-types';
 import { cluster, middle, shortPrice } from '@/lib/map-cluster';
+import { OSM_TILES, pickTiles } from '@/lib/map-tiles';
 import {
   COMMERCIAL_TYPE, RENTAL_TERM, commercialCode, mhouseCommercial, mhouseTerm,
 } from '@/lib/mhouse';
@@ -3165,6 +3166,35 @@ export default {
     check('центр сгущения — середина точек',
       middle([{ latitude: 42, longitude: 74 }, { latitude: 44, longitude: 76 }])
         .join(',') === '43,75');
+
+    // Источник плиток приходит настройкой, а не вшит в код: этого
+    // просит сама политика OpenStreetMap, и причина у неё не в удобстве
+    // — доступ к их серверу может быть отозван без предупреждения, и
+    // коммерческие сайты она предупреждает об этом отдельно.
+    check('без настройки берём OpenStreetMap',
+      pickTiles(undefined, undefined).url === OSM_TILES.url);
+    check('и его подпись', pickTiles('', '').attribution.includes('OpenStreetMap'));
+    check('заданный источник берётся как есть',
+      pickTiles('https://tiles.example.com/{z}/{x}/{y}.png', '© Example').url
+        === 'https://tiles.example.com/{z}/{x}/{y}.png');
+    // Подпись без адреса и адрес без подписи — не настройка, а половина
+    // настройки: карта с чужими плитками и чужой подписью нарушает уже
+    // лицензию второго поставщика.
+    check('адрес без подписи не принимается',
+      pickTiles('https://tiles.example.com/{z}/{x}/{y}.png', '').url === OSM_TILES.url);
+    check('подпись без адреса — тоже',
+      pickTiles('', '© Example').attribution === OSM_TILES.attribution);
+    // Адрес без {z} — не шаблон плиток, а чей-то недописанный адрес:
+    // карта осталась бы серой молча.
+    check('адрес без подстановки не принимается',
+      pickTiles('https://tiles.example.com/map.png', '© Example').url === OSM_TILES.url);
+    check('http вместо https не принимается',
+      pickTiles('http://tiles.example.com/{z}/{x}/{y}.png', '© Example').url
+        === OSM_TILES.url);
+    // В подписи OSM обязано стоять слово contributors — так требуют их
+    // правила указания авторства.
+    check('подпись OSM называет участников',
+      OSM_TILES.attribution.includes('contributors'), OSM_TILES.attribution);
 
     // Короткая цена: на булавке помещается только она.
     const units = { mln: ' млн', thd: ' тыс.', som: ' с' };
