@@ -337,6 +337,13 @@ export default {
     // Главный случай — запись БЕЗ связей с объектами. При неправильном
     // порядке RESTRICT промолчит, и потребности исчезнут без единой ошибки.
     const dupe = await createContact({ name: 'Иван Иванов', phone: '0555 40 50 60' });
+
+    // Обе записи — собственники ОДНОГО объекта в ОДНОЙ роли. Роль входит
+    // в ключ связи, поэтому при объединении лишняя связь снимается
+    // навсегда. Это единственное, что объединение действительно теряет, и
+    // в журнале должно остаться, ЧТО именно снято, а не только сколько.
+    await setObjectOwnership(obj.id, ivan.id, 'owner');
+    await setObjectOwnership(obj.id, dupe.id, 'owner');
     await db.prepare(
       `insert into requirements (id, contact_id, deal_type, agent_id, status,
                                  created_at, updated_at)
@@ -349,6 +356,32 @@ export default {
     ).bind(ivan.id).first<{ n: number }>();
     const gone = await db.prepare('select count(*) as n from requirements')
       .first<{ n: number }>();
+
+    // Присоединённая запись удаляется без возможности вернуть, и журнал —
+    // единственное место, где её содержимое остаётся. До этого там лежало
+    // ОДНО ИМЯ, хотя README обещал содержимое: по имени запись не собрать.
+    const mergedAudit = await db.prepare(
+      `select diff from audit_log
+        where entity_type = 'contacts' and entity_id = ? and action = 'delete'
+        order by id desc limit 1`,
+    ).bind(dupe.id).first<{ diff: string }>();
+    const buried = JSON.parse(mergedAudit?.diff ?? '{}') as Record<string, unknown>;
+
+    check('журнал хранит имя удалённой записи', buried.name === 'Иван Иванов');
+    check('и её вид', buried.kind === 'person');
+    check('и владельца', buried.owner_agent_id === anna);
+    check('и дату появления', typeof buried.created_at === 'string');
+    check('и куда её влили', buried.merged_into === ivan.id);
+    // Телефонов в журнале быть не должно: они не удаляются, а переезжают.
+    check('а телефонов в журнале нет', !('phones' in buried) && !('phone' in buried));
+
+    const dropped = buried.dropped_ownerships as Array<{ object_id: string; role: string }>;
+    check('и снятая связь собственности выписана целиком',
+      Array.isArray(dropped) && dropped.length === 1
+      && dropped[0]?.object_id === obj.id && dropped[0]?.role === 'owner',
+      JSON.stringify(dropped));
+    check('а отчёт об объединении её посчитал', report.ownerships_dropped === 1,
+      `снято ${report.ownerships_dropped}`);
 
     check('объединение переносит потребность, а не теряет её',
       (reqAfter?.n ?? 0) === 1 && (gone?.n ?? 0) === 1,
@@ -420,6 +453,33 @@ export default {
       (await contactList('сидоров')).rows.some((c) => c.id === capsDupe.id));
     check('и по прежнему имени больше нет',
       !(await contactList('иван')).rows.some((c) => c.id === capsDupe.id));
+
+    // Порядок списка: SQLite сравнивает побайтно, и для кириллицы это
+    // значит, что все заглавные идут перед всеми строчными. Проверено
+    // запросом к боевой базе: «Абрамов, Орозов, Яковлев, абрамов,
+    // яковлев». Значит контакт, записанный строчными, уезжал в конец.
+    // Пара выбрана так, чтобы побайтный порядок РАСХОДИЛСЯ с алфавитным:
+    // строчная «а» это U+0430, заглавная «Я» — U+042F, то есть побайтно
+    // «Яковлев» идёт ПЕРЕД «абрамов», хотя по алфавиту наоборот. Пара
+    // «Абрамов»/«яблоков» для этого не годится: там оба порядка совпадают,
+    // и проверка проходила бы на сломанной сортировке — проверено
+    // мутацией, она так и прошла.
+    await createContact({ name: 'абрамов Клиент', phone: '0555 10 20 38' });
+    await createContact({ name: 'Яковлев Клиент', phone: '0555 10 20 39' });
+
+    const order = (await contactList(null, 'name', 'asc')).rows.map((c) => c.name);
+    const abramov = order.indexOf('абрамов Клиент');
+    const yakovlev = order.indexOf('Яковлев Клиент');
+    check('строчный «абрамов» идёт раньше заглавного «Яковлева»',
+      abramov >= 0 && yakovlev >= 0 && abramov < yakovlev,
+      `порядок: ${order.join(' | ')}`);
+
+    // И наоборот — иначе проверка проходила бы на любом устойчивом
+    // порядке, хоть бы и на обратном.
+    const desc = (await contactList(null, 'name', 'desc')).rows.map((c) => c.name);
+    check('а в обратном порядке — позже',
+      desc.indexOf('Яковлев Клиент') < desc.indexOf('абрамов Клиент'),
+      `порядок: ${desc.join(' | ')}`);
 
     // Следующий блок рассчитывает на вход Бориса — возвращаем как было.
     await loginAs(db, boris);
@@ -1073,6 +1133,125 @@ export default {
     check('список коллег отдаёт одобренных', colleagues.some((c) => c.id === vera));
     check('и не предлагает передать самому себе',
       !colleagues.some((c) => c.id === anna));
+
+    // Маленькие списки сортируются в коде, через localeCompare. Имена
+    // подменяются на ту же расходящуюся пару и возвращаются обратно:
+    // настоящие имена агентов нужны другим проверкам.
+    await loginAs(db, anna);
+    const originals = await db.prepare(
+      `select id, full_name from agents where id in (?, ?)`,
+    ).bind(vera, newcomer.id).all<{ id: string; full_name: string }>();
+
+    await db.prepare('update agents set full_name = ? where id = ?')
+      .bind('Ядрин Коллега', vera).run();
+    await db.prepare('update agents set full_name = ? where id = ?')
+      .bind('абаев Коллега', newcomer.id).run();
+
+    const names = (await approvedColleagues()).map((c) => c.full_name);
+    check('в списке коллег строчный «абаев» идёт раньше заглавного «Ядрина»',
+      names.indexOf('абаев Коллега') >= 0 && names.indexOf('Ядрин Коллега') >= 0
+      && names.indexOf('абаев Коллега') < names.indexOf('Ядрин Коллега'),
+      names.join(' | '));
+
+    // Сопоставимое имя агента пишется в ТРЁХ местах, и на каждое своя
+    // проверка: иначе одно из трёх однажды отстанет, и список будет
+    // сортироваться по прежнему имени, а показывать новое.
+    const sortOf = async (id: string) => (await db
+      .prepare('select full_name, name_sort from agents where id = ?')
+      .bind(id).first<{ full_name: string; name_sort: string }>());
+
+    // Путь 1: заведение агента.
+    const freshAgent = await ensureAgentByEmail('sortirovka@example.kg', 'ЯДРИН Сорт');
+    check('у нового агента сопоставимое имя заполнено',
+      (await sortOf(freshAgent.id))?.name_sort === 'ядрин сорт',
+      String((await sortOf(freshAgent.id))?.name_sort));
+
+    // Путь 2: переименование при входе.
+    await ensureAgentByEmail('sortirovka@example.kg', 'АБАЕВ Сорт');
+    check('и после переименования при входе — тоже',
+      (await sortOf(freshAgent.id))?.name_sort === 'абаев сорт',
+      String((await sortOf(freshAgent.id))?.name_sort));
+
+    // Путь 3: правка профиля самим агентом.
+    await db.prepare(`update agents set status = 'approved' where id = ?`)
+      .bind(freshAgent.id).run();
+    await loginAs(db, freshAgent.id);
+    await updateProfile({ full_name: 'ВОРОНОВ Сорт' });
+    check('и после правки профиля — тоже',
+      (await sortOf(freshAgent.id))?.name_sort === 'воронов сорт',
+      String((await sortOf(freshAgent.id))?.name_sort));
+
+    // А теперь сам порядок: строчный агент не должен уезжать в конец.
+    // Переименовываются ТЕ, КТО ведёт потребности в списке, — Анна и
+    // Борис. Переименование кого-то другого проверку не затронуло бы, и
+    // она проходила бы на пустой выдаче: так и случилось в первой версии.
+    await loginAs(db, anna);
+    const leading = await db.prepare(
+      'select id, full_name, name_sort from agents where id in (?, ?)',
+    ).bind(anna, boris).all<{ id: string; full_name: string; name_sort: string }>();
+
+    // Пара снова выбрана так, чтобы побайтный порядок РАСХОДИЛСЯ с
+    // алфавитным: строчная «а» это U+0430, заглавная «Я» — U+042F. Пара
+    // «Абаев»/«ядрин» для этого не годится, там порядки совпадают — на
+    // ней мутация «сортировать по ag.full_name» прошла молча.
+    await db.prepare('update agents set full_name = ?, name_sort = ? where id = ?')
+      .bind('абаев Ведущий', 'абаев ведущий', anna).run();
+    await db.prepare('update agents set full_name = ?, name_sort = ? where id = ?')
+      .bind('Ядрин Ведущий', 'ядрин ведущий', boris).run();
+
+    const byAgent = (await requirementList({ sort: 'agent', dir: 'asc' }))
+      .rows.map((r) => r.agent_name);
+    const abaev = byAgent.indexOf('абаев Ведущий');
+    const yadrin = byAgent.indexOf('Ядрин Ведущий');
+    // Строго: без требования, чтобы ОБА были в списке, проверка проходила
+    // бы и на пустой выдаче — то есть не проверяла бы ничего.
+    check('оба ведущих есть в списке — значит проверка не пустая',
+      abaev >= 0 && yadrin >= 0, `порядок: ${byAgent.join(' | ')}`);
+    check('и строчный «абаев» идёт раньше заглавного «Ядрина»',
+      abaev >= 0 && yadrin >= 0 && abaev < yadrin,
+      `порядок: ${byAgent.join(' | ')}`);
+
+    // То же для списка объектов: там колонка «ведёт» это отдельный
+    // подзапрос, и свой порядок у него тоже свой — без проверки мутация
+    // «сортировать по responsible_name» проходила бы молча.
+    //
+    // Объект Бориса нужен именно здесь: до этого места все объекты ведёт
+    // Анна, и список был из одного имени — проверка проходила бы на
+    // пустом сравнении.
+    // Статус Бориса к этому месту уже менялся предыдущими блоками, и
+    // неодобренный агент объект не заведёт. Возвращаем как было сразу
+    // после — иначе сломается то, что идёт дальше.
+    const borisStatus = await db.prepare('select status from agents where id = ?')
+      .bind(boris).first<{ status: string }>();
+    await db.prepare(`update agents set status = 'approved' where id = ?`)
+      .bind(boris).run();
+
+    await loginAs(db, boris);
+    const borisObject = await createObject({
+      kind: 'flat', deal_type: 'sale', address: 'Сортировочная 1',
+      price_minor: 3_300_000,
+    });
+    await createMandate({ object_id: borisObject.id, kind: 'non_exclusive' });
+
+    await db.prepare('update agents set status = ? where id = ?')
+      .bind(borisStatus?.status ?? 'approved', boris).run();
+    await loginAs(db, anna);
+
+    const byLeader = (await objectList({ sort: 'agent', dir: 'asc' }))
+      .rows.map((o) => o.responsible_name);
+    const abaevObj = byLeader.indexOf('абаев Ведущий');
+    const yadrinObj = byLeader.indexOf('Ядрин Ведущий');
+    check('оба ведущих есть в списке объектов — проверка не пустая',
+      abaevObj >= 0 && yadrinObj >= 0, `порядок: ${byLeader.join(' | ')}`);
+    check('и в объектах строчный «абаев» идёт раньше',
+      abaevObj >= 0 && yadrinObj >= 0 && abaevObj < yadrinObj,
+      `порядок: ${byLeader.join(' | ')}`);
+
+    for (const row of [...originals.results, ...leading.results]) {
+      await db.prepare('update agents set full_name = ?, name_sort = ? where id = ?')
+        .bind(row.full_name, row.full_name.toLowerCase(), row.id).run();
+    }
+
     // Имя и агентство — и больше ничего. Список видит любой агент, а
     // телефоны коллег в выпадающем списке не нужны никому.
     const colleagueKeys = Object.keys(colleagues[0] ?? {}).sort().join(',');
@@ -1090,11 +1269,18 @@ export default {
     // Ради чего всё: задача должна появиться в списке дел ТОГО, на кого
     // поставлена, а не того, кто поставил. Иначе коллега о ней не узнает.
     await loginAs(db, vera);
+    // Дела разложены по вкладкам (просрочено, со сроком, без срока), и
+    // задача лежит в той, куда попал её срок. Проверяем по всем сразу:
+    // важно, что она у коллеги есть, а не в какой она вкладке.
+    const everyTask = async () => (await Promise.all(
+      (['overdue', 'due', 'nodate'] as const).map((s) => myActivities(s)),
+    )).flatMap((p) => p.rows);
+
     check('и она появилась в списке дел коллеги',
-      (await myActivities()).some((t) => t.id === forVera.id));
+      (await everyTask()).some((t) => t.id === forVera.id));
     await loginAs(db, anna);
     check('а в моём списке её нет',
-      !(await myActivities()).some((t) => t.id === forVera.id));
+      !(await everyTask()).some((t) => t.id === forVera.id));
 
     const assignAudit = await db
       .prepare(`select diff from audit_log where entity_type = 'activities'
@@ -1885,13 +2071,19 @@ export default {
     check('объекты чужого контакта не видны',
       (await contactObjects(annaContact.id)).length === 0);
 
-    // Сделки: видит только сторона.
+    // Сделки: видит только сторона. Список разложен по вкладкам (идущие и
+    // завершённые), и сделка лежит в той, куда попал её статус. Проверяем
+    // обе: важно, что сторона её видит, а не в какой она вкладке.
+    const everyDeal = async () => (await Promise.all(
+      (['open', 'done'] as const).map((s) => dealList(null, 'desc', s)),
+    )).flatMap((p) => p.rows);
+
     await loginAs(db, anna);
-    const annaDeals = await dealList();
+    const annaDeals = await everyDeal();
     check('сторона сделки свои сделки видит', annaDeals.length > 0);
 
     await loginAs(db, vera);
-    const veraDeals = await dealList();
+    const veraDeals = await everyDeal();
     check('посторонний чужих сделок не видит',
       veraDeals.length === 0, `видно ${veraDeals.length}`);
 

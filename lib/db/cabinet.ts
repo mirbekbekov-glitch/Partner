@@ -61,6 +61,14 @@ export type Page<T> = { rows: T[]; total: number };
  * Колонки, закрытые инвариантом 4 (имя собственника, имя клиента), в
  * списки не входят намеренно: порядок строк выдал бы то, что скрыто в
  * самой ячейке.
+ *
+ * ТЕКСТОВЫЕ колонки сортируются по нормализованному виду, а не по самому
+ * тексту. Причина та же, что у поиска: SQLite сравнивает строки побайтно,
+ * и для кириллицы это значит, что ВСЕ заглавные идут перед всеми
+ * строчными. Проверено запросом к боевой базе: «Абрамов, Орозов, Яковлев,
+ * абрамов, яковлев» — то есть контакт, записанный строчными, уезжает в
+ * конец списка после «Яковлева». `collate nocase` не помогает: он тоже
+ * знает только латиницу.
  */
 function orderBy(
   columns: Record<string, string>,
@@ -162,7 +170,8 @@ export async function contactList(
        left join agents ag on ag.id = c.owner_agent_id
       where ${visible.sql} ${filter}
       ${orderBy({
-        name: 'c.name',
+        // По нормализованной колонке: см. пояснение к orderBy.
+        name: 'c.search_text',
         objects: 'objects_count',
         requirements: 'requirements_count',
         source: 'c.source',
@@ -355,6 +364,9 @@ export async function objectList(query: {
             la.full_name as listing_agent_name,
             org.name as organization_name,
             ra.full_name as responsible_name,
+            -- Порядок по сопоставимому виду, а не по самому имени: см.
+            -- пояснение к orderBy.
+            ra.name_sort as responsible_sort,
             org.name as responsible_org_name,
             o.price_minor,
             (select count(*) from matches mt where mt.object_id = o.id)
@@ -378,12 +390,12 @@ export async function objectList(query: {
        left join organizations org on org.id = ra.organization_id
       where ${where.join(' and ')}
       ${orderBy({
-        address: 'o.address',
+        address: 'o.search_text',
         deal: 'o.deal_type',
         state: 'o.publication_state',
         price: 'o.price_minor',
         matches: 'matches_count',
-        agent: 'responsible_name',
+        agent: 'responsible_sort',
         actual: 'o.actual_at',
       }, 'o.actual_at desc', query.sort, query.dir)}
       ${limitOffset(query.page, query.perPage)}`,
@@ -766,7 +778,7 @@ export async function requirementList(query: {
         budget: 'r.budget_max_minor',
         deal: 'r.deal_type',
         status: 'r.status',
-        agent: 'ag.full_name',
+        agent: 'ag.name_sort',
         matches: 'matches_count',
         showings: 'showings_count',
         deadline: 'r.deadline',
@@ -929,10 +941,38 @@ export type DealListItem = {
   closed_at: string | null;
 };
 
+/** Какие сделки показывать: идущие или завершённые. */
+export type DealScope = 'open' | 'done';
+
+/**
+ * Сколько сделок в каждой вкладке.
+ *
+ * Считает база: подпись вкладки должна показывать всё, а не то, что
+ * уместилось на странице.
+ */
+export async function dealCounts(): Promise<Record<DealScope, number>> {
+  const me = await asker();
+  const party = dealParty('d', me.id, me.admin);
+
+  const row = await one<{ open: number; done: number }>(
+    `select
+       sum(case when d.status in ('closed', 'failed') then 0 else 1 end) as open,
+       sum(case when d.status in ('closed', 'failed') then 1 else 0 end) as done
+     from deals d
+     where ${party.sql}`,
+    me.id,
+  );
+
+  return { open: row?.open ?? 0, done: row?.done ?? 0 };
+}
+
 export async function dealList(
   sort?: string | null,
   dir?: 'asc' | 'desc',
-): Promise<DealListItem[]> {
+  scope: DealScope = 'open',
+  page?: number | null,
+  perPage?: number | null,
+): Promise<Page<DealListItem>> {
   const me = await asker();
   const party = dealParty('d', me.id, me.admin);
 
@@ -940,6 +980,7 @@ export async function dealList(
 
   const rows = await all<{
     id: string; status: string; address: string; deal_type: 'rent' | 'sale';
+    total_count: number;
     final_price_minor: number | null; price_minor: number; currency: string;
     failure_reason: string | null;
     commission_total_minor: number | null;
@@ -959,6 +1000,7 @@ export async function dealList(
                from requirements r join contacts c on c.id = r.contact_id
               where r.id = d.requirement_id) as client_name,
             (${party.sql}) as can_act,
+            count(*) over () as total_count,
             d.created_at, d.closed_at
        from deals d
        join objects o on o.id = d.object_id
@@ -966,16 +1008,17 @@ export async function dealList(
        left join agents la on la.id = d.listing_agent_id
        left join agents ca on ca.id = d.closing_agent_id
       where ${party.sql}
+        and d.status ${scope === 'done' ? 'in' : 'not in'} ('closed', 'failed')
       ${orderBy({
-        address: 'o.address',
+        address: 'o.search_text',
         status: 'd.status',
         price: 'coalesce(d.final_price_minor, o.price_minor)',
         created: 'd.created_at',
-      }, 'd.created_at desc', sort, dir)} limit 200`,
+      }, 'd.created_at desc', sort, dir)} ${limitOffset(page, perPage)}`,
     me.id,
   );
 
-  return rows.map((r) => {
+  const items = rows.map((r) => {
     // До закрытия суммы индикативны и считаются на лету; после закрытия
     // отдаются зафиксированные. Записывать индикативные нельзя — записанные
     // означали бы, что деньги уже поделены.
@@ -1009,6 +1052,8 @@ export async function dealList(
       closed_at: r.closed_at,
     };
   });
+
+  return { total: rows[0]?.total_count ?? 0, rows: items };
 }
 
 /**
@@ -1155,25 +1200,78 @@ export async function activityFeed(
 }
 
 /** Личный список задач: свои незакрытые, по сроку. */
-export async function myActivities(): Promise<ActivityItem[]> {
+/** Какие дела показывать: просроченные, со сроком впереди или без срока. */
+export type ActivityScope = 'overdue' | 'due' | 'nodate';
+
+const ACTIVITY_SCOPE: Record<ActivityScope, string> = {
+  overdue: 'a.due_at is not null and a.due_at < ?2',
+  due: 'a.due_at is not null and a.due_at >= ?2',
+  nodate: 'a.due_at is null',
+};
+
+/**
+ * Личный список дел одной вкладкой.
+ *
+ * Раньше страница брала двести незакрытых записей и делила их на разделы
+ * уже в браузере. Пока записей мало, разница незаметна; на двести первой
+ * просроченная задача просто перестала бы показываться — молча.
+ *
+ * Поэтому разделы стали вкладками: условие ушло в запрос, и каждая
+ * вкладка листается своими страницами.
+ */
+export async function myActivities(
+  scope: ActivityScope = 'overdue',
+  page?: number | null,
+  perPage?: number | null,
+): Promise<Page<ActivityItem>> {
   const me = await asker();
   const at = new Date().toISOString();
 
-  const rows = await all<Parameters<typeof toActivity>[0]>(
+  const rows = await all<Parameters<typeof toActivity>[0] & { total_count: number }>(
     `select a.id, a.kind, a.entity_type, a.entity_id, a.body, a.due_at,
             a.done, a.done_at, a.is_shared, a.created_at, a.agent_id,
             ag.full_name as agent_name,
             1 as mine,
             (a.done = 0 and a.due_at is not null and a.due_at < ?2) as overdue,
-            ${ENTITY_TITLE} as entity_title
+            ${ENTITY_TITLE} as entity_title,
+            count(*) over () as total_count
        from activities a
        left join agents ag on ag.id = a.agent_id
       where a.agent_id = ?1 and a.done = 0
-      order by a.due_at is null, a.due_at limit 200`,
+        and ${ACTIVITY_SCOPE[scope] ?? ACTIVITY_SCOPE.overdue}
+      order by a.due_at is null, a.due_at ${limitOffset(page, perPage)}`,
     me.id, at,
   );
 
-  return rows.map(toActivity);
+  return { total: rows[0]?.total_count ?? 0, rows: rows.map(toActivity) };
+}
+
+/**
+ * Сколько дел в каждой вкладке.
+ *
+ * Одним запросом и в базе: подписи вкладок должны показывать всё, а не то,
+ * что уместилось на странице. Просроченное число — главное на экране, и
+ * врать ему нельзя.
+ */
+export async function myActivityCounts(): Promise<Record<ActivityScope, number>> {
+  const me = await asker();
+  const at = new Date().toISOString();
+
+  const row = await one<{ overdue: number; due: number; nodate: number }>(
+    `select
+       sum(case when a.due_at is not null and a.due_at < ?2 then 1 else 0 end) as overdue,
+       sum(case when a.due_at is not null and a.due_at >= ?2 then 1 else 0 end) as due,
+       sum(case when a.due_at is null then 1 else 0 end) as nodate
+     from activities a
+     where a.agent_id = ?1 and a.done = 0`,
+    me.id, at,
+  );
+
+  return {
+    overdue: row?.overdue ?? 0,
+    due: row?.due ?? 0,
+    nodate: row?.nodate ?? 0,
+  };
 }
 
 /**

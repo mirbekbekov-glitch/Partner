@@ -2,7 +2,7 @@ import 'server-only';
 import { all, batch, flag, newId, now, one, stmt } from './sql';
 import { auditStmt } from './audit';
 import { requireAdmin, requireAgent, requireSelf, type Agent } from './session';
-import { normalizeName } from './normalize';
+import { normalizeName, searchText } from './normalize';
 import { Conflict, Forbidden, Invalid, NotFound } from './errors';
 
 /**
@@ -73,11 +73,18 @@ export async function listAgents(): Promise<Array<AgentRow & {
  */
 export async function approvedColleagues(): Promise<Array<{ id: string; full_name: string }>> {
   const agent = await requireAgent();
-  return all(
-    `select id, full_name from agents
-      where status = 'approved' and id <> ? order by full_name`,
+  const rows = await all<{ id: string; full_name: string }>(
+    `select id, full_name from agents where status = 'approved' and id <> ?`,
     agent.id,
   );
+
+  // Порядок задаётся в коде, а не в запросе. SQLite сравнивает строки
+  // побайтно, и для кириллицы это значит, что все заглавные идут перед
+  // всеми строчными: «Абрамов, Яковлев, абрамов» — проверено запросом к
+  // боевой базе. localeCompare знает русский алфавит. Список агентств
+  // мал и не постраничный, поэтому сортировка в коде ничего не стоит; в
+  // постраничных списках так нельзя — там порядок обязан быть в запросе.
+  return rows.sort((a, b) => a.full_name.localeCompare(b.full_name, 'ru'));
 }
 
 // ---------------------------------------------------------------------------
@@ -109,8 +116,9 @@ export async function ensureAgentByEmail(
     const name = (fullName ?? '').trim();
     if (name && name !== existing.full_name) {
       await batch([
-        stmt('update agents set full_name = ?, updated_at = ? where id = ?',
-          name, at, existing.id),
+        // name_sort рядом с full_name: порядок в списках берётся из неё.
+        stmt('update agents set full_name = ?, name_sort = ?, updated_at = ? where id = ?',
+          name, searchText(name), at, existing.id),
         auditStmt('agents', existing.id, 'update', existing.id,
           { full_name: { from: existing.full_name, to: name } }),
       ]);
@@ -126,9 +134,9 @@ export async function ensureAgentByEmail(
   await batch([
     stmt(
       `insert into agents (id, email, full_name, role, status, focus,
-                           created_at, updated_at)
-       values (?, ?, ?, 'agent', 'pending', 'both', ?, ?)`,
-      id, clean, name, at, at,
+                           name_sort, created_at, updated_at)
+       values (?, ?, ?, 'agent', 'pending', 'both', ?, ?, ?)`,
+      id, clean, name, searchText(name), at, at,
     ),
     auditStmt('agents', id, 'insert', null, { email: clean }),
   ]);
@@ -163,6 +171,9 @@ export async function updateProfile(
     const name = patch.full_name.trim();
     if (!name) throw new Invalid('Имя обязательно');
     next.full_name = name;
+    // В том же наборе колонок: иначе список сортировался бы по прежнему
+    // имени, а показывал новое.
+    next.name_sort = searchText(name);
   }
   if (patch.phone !== undefined) next.phone = (patch.phone ?? '').trim() || null;
   if (patch.focus !== undefined) next.focus = patch.focus;
@@ -340,7 +351,9 @@ export type OrganizationRow = {
 };
 
 export async function listOrganizations(): Promise<OrganizationRow[]> {
-  return all<OrganizationRow>('select * from organizations order by name');
+  // Порядок в коде — та же причина, что у approvedColleagues.
+  const rows = await all<OrganizationRow>('select * from organizations');
+  return rows.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 
 /**
