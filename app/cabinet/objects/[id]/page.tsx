@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { STATE_RU } from '@/lib/object-state';
 import { notFound } from 'next/navigation';
 import {
   activeMandateOf, activityFeed, objectCard, objectMatches, openRequirements,
@@ -79,7 +80,7 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
       <div className="card">
         <div className="row">
           <span className="key">Публикация</span>
-          <span className="tag">{object.publication_state}</span>
+          <span className="tag">{STATE_RU[object.publication_state] ?? object.publication_state}</span>
           <span className="key">Опубликован</span>
           <span>{when(object.published_at)}</span>
           <span className="key">Актуально на</span>
@@ -130,6 +131,20 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
         </div>
       </div>
 
+      {/* Правка стоит ПЕРВОЙ и кнопкой, а не строчной ссылкой под рядом
+          действий. Так было раньше, и владелец, глядя на свою же карточку,
+          спросил, как отредактировать объявление: самое частое действие
+          пряталось под тремя кнопками, две из которых снимают с публикации
+          и расторгают договор. Снимать с публикации ради правки не нужно —
+          изменения уходят в каталог сразу. */}
+      {canEdit === true ? (
+        <div className="actions" style={{ marginBottom: 4 }}>
+          <Link className="btn" href={`/cabinet/objects/${object.id}/edit`}>
+            Редактировать
+          </Link>
+        </div>
+      ) : null}
+
       <ObjectActions
         objectId={object.id}
         publicationState={object.publication_state}
@@ -139,9 +154,6 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
 
       {canEdit === true ? (
         <>
-          <p className="key" style={{ marginTop: 8 }}>
-            <Link href={`/cabinet/objects/${object.id}/edit`}>править объект →</Link>
-          </p>
           <div style={{ marginTop: 12 }}>
             <TransferForm
               action={transferObject}
@@ -149,7 +161,7 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
               idValue={object.id}
               colleagues={(colleagues ?? []) as Colleague[]}
               what="объект"
-              warning="Объект и активный мандат перейдут коллеге — вместе с долей listing-агента в комиссии. Править его вы больше не сможете."
+              warning="Объект и активный мандат перейдут коллеге — вместе с долей listing-агента в комиссии. Редактировать его вы больше не сможете."
             />
           </div>
         </>

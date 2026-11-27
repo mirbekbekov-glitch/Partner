@@ -491,20 +491,20 @@ textarea {
    действительно есть что чинить: вечно красный счётчик перестают видеть. */
 .counters { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 16px; }
 .counter { background: var(--sunk); border-radius: var(--r-full); padding: 8px 16px;
-  font-size: 14px; color: var(--muted); }
-.counter b { color: var(--fg); font-size: 16px; }
+  font-size: 0.875rem; color: var(--muted); }
+.counter b { color: var(--fg); font-size: 1rem; }
 .counter.warn { background: var(--warn-bg); color: var(--warn-fg); }
 .counter.warn b { color: var(--warn-fg); }
 
 .tabs-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .chip { border: 1px solid var(--line); background: var(--bg); color: var(--muted);
-  border-radius: var(--r-full); padding: 7px 15px; font-size: 13px; font-weight: 600;
+  border-radius: var(--r-full); padding: 7px 15px; font-size: 0.8125rem; font-weight: 600;
   text-decoration: none; }
 .chip:hover { color: var(--fg); }
 .chip[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
 .rq-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
-.rq-head b { font-size: 16px; }
+.rq-head b { font-size: 1rem; }
 .rq-head .key { margin-left: auto; }
 
 /* === Публичная часть ===================================================== */
@@ -523,9 +523,21 @@ main:has(.nav) { max-width: none; padding: 0; }
    встать по центру, а не колонка в 900 px с отступами. */
 main:has(.auth) { max-width: none; padding: 0; }
 
-.wrap { max-width: 1180px; margin: 0 auto;
+/* Ширина полосы.
+   Было жёстко 1180px, и на ноутбуке каталог стоял островком посреди
+   экрана: на 1366 по бокам оставалось по 93 пустых пикселя, на 1920 — по
+   370. Теперь полоса тянется с экраном и упирается в потолок, чтобы на
+   очень широком мониторе строка не стала бесконечной. */
+.wrap { max-width: 1680px; margin: 0 auto;
   padding-left: max(18px, env(safe-area-inset-left, 0px));
   padding-right: max(18px, env(safe-area-inset-right, 0px)); }
+/* Поля по бокам — только там, где есть что оставлять. Сначала 94vw стояли
+   на всех ширинах, и на телефоне полоса ужалась на шесть процентов: шапка
+   на 390 px тут же уехала на вторую строку. Ниже 1200 полоса занимает всю
+   ширину, как и занимала. */
+@media (min-width: 1200px) {
+  .wrap { max-width: min(1680px, 94vw); }
+}
 
 /* Табличные цифры: в соседних карточках цены встают в колонку, а не
    пляшут по ширине восьмёрки. Шрифт при этом остаётся фирменным —
@@ -612,9 +624,13 @@ main:has(.auth) { max-width: none; padding: 0; }
 .hero-glow { position: absolute; inset: 0;
   background: radial-gradient(520px circle at var(--mx, 26%) var(--my, 32%),
               var(--glow), transparent 65%); }
+/* Текст героя живёт у левой кромки полосы, а не по центру экрана. Полоса
+   каталога доходит до 1680 px, и блок на 800 px с автополями оказывался
+   посередине: слева открывалось пустое поле в четыре сотни пикселей.
+   Ширину теперь ограничивает не блок, а сама строка заголовка — ниже. */
 .hero-in { position: relative; z-index: 1; padding-block: 64px 112px;
-  display: flex; flex-direction: column; gap: 16px; max-width: 800px; }
-.eyebrow { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 700;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.eyebrow { display: flex; align-items: center; gap: 10px; font-size: 0.75rem; font-weight: 700;
   letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
 .eyebrow::after { content: ""; height: 1px; width: 64px; background: var(--line); }
 /* Потолок кегля 56, а не 58. Два пикселя — цена вежливого обращения:
@@ -622,11 +638,15 @@ main:has(.auth) { max-width: none; padding: 0; }
    на широком экране разъезжался с трёх строк на четыре, теряя ритм.
    На 56 первая строка сходится, и composition остаётся прежней. */
 .hero h1 { font-size: clamp(34px, 5.2vw, 56px); line-height: 1.04; font-weight: 800;
-  letter-spacing: -.035em; margin: 0; text-wrap: balance; }
+  letter-spacing: -.035em; margin: 0; text-wrap: balance;
+  /* Мера строки: 800 px — это примерно 28 слов на кегле 56, предел, после
+     которого глаз теряет начало следующей строки. Доля 46vw держит
+     заголовок левее чертежа лестницы, который занимает правую половину. */
+  max-width: min(800px, 46vw); }
 .hero h1 em { font-style: normal; color: var(--accent-2); }
-.hero .lede { color: var(--muted); font-size: 17px; line-height: 1.5; max-width: 56ch; margin: 0; }
+.hero .lede { color: var(--muted); font-size: 1.0625rem; line-height: 1.5; max-width: 56ch; margin: 0; }
 .props { display: flex; flex-wrap: wrap; gap: 10px 26px; margin: 6px 0 0; padding: 0; list-style: none; }
-.prop { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600;
+.prop { display: flex; align-items: center; gap: 9px; font-size: 0.875rem; font-weight: 600;
   color: var(--fg); }
 /* Маркер — ступенька из знака агентства, а не галочка: фирменный мотив
    работает лучше любого значка из набора. */
@@ -638,7 +658,9 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* Герой страницы заявки ниже: там под ним форма, а не выдача, и высокий
    герой отодвинул бы первое поле за сгиб. */
 .hero-slim .hero-in { padding-block: 48px 104px; }
-.hero-slim h1 { font-size: clamp(30px, 4vw, 44px); }
+.hero-slim h1 { font-size: clamp(30px, 4vw, 44px);
+  /* На странице заявки чертежа нет — правую половину освобождать не от чего. */
+  max-width: 800px; }
 
 /* Числа под заголовком. Крупные моноширинные цифры — это и есть
    «современно»: страница показывает состояние дела, а не обещания.
@@ -671,7 +693,7 @@ main:has(.auth) { max-width: none; padding: 0; }
   bottom: -1px; height: 2px; background: var(--accent); }
 
 .more { padding: 0 14px 14px; }
-.more summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--accent);
+.more summary { cursor: pointer; font-size: 0.8125rem; font-weight: 700; color: var(--accent);
   width: fit-content; list-style: none; }
 .more summary::-webkit-details-marker { display: none; }
 .more summary::after { content: ' ▾'; }
@@ -712,7 +734,7 @@ main:has(.auth) { max-width: none; padding: 0; }
   color: var(--muted); margin-bottom: 8px; }
 .seg label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
   border: 1px solid var(--line); border-radius: var(--r-full); padding: 10px 18px;
-  font-weight: 700; font-size: 15px; transition: border-color .18s, background .18s; }
+  font-weight: 700; font-size: 0.9375rem; transition: border-color .18s, background .18s; }
 .seg label:hover { border-color: var(--steel); }
 .seg label:has(input:checked) { border-color: var(--accent); background: var(--accent);
   color: var(--accent-fg); }
@@ -724,20 +746,20 @@ main:has(.auth) { max-width: none; padding: 0; }
 .consent { display: flex; gap: 12px; align-items: flex-start; cursor: pointer;
   background: var(--sunk); border-radius: var(--r-lg); padding: 14px 16px; }
 .consent input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); flex: none; }
-.consent span { font-size: 14px; font-weight: 600; line-height: 1.45; }
+.consent span { font-size: 0.875rem; font-weight: 600; line-height: 1.45; }
 .consent small { display: block; font-weight: 500; color: var(--muted); margin-top: 4px; }
 .reqform .go { align-self: flex-start; padding: 13px 28px; }
 
 .sent-plate { background: var(--ok-bg); border-radius: var(--r-lg); padding: 24px; }
-.sent-plate strong { display: block; font-size: 19px; color: var(--ok-fg); margin-bottom: 6px; }
-.sent-plate p { margin: 0; color: var(--fg); font-size: 15px; line-height: 1.5; }
+.sent-plate strong { display: block; font-size: 1.1875rem; color: var(--ok-fg); margin-bottom: 6px; }
+.sent-plate p { margin: 0; color: var(--fg); font-size: 0.9375rem; line-height: 1.5; }
 
 /* --- Районы строкой ------------------------------------------------------ */
 /* Появляются волной слева направо — тем же движением, что карточки:
    одно правило на всю страницу, а не отдельный эффект в каждом месте. */
 .zonerow { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 26px; }
 .zone { border: 1px solid var(--line); background: var(--panel); color: var(--muted);
-  border-radius: var(--r-full); padding: 8px 16px; font-size: 13px; font-weight: 600;
+  border-radius: var(--r-full); padding: 8px 16px; font-size: 0.8125rem; font-weight: 600;
   text-decoration: none; white-space: nowrap;
   transition: color .18s, border-color .18s, transform .18s;
   animation: rise .4s cubic-bezier(.2,.7,.3,1) backwards;
@@ -748,17 +770,21 @@ main:has(.auth) { max-width: none; padding: 0; }
 
 /* --- Полоса результатов ------------------------------------------------- */
 .strip { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-block: 30px 16px; }
-.strip h2 { font-size: 24px; font-weight: 800; letter-spacing: -.02em; margin: 0; }
-.strip .found { font-size: 14px; color: var(--muted); }
+.strip h2 { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; margin: 0; }
+.strip .found { font-size: 0.875rem; color: var(--muted); }
 .sorts { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 .sort { border: 1px solid var(--line); background: var(--panel); color: var(--muted);
-  border-radius: var(--r-full); padding: 8px 15px; font-size: 13px; font-weight: 600;
+  border-radius: var(--r-full); padding: 8px 15px; font-size: 0.8125rem; font-weight: 600;
   text-decoration: none; white-space: nowrap; transition: color .18s, border-color .18s, background .18s; }
 .sort:hover { color: var(--fg); border-color: var(--steel); }
 .sort[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
 /* --- Сетка карточек ----------------------------------------------------- */
-.grid { display: grid; gap: 18px; grid-template-columns: repeat(3, 1fr); padding-bottom: 56px; }
+/* Карточки: сколько влезет, а не ровно три. На широком экране полоса
+   теперь шире, и жёсткие три колонки растягивали карточку до нелепой
+   ширины вместо того, чтобы показать четвёртый объект. */
+.grid { display: grid; gap: 18px; padding-bottom: 56px;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
 .item { position: relative; display: flex; flex-direction: column; background: var(--panel);
   border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden;
   text-decoration: none; color: inherit; min-width: 0;
@@ -810,36 +836,36 @@ main:has(.auth) { max-width: none; padding: 0; }
    деньгами, а не в подвале карточки. Раньше одно и то же говорилось
    дважды — бейджем на фотографии и строкой внизу. */
 .price-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.price { font-size: 24px; font-weight: 800; letter-spacing: -.03em; }
+.price { font-size: 1.5rem; font-weight: 800; letter-spacing: -.03em; }
 .ok-mark { display: inline-flex; align-items: center; gap: 5px; margin-left: auto;
-  font-size: 12px; font-weight: 600; color: var(--ok-fg); white-space: nowrap; }
+  font-size: 0.75rem; font-weight: 600; color: var(--ok-fg); white-space: nowrap; }
 .ok-mark .pulse { background: var(--ok-fg); }
 /* Текст только для экранного диктора: на карточке у отметки места на
    полную фразу нет, а диктору «сегодня» без глагола ничего не говорит. */
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip-path: inset(50%); white-space: nowrap; }
-.price small { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
-.addr { font-size: 16px; font-weight: 700; letter-spacing: -.01em;
+.price small { font-size: 0.8125rem; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.addr { font-size: 1rem; font-weight: 700; letter-spacing: -.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px; }
 /* Цвет текста плашек отдельный от общего приглушённого: на светлой
    подложке тот давал 4.59 : 1 — норму проходит, но впритык, и мелкий
    текст читался бледно. Здесь 7.5 : 1. */
-.fact { font-size: 12px; font-weight: 600; color: var(--chip-fg); background: var(--sunk);
+.fact { font-size: 0.75rem; font-weight: 600; color: var(--chip-fg); background: var(--sunk);
   border-radius: 6px; padding: 4px 8px; }
-.conf { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted);
+.conf { display: flex; align-items: center; gap: 7px; font-size: 0.75rem; color: var(--muted);
   border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; }
 
 .none { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: var(--r-lg);
   padding: 64px 16px; text-align: center; color: var(--muted); }
 
 .pager { display: flex; align-items: center; gap: 16px; padding-bottom: 56px; }
-.pager .key { font-size: 13px; }
+.pager .key { font-size: 0.8125rem; }
 .pager a { font-weight: 600; text-decoration: none; }
 .pager a:hover { text-decoration: underline; }
 
 /* --- Страница объекта --------------------------------------------------- */
-.back { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600;
+.back { display: inline-flex; align-items: center; gap: 7px; font-size: 0.875rem; font-weight: 600;
   text-decoration: none; color: var(--muted); padding-block: 22px 4px;
   transition: color .18s, gap .18s; }
 .back:hover { color: var(--accent); gap: 11px; }
@@ -853,10 +879,10 @@ main:has(.auth) { max-width: none; padding: 0; }
 .dhead { padding-block: 22px 4px; }
 .dhead h1 { font-size: clamp(26px, 3.4vw, 36px); line-height: 1.1; font-weight: 800;
   letter-spacing: -.03em; margin: 0; }
-.dhead .sub { color: var(--muted); font-size: 15px; margin: 8px 0 0; }
+.dhead .sub { color: var(--muted); font-size: 0.9375rem; margin: 8px 0 0; }
 .price-big { font-size: clamp(30px, 4vw, 42px); font-weight: 800; letter-spacing: -.03em;
   margin: 14px 0 0; }
-.price-big small { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.price-big small { font-size: 0.9375rem; font-weight: 600; color: var(--muted); letter-spacing: 0; }
 /* Характеристики.
    Не сетка, а ряд с переносом — и в этом вся разница. Сетка считала
    колонки от ширины: на широком экране их выходило пять, а фактов у
@@ -873,26 +899,29 @@ main:has(.auth) { max-width: none; padding: 0; }
   display: flex; flex-direction: column; gap: 4px; }
 .spec dt { font-size: 0.75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
-.spec dd { margin: 0; font-size: 17px; font-weight: 700; }
-.desc { margin: 24px 0 0; font-size: 16px; line-height: 1.65; white-space: pre-wrap; }
-.desc h2 { font-size: 18px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 10px; }
+.spec dd { margin: 0; font-size: 1.0625rem; font-weight: 700; }
+/* Описание — проза, и её длина строки ограничена знаками: полоса теперь
+   тянется с экраном, а строка в сто с лишним знаков не читается. */
+.desc { margin: 24px 0 0; font-size: 1rem; line-height: 1.65; white-space: pre-wrap;
+  max-width: 75ch; }
+.desc h2 { font-size: 1.125rem; font-weight: 800; letter-spacing: -.02em; margin: 0 0 10px; }
 .fresh { display: inline-flex; align-items: center; gap: 8px; margin: 22px 0 0;
-  font-size: 13px; color: var(--muted); background: var(--sunk); border-radius: var(--r-full);
+  font-size: 0.8125rem; color: var(--muted); background: var(--sunk); border-radius: var(--r-full);
   padding: 8px 14px; }
 
 .aside { position: sticky; top: 86px; display: flex; flex-direction: column; gap: 14px; }
 .panel-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
   padding: 20px; box-shadow: var(--sh-md); }
-.panel-card h2 { font-size: 19px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 6px; }
-.panel-card .note { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0 0 14px; }
+.panel-card h2 { font-size: 1.1875rem; font-weight: 800; letter-spacing: -.02em; margin: 0 0 6px; }
+.panel-card .note { font-size: 0.8125rem; color: var(--muted); line-height: 1.5; margin: 0 0 14px; }
 /* Карточка агента на странице объекта. Светлая, как панель заявки, а не
    тёмная, как блок с телефоном: тёмных пятен в колонке должно остаться одно,
    иначе глаз не понимает, куда смотреть в первую очередь. */
 .agent-card { background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--r-lg); padding: 16px 20px; box-shadow: var(--sh-md); }
 .agent-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
-.agent-row b { display: block; font-size: 16px; letter-spacing: -.01em; }
-.agent-row .mini { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.agent-row b { display: block; font-size: 1rem; letter-spacing: -.01em; }
+.agent-row .mini { display: block; font-size: 0.8125rem; color: var(--muted); margin-top: 2px; }
 /* Фиксированный размер и overflow: hidden — чтобы вертикальный снимок не
    растянул строку и не вылез из кружка. */
 .avatar { flex: 0 0 48px; width: 48px; height: 48px; border-radius: var(--r-full);
@@ -900,26 +929,26 @@ main:has(.auth) { max-width: none; padding: 0; }
   justify-content: center; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .initials { font-size: 15px; font-weight: 800; color: var(--muted); letter-spacing: .02em; }
-.registry { margin: 12px 0 0; font-size: 13px; font-weight: 700; }
+.registry { margin: 12px 0 0; font-size: 0.8125rem; font-weight: 700; }
 .registry .key { display: block; font-weight: 400; margin-top: 2px; }
 
 .callout { background: var(--ink); color: var(--on-ink); border-radius: var(--r-lg); padding: 20px; }
-.callout b { display: block; font-size: 15px; margin-bottom: 4px; }
-.callout .mini { color: var(--on-ink-faint); font-size: 13px; }
+.callout b { display: block; font-size: 0.9375rem; margin-bottom: 4px; }
+.callout .mini { color: var(--on-ink-faint); font-size: 0.8125rem; }
 .callout a { display: block; color: var(--on-ink); text-decoration: none; font-weight: 700;
-  font-size: 16px; padding-top: 8px; transition: color .18s; }
+  font-size: 1rem; padding-top: 8px; transition: color .18s; }
 .callout a:hover { color: var(--accent-2); }
 
 /* --- Подвал ------------------------------------------------------------- */
 .foot { background: var(--ink); color: var(--on-ink-faint); }
 .foot-in { display: flex; flex-wrap: wrap; gap: 28px; justify-content: space-between;
   padding-block: 40px 48px; }
-.foot h4 { color: var(--on-ink); font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+.foot h4 { color: var(--on-ink); font-size: 0.75rem; letter-spacing: .14em; text-transform: uppercase;
   margin: 0 0 12px; font-weight: 700; }
-.foot a { color: #C9CDD4; text-decoration: none; display: block; padding: 3px 0; font-size: 15px;
+.foot a { color: #C9CDD4; text-decoration: none; display: block; padding: 3px 0; font-size: 0.9375rem;
   font-weight: 600; transition: color .18s; }
 .foot a:hover { color: var(--accent-2); }
-.foot .fine { font-size: 13px; max-width: 34ch; line-height: 1.55; }
+.foot .fine { font-size: 0.8125rem; max-width: 34ch; line-height: 1.55; }
 
 /* Приманка для ботов: поле есть в разметке, но человек его не видит и не
    заполнит. Прятать через display:none нельзя — часть ботов такие поля
@@ -941,8 +970,8 @@ main:has(.auth) { max-width: none; padding: 0; }
 .auth-brand img { height: 28px; }
 .auth-card { width: 100%; background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--r-lg); box-shadow: var(--sh-md); padding: 28px 26px; }
-.auth-card h1 { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 6px; }
-.auth-sub { margin: 0 0 22px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.auth-card h1 { font-size: 1.375rem; font-weight: 800; letter-spacing: -.02em; margin: 0 0 6px; }
+.auth-sub { margin: 0 0 22px; color: var(--muted); font-size: 0.875rem; line-height: 1.5; }
 .auth-form { display: flex; flex-direction: column; }
 .auth-form label { font-size: 0.75rem; font-weight: 700; letter-spacing: .1em;
   text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
@@ -959,9 +988,9 @@ main:has(.auth) { max-width: none; padding: 0; }
    администратором тоже уходит: он объясняет, что будет ПОСЛЕ входа, а
    сейчас на экране один ответ — письмо отправлено. */
 .auth-card:has(.auth-sent) .auth-sub { display: none; }
-.auth-sent p { margin: 0; font-size: 15px; line-height: 1.55; }
-.auth-sent .auth-hint { margin-top: 10px; color: var(--muted); font-size: 13px; }
-.auth-back { margin: 0; font-size: 14px; }
+.auth-sent p { margin: 0; font-size: 0.9375rem; line-height: 1.55; }
+.auth-sent .auth-hint { margin-top: 10px; color: var(--muted); font-size: 0.8125rem; }
+.auth-back { margin: 0; font-size: 0.875rem; }
 .auth-back a { color: var(--muted); text-decoration: none; font-weight: 600; }
 .auth-back a:hover { color: var(--accent); }
 
@@ -969,7 +998,7 @@ main:has(.auth) { max-width: none; padding: 0; }
 .lang { position: relative; }
 .lang-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--sunk);
   color: var(--fg); border: 0; border-radius: var(--r-full); padding: 11px 12px;
-  font-size: 12px; font-weight: 700; line-height: 1; font-family: var(--mono); cursor: pointer;
+  font-size: 0.75rem; font-weight: 700; line-height: 1; font-family: var(--mono); cursor: pointer;
   transition: background .18s, color .18s; }
 .lang-btn:hover, .lang-btn[aria-expanded='true'] { background: var(--ink); color: #fff; }
 .lang-menu { position: absolute; right: 0; top: calc(100% + 10px); z-index: 40; list-style: none;
@@ -978,7 +1007,7 @@ main:has(.auth) { max-width: none; padding: 0; }
   animation: pop .18s cubic-bezier(.2,.7,.3,1); transform-origin: top right; }
 @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(.96); } }
 .lang-menu a { display: block; padding: 9px 11px; border-radius: var(--r-md); text-decoration: none;
-  color: var(--fg); font-size: 14px; font-weight: 600; white-space: nowrap;
+  color: var(--fg); font-size: 0.875rem; font-weight: 600; white-space: nowrap;
   transition: background .14s; }
 .lang-menu a:hover { background: var(--sunk); }
 /* Текущий язык отмечен точкой, а не только цветом: в списке из четырёх
@@ -1008,8 +1037,10 @@ main:has(.auth) { max-width: none; padding: 0; }
   .console .row, .console .row.sub { grid-template-columns: 1fr 1fr; }
   .reqconsole { padding: 16px; }
   .reqform .go { align-self: stretch; }
-  .tab { padding: 11px 13px; font-size: 14px; }
+  .tab { padding: 11px 13px; font-size: 0.875rem; }
   .hero-art svg { display: none; }
+  /* Чертежа нет — заголовок берёт всю ширину. */
+  .hero h1, .hero-slim h1 { max-width: none; }
   .grid { grid-template-columns: 1fr; }
   .gal { grid-template-columns: 1fr; }
   .gal .side { grid-template-columns: 1fr 1fr; }
@@ -1020,11 +1051,11 @@ main:has(.auth) { max-width: none; padding: 0; }
      flex-wrap оставлен: если на совсем узком экране строка всё же не
      сойдётся, пусть переносится, а не вылезает за край. */
   .nav-in { flex-wrap: wrap; row-gap: 10px; gap: 8px; }
-  .nav-link { font-size: 13px; }
+  .nav-link { font-size: 0.8125rem; }
   .nav .spacer { display: none; }
   .lang { margin-left: auto; }
   .brand img { height: 20px; }
-  .enter { padding: 11px 12px; font-size: 13px; }
+  .enter { padding: 11px 12px; font-size: 0.8125rem; }
   .enter .wide { display: none; }
   .enter .narrow { display: inline; }
 }
@@ -1065,7 +1096,7 @@ main:has(.auth) { max-width: none; padding: 0; }
 .citymap { padding-bottom: 56px; }
 .map-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
   margin-bottom: 14px; }
-.map-head h2 { font-size: 24px; font-weight: 800; letter-spacing: -.02em; margin: 0; }
+.map-head h2 { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; margin: 0; }
 
 /* План города: север сверху, горы на юге, Чүй поперёк центра. Сетка, а не
    SVG, потому что это ссылки: их надо открывать в новой вкладке, видеть
@@ -1078,9 +1109,9 @@ main:has(.auth) { max-width: none; padding: 0; }
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md);
   padding: 10px 12px; text-decoration: none; color: var(--fg); min-width: 0;
   transition: border-color .18s, transform .18s, box-shadow .18s; }
-.zone-cell b { font-size: 14px; font-weight: 700; letter-spacing: -.01em;
+.zone-cell b { font-size: 0.875rem; font-weight: 700; letter-spacing: -.01em;
   overflow: hidden; text-overflow: ellipsis; }
-.zone-cell small { font-size: 15px; font-weight: 800; color: var(--accent);
+.zone-cell small { font-size: 0.9375rem; font-weight: 800; color: var(--accent);
   letter-spacing: -.02em; }
 .zone-cell:hover { border-color: var(--accent); transform: translateY(-2px);
   box-shadow: var(--sh-md); }
@@ -1091,12 +1122,12 @@ main:has(.auth) { max-width: none; padding: 0; }
    ничего нет, — обман. */
 .zone-cell.off { background: transparent; border-color: transparent; color: var(--muted);
   opacity: .55; cursor: default; }
-.zone-cell.off b { font-weight: 500; font-size: 13px; }
+.zone-cell.off b { font-weight: 500; font-size: 0.8125rem; }
 
 .avenue { position: absolute; left: 14px; right: 14px; top: 50%; height: 1px;
   background: var(--accent); opacity: .35; pointer-events: none; z-index: 1; }
 .avenue i { position: absolute; left: 50%; top: -9px; transform: translateX(-50%);
-  background: var(--sunk); padding: 0 8px; font-style: normal; font-size: 10px;
+  background: var(--sunk); padding: 0 8px; font-style: normal; font-size: 0.625rem;
   font-weight: 700; letter-spacing: .14em; color: var(--muted); }
 /* Горы на юге: без них схема — просто сетка прямоугольников. */
 .ridge { position: absolute; left: 0; right: 0; bottom: 0; height: 26px;
@@ -1106,7 +1137,7 @@ main:has(.auth) { max-width: none; padding: 0; }
 /* Стрелка севера: без неё схема — сетка прямоугольников, с ней сразу
    видно, что это план города и что горы внизу действительно юг. */
 .compass { position: absolute; right: 16px; top: 14px; z-index: 2; display: flex;
-  align-items: center; gap: 5px; font-size: 10px; font-weight: 800;
+  align-items: center; gap: 5px; font-size: 0.625rem; font-weight: 800;
   letter-spacing: .14em; color: var(--muted); pointer-events: none; }
 .compass::before { content: ""; width: 0; height: 0; border-left: 4px solid transparent;
   border-right: 4px solid transparent; border-bottom: 9px solid var(--accent); }
@@ -1117,13 +1148,13 @@ main:has(.auth) { max-width: none; padding: 0; }
   padding-block: 56px; position: relative; z-index: 1; }
 .pitch-text h2 { font-size: clamp(26px, 3.2vw, 38px); line-height: 1.1; font-weight: 800;
   letter-spacing: -.03em; margin: 10px 0 0; text-wrap: balance; }
-.pitch-text p { color: var(--on-ink-dim); font-size: 16px; line-height: 1.55;
+.pitch-text p { color: var(--on-ink-dim); font-size: 1rem; line-height: 1.55;
   margin: 14px 0 0; max-width: 46ch; }
 .pitch .eyebrow { color: var(--accent-2); }
 .pitch .eyebrow::after { background: rgba(255,255,255,.18); }
 .pitch-go { display: inline-flex; align-items: center; gap: 10px; margin-top: 24px;
   background: var(--accent); color: var(--accent-fg); text-decoration: none; font-weight: 700;
-  font-size: 16px; padding: 14px 26px; border-radius: var(--r-full);
+  font-size: 1rem; padding: 14px 26px; border-radius: var(--r-full);
   transition: background .18s, transform .18s, gap .18s; }
 .pitch-go:hover { background: var(--accent-hover); transform: translateY(-2px); gap: 14px; }
 
@@ -1138,9 +1169,9 @@ main:has(.auth) { max-width: none; padding: 0; }
 .steps li:nth-child(3) { margin-left: 48px; }
 .step-n { grid-row: 1 / 3; width: 34px; height: 34px; border-radius: 50%;
   background: var(--accent); color: var(--accent-fg); display: grid; place-items: center;
-  font-size: 15px; font-weight: 700; }
-.steps b { font-size: 15px; font-weight: 700; }
-.steps small { font-size: 13px; color: var(--on-ink-faint); line-height: 1.4; }
+  font-size: 0.9375rem; font-weight: 700; }
+.steps b { font-size: 0.9375rem; font-weight: 700; }
+.steps small { font-size: 0.8125rem; color: var(--on-ink-faint); line-height: 1.4; }
 
 @media (max-width: 900px) {
   .pitch-in { grid-template-columns: 1fr; gap: 28px; padding-block: 44px; }
@@ -1178,9 +1209,9 @@ main:has(.auth) { max-width: none; padding: 0; }
 .block { padding-block: 22px; border-top: 1px solid var(--line); }
 .block h2 { font-size: 20px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 10px; }
 .block h3 { margin: 0 0 8px; }
-.block p { margin: 0; color: var(--fg); font-size: 16px; line-height: 1.6; max-width: 62ch; }
+.block p { margin: 0; color: var(--fg); font-size: 1rem; line-height: 1.6; max-width: 62ch; }
 .ticks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.ticks li { position: relative; padding-left: 22px; font-size: 15px; line-height: 1.5; }
+.ticks li { position: relative; padding-left: 22px; font-size: 0.9375rem; line-height: 1.5; }
 /* Галочка нарисована фоном, а не символом: экранный диктор не должен
    зачитывать «галка» перед каждым пунктом. */
 .ticks li::before {
@@ -1262,5 +1293,5 @@ main:has(.auth) { max-width: none; padding: 0; }
 
 .photolist button {
   padding: 4px 10px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }

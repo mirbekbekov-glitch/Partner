@@ -311,7 +311,8 @@ export async function updateObject(id: string, patch: ObjectPatch): Promise<Obje
 
   if (!(await canEditObject(id))) {
     throw new Forbidden(
-      'Править объект может тот, кто его завёл, listing-агент активного мандата или админ',
+      'Редактировать объект может тот, кто его завёл, listing-агент активного '
+      + 'мандата или администратор',
     );
   }
 

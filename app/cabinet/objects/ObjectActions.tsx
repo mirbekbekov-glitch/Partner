@@ -55,8 +55,8 @@ export function ObjectActions({ objectId, publicationState, activeMandateId, can
   if (!canEdit) {
     return (
       <p className="key">
-        Правка доступна тому, кто завёл объект, listing-агенту активного мандата и
-        администратору.
+        Редактировать может тот, кто завёл объект, listing-агент активного мандата
+        и администратор.
       </p>
     );
   }
