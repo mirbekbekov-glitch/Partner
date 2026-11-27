@@ -45,6 +45,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               "if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}",
           }}
         />
+        {/* Подпись под значком на экране «Домой». Без неё iPhone берёт
+            заголовок страницы и обрезает его: «Кабинет—Liber…». Сам значок
+            лежит в app/apple-icon.png — iOS берёт именно apple-touch-icon,
+            а favicon (app/icon.png) для рабочего стола не использует.
+
+            Намеренно НЕ apple-mobile-web-app-capable: он открывает сайт
+            отдельным окном без адресной строки, и это другое решение —
+            его принимают, а не получают заодно с подписью. */}
+        <meta name="apple-mobile-web-app-title" content="Liberterra" />
+
         {/* Manrope — шрифт дизайн-системы. Ссылкой, а не next/font: сборка
             идёт в сети, где Google Fonts недоступен, а браузер читателя
             загрузит его сам. Запасные шрифты заданы в globals.css. */}
