@@ -5,6 +5,8 @@ import { idleRequests, markRequestNudged } from '@/lib/db/requests';
 import { sweepExpired } from '@/lib/db/session';
 import { expireMandates } from '@/lib/db/mandates';
 import { denyCron } from '@/lib/cron-auth';
+// Общая отправка: второй маршрут с расписанием использует её же.
+import { sendTelegram } from '@/lib/telegram-send';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,28 +27,6 @@ export const dynamic = 'force-dynamic';
  * всё — потому что все три задачи идемпотентны и дешёвы, а отдельное
  * расписание на каждую пришлось бы заводить и помнить.
  */
-
-async function sendTelegram(chatId: number, text: string): Promise<string | null> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) return 'TELEGRAM_BOT_TOKEN не задан';
-
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, disable_notification: false }),
-    });
-
-    if (res.ok) return null;
-
-    // Описание ошибки от Telegram полезно в last_error, но токен в тексте
-    // ответа не встречается, поэтому записывать его безопасно.
-    const detail = await res.text();
-    return `Telegram ответил ${res.status}: ${detail.slice(0, 200)}`;
-  } catch (e) {
-    return `не удалось отправить: ${e instanceof Error ? e.message : 'неизвестная ошибка'}`;
-  }
-}
 
 export async function GET(request: Request) {
   const denied = denyCron(request);

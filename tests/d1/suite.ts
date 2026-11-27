@@ -30,8 +30,8 @@ import { createRequirement, updateRequirement } from '@/lib/db/requirements';
 import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
 import {
-  idleRequests, markRequestNudged, requestCounts, requestFeed, submitRequest,
-  takeRequest,
+  idleRequests, markRequestNudged, markUnclaimedNudged, requestCounts, requestFeed,
+  submitRequest, takeRequest, unclaimedRequests,
 } from '@/lib/db/requests';
 import {
   catalogAgent, catalogAgentById, catalogAgents, catalogCities, catalogCount,
@@ -788,6 +788,66 @@ export default {
       .bind(new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(), noTg).run();
     check('агенту без Telegram напоминание не собирается',
       !(await idleRequests()).some((n) => n.request_id === noTg));
+
+    // -----------------------------------------------------------------
+    // Непринятая заявка: одно сообщение всем, и не ночью
+    // -----------------------------------------------------------------
+    await db.prepare('update agents set telegram_id = ? where id = ?')
+      .bind(700100200, anna).run();
+    // Чистим поле: предыдущие блоки оставили заявки в разных состояниях.
+    await db.prepare(`update requests set unclaimed_notified_at = ?`).bind(iso()).run();
+
+    const noon = new Date('2026-11-27T06:00:00.000Z');   // 12:00 в Бишкеке
+    const night = new Date('2026-11-27T20:00:00.000Z');  // 02:00 в Бишкеке
+
+    const waiting1 = await submitRequest({
+      phone: '0555 10 10 01', deal: 'rent', housing_type: 'flat',
+      district: 'Джал', budget_minor: 40_000_00, budget_currency: 'KGS',
+    });
+    const waiting2 = await submitRequest({
+      phone: '0555 10 10 02', deal: 'buy', housing_type: 'house',
+    });
+    await db.prepare(
+      `update requests set created_at = ?, unclaimed_notified_at = null where id in (?, ?)`,
+    ).bind(new Date(noon.getTime() - 3 * 3600 * 1000).toISOString(),
+           waiting1, waiting2).run();
+
+    const digest = await unclaimedRequests(2 * 3600 * 1000, noon);
+    check('непринятые заявки собираются в ОДНО сообщение', Boolean(digest));
+    check('и в нём обе', digest?.request_ids.length === 2,
+      String(digest?.request_ids.length));
+    check('получатель — агент с привязанным Telegram',
+      digest?.recipients.some((r) => r.agent_id === anna) === true);
+    check('в тексте видно, сколько заявка ждёт',
+      digest?.body.includes('ждёт 3 ч') === true, digest?.body);
+
+    // Ночью бот молчит — и НЕ отмечает заявки: иначе утром о них никто не
+    // узнает. Это важнее самой тишины.
+    check('ночью напоминания нет',
+      (await unclaimedRequests(2 * 3600 * 1000, night)) === null);
+    check('и заявки при этом не отмечены как отработанные',
+      (await unclaimedRequests(2 * 3600 * 1000, noon))?.request_ids.length === 2);
+
+    // Свежая заявка не торопит: два часа ещё не прошло.
+    const justNow = await submitRequest({ phone: '0555 10 10 03', deal: 'rent' });
+    await db.prepare('update requests set unclaimed_notified_at = null where id = ?')
+      .bind(justNow).run();
+    check('заявка моложе двух часов в сводку не идёт',
+      !(await unclaimedRequests(2 * 3600 * 1000, noon))?.request_ids.includes(justNow));
+
+    // Взятая заявка — не непринятая.
+    await takeRequest(waiting1);
+    check('взятая заявка из сводки уходит',
+      !(await unclaimedRequests(2 * 3600 * 1000, noon))?.request_ids.includes(waiting1));
+
+    // Отметка гасит повтор.
+    await markUnclaimedNudged([waiting2]);
+    check('после отметки сводки нет',
+      (await unclaimedRequests(2 * 3600 * 1000, noon)) === null);
+
+    // Возвращаем как было: ниже стоит проверка «без привязанного Telegram
+    // статус „нечем доставить"», и привязка, оставленная здесь, ломает её.
+    await db.prepare('update agents set telegram_id = null where id = ?').bind(anna).run();
 
     check('курса в пустой базе нет', (await usdRate()) === null);
     check('и витрина его тоже не выдумывает', (await catalogRate()) === null);

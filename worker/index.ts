@@ -15,11 +15,19 @@
  */
 import handler from 'vinext/server/fetch-handler';
 
+/**
+ * Частое расписание. Строка обязана совпадать с cloudflare.config.ts
+ * ДОСЛОВНО: платформа отдаёт в controller.cron ровно то, что записано в
+ * настройке, и любая разница в пробелах отправит частый прогон по
+ * суточной ветке.
+ */
+const FAST = '*/15 * * * *';
+
 export default {
   fetch: handler.fetch,
 
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     env: { CRON_SECRET?: string },
     ctx: ExecutionContext,
   ): Promise<void> {
@@ -44,6 +52,20 @@ export default {
     // ненадёжный: чужой сайт вправе не ответить. Напоминания от этого
     // зависеть не должны — агент обязан получить задачи на день, даже
     // когда house.kg лежит.
+    // Расписаний два, и делать по ним надо разное.
+    //
+    // Частое (каждые 15 минут) — только непринятые заявки: один запрос в
+    // свою базу. Суточное — всё остальное, включая курс Нацбанка и
+    // перенос каталога, которые ходят наружу: дёргать их каждые четверть
+    // часа значило бы молотить чужие сервера без нужды.
+    //
+    // Различаем по cron самого расписания. Неизвестное выражение считаем
+    // суточным: пропустить напоминания хуже, чем прислать лишнее.
+    if (controller.cron === FAST) {
+      await run('/api/cron/unclaimed', 'непринятые заявки', secret, env, ctx);
+      return;
+    }
+
     await run('/api/cron/reminders', 'напоминания', secret, env, ctx);
     await run('/api/cron/catalog-import', 'перенос каталога', secret, env, ctx);
     await run('/api/cron/fx', 'курс Нацбанка', secret, env, ctx);

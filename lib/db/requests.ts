@@ -644,3 +644,114 @@ export async function idleRequests(idleMs = DAY_MS): Promise<RequestNudge[]> {
 export async function markRequestNudged(requestId: string): Promise<void> {
   await run('update requests set idle_notified_at = ? where id = ?', now(), requestId);
 }
+
+/**
+ * Заявки, которые никто не взял.
+ *
+ * Самое дорогое из всего, о чём может напомнить бот: клиент написал,
+ * прошло два часа, заявка лежит в ленте «новой», и об этом не знает
+ * никто. Через сутки он уже написал в другое агентство.
+ *
+ * ОДНО сообщение на всех, а не по сообщению на заявку. Пять заявок за
+ * ночь — это пять уведомлений в восемь утра, после которых бота глушат, и
+ * вместе со спамом теряется то единственное, ради чего он был нужен.
+ *
+ * ТИХИЕ ЧАСЫ. Заявка может прийти в три ночи, и напоминание в три ночи
+ * разбудит агента ради того, с чем он всё равно ничего не сделает до
+ * утра. Поэтому с 21:00 до 8:00 по Бишкеку бот молчит, а накопленное
+ * отдаёт утром одним сообщением. Отметка при этом НЕ ставится — иначе
+ * ночные заявки оказались бы отмеченными как отработанные и утром никто
+ * бы о них не узнал.
+ */
+export type UnclaimedDigest = {
+  /** Кому отправлять: все одобренные агенты с привязанным Telegram. */
+  recipients: Array<{ agent_id: string; telegram_id: number }>;
+  /** Что отметить после доставки. */
+  request_ids: string[];
+  body: string;
+};
+
+/** Час в Бишкеке (UTC+6) без зависимости от часового пояса машины. */
+function bishkekHour(at: Date): number {
+  return new Date(at.getTime() + 6 * 60 * 60 * 1000).getUTCHours();
+}
+
+const QUIET_FROM = 21;
+const QUIET_TO = 8;
+
+export async function unclaimedRequests(
+  idleMs = 2 * 60 * 60 * 1000,
+  at: Date = new Date(),
+): Promise<UnclaimedDigest | null> {
+  const hour = bishkekHour(at);
+  if (hour >= QUIET_FROM || hour < QUIET_TO) return null;
+
+  const since = new Date(at.getTime() - idleMs).toISOString();
+
+  const rows = await all<{
+    id: string; created_at: string; deal: string | null;
+    housing_type: string | null; district: string | null;
+    budget_minor: number | null; budget_currency: string;
+  }>(
+    `select r.id, r.created_at, r.deal, r.housing_type,
+            coalesce(d.name, r.district_other) as district,
+            r.budget_minor, r.budget_currency
+       from requests r
+       left join districts d on d.id = r.district_id
+      where r.status = 'new'
+        -- Сегодня это условие избыточно: взятие ставит статус in_work, и
+        -- проверено мутацией — снятие строки прогон не валит. Оставлено
+        -- намеренно: статус и агент меняются разными путями, и однажды
+        -- появится путь, который поставит 'new', не сняв агента. Тогда
+        -- заявка ушла бы в сводку как ничья, имея владельца.
+        and r.agent_id is null
+        and r.created_at < ?
+        and r.unclaimed_notified_at is null
+      order by r.created_at
+      limit 20`,
+    since,
+  );
+  if (rows.length === 0) return null;
+
+  const recipients = await all<{ agent_id: string; telegram_id: number }>(
+    `select id as agent_id, telegram_id from agents
+      where status = 'approved' and telegram_id is not null`,
+  );
+  if (recipients.length === 0) return null;
+
+  const DEAL: Record<string, string> = { buy: 'покупка', rent: 'аренда' };
+
+  const lines = rows.map((r) => {
+    const hours = Math.floor((at.getTime() - Date.parse(r.created_at)) / 3_600_000);
+    const what = [
+      r.deal ? DEAL[r.deal] : null,
+      r.housing_type,
+      r.district,
+      r.budget_minor ? `до ${fromMinor(r.budget_minor)} ${r.budget_currency}` : null,
+    ].filter(Boolean).join(', ');
+    return `• ${what || 'без подробностей'} — ждёт ${hours} ч`;
+  });
+
+  return {
+    recipients,
+    request_ids: rows.map((r) => r.id),
+    body: [
+      rows.length === 1
+        ? 'Заявку никто не взял:'
+        : `Заявок без агента: ${rows.length}`,
+      ...lines,
+      '',
+      'Откройте «Заявки» в кабинете и возьмите в работу.',
+    ].join('\n'),
+  };
+}
+
+/** Отметить, что про непринятые заявки написали. После доставки. */
+export async function markUnclaimedNudged(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await run(
+    `update requests set unclaimed_notified_at = ?
+      where id in (${ids.map(() => '?').join(', ')})`,
+    now(), ...ids,
+  );
+}
