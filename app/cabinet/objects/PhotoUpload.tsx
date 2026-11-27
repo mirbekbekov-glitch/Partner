@@ -189,6 +189,7 @@ function LinkAdder({ onAdd }: { onAdd: (url: string) => void }) {
     <div className="inline">
       <input
         type="url"
+        aria-label="Ссылка на снимок"
         placeholder="https://…/1.jpg"
         value={value}
         onChange={(e) => setValue(e.target.value)}

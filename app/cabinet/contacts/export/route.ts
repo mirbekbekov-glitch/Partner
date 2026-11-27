@@ -1,7 +1,7 @@
 import { contactList } from '@/lib/db/cabinet';
 import { parseFilters } from '@/lib/list-params';
 import { csvResponse, toCsv } from '@/lib/csv';
-import { ROLE_RU } from '../ContactForm';
+import { ROLE_RU } from '@/lib/contact-roles';
 import { exportFailed, EXPORT_LIMIT } from '../../export-response';
 
 /**

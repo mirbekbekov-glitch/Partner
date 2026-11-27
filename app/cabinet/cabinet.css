@@ -99,7 +99,9 @@ form.stack.card { max-width: 760px; }
   color: var(--crm-link-active-fg);
 }
 .crm-link svg { flex: none; }
-.crm-me { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Имя переносится, а не обрезается: «Айбек Мурза…» в сайдбаре на 240 px
+   не сообщает ничего, чего не сообщало бы полное имя в две строки. */
+.crm-me { min-width: 0; overflow-wrap: anywhere; }
 
 .crm-side-foot {
   margin-top: auto;
@@ -112,7 +114,20 @@ form.stack.card { max-width: 760px; }
 .crm-side-foot form { margin: 0; }
 /* Стрелка «откроется в новой вкладке»: бледнее подписи и прижата вправо. */
 .crm-link-out { margin-left: auto; opacity: .55; }
-.crm-side-foot button.ghost { width: 100%; text-align: left; }
+/* «Выйти» выглядит как строка меню, а не как кнопка в рамке. В рамке она
+   была самым заметным элементом низа сайдбара — заметнее каталога и
+   профиля, рядом с которыми стоит, — хотя нужна реже всего. */
+.crm-side-foot button.ghost {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border-color: transparent;
+  color: var(--crm-link-fg);
+  padding: 9px 10px;
+  border-radius: var(--r-md);
+  font-size: 14px;
+}
+.crm-side-foot button.ghost:hover { background: var(--crm-link-hover-bg); color: var(--fg); }
 
 /* Кнопки мобильного меню на широком экране скрыты. */
 .crm-mobilebar, .crm-close, .crm-backdrop { display: none; }
@@ -218,7 +233,7 @@ form.stack.card { max-width: 760px; }
 .tbl th,
 .tbl td {
   text-align: left;
-  padding: 9px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
@@ -249,6 +264,9 @@ form.stack.card { max-width: 760px; }
 .tbl-main { font-weight: 700; }
 .tbl-sub { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
 .tbl-note { display: block; margin-top: 4px; }
+/* Пометка о мандате в одну строку: разорванная пополам, она добавляла
+   строке таблицы целую строку текста. */
+.tbl-note .warn { white-space: nowrap; }
 
 /* Узкий экран: таблица разбирается на карточки. Горизонтальная прокрутка
    девяти колонок на телефоне нечитаема, а подписи колонок подставляются
@@ -272,6 +290,11 @@ form.stack.card { max-width: 760px; }
     font-size: 13px;
   }
   .tbl .num { text-align: left; }
+  /* В карточке девять строк «подпись: значение» одного веса, и цена
+     теряется среди них. На телефоне она крупнее остальных: по ней
+     карточку и просматривают. */
+  .tbl td[data-l='Цена'] { font-size: 16px; font-weight: 700; padding-top: 4px; }
+  .tbl td[data-l='Цена']::before { font-weight: 400; }
   .tbl td:first-child { min-width: 0; }
   /* Пустая ячейка на телефоне исчезает вместе с подписью: «Действия:» без
      кнопок — это строка ни о чём. */
@@ -282,6 +305,21 @@ form.stack.card { max-width: 760px; }
   .tbl td[data-l] .tbl-sub { display: inline; margin: 0; }
   .tbl td[data-l] .tbl-sub::before { content: " · "; }
 }
+
+/* ── Сводки на главной ───────────────────────────────────── */
+/* Три списка под плитками: задачи, новые заявки, последние действия.
+   Это выжимка, а не список: пять строк, дальше ссылка в раздел. */
+.cab-digest { margin-top: 4px; }
+.cab-digest .head { margin-bottom: 10px; }
+.cab-digest h2 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -.01em; }
+.digest { list-style: none; margin: 0; padding: 0; display: flex;
+  flex-direction: column; gap: 10px; }
+.digest > li { display: flex; flex-direction: column; gap: 3px; }
+.digest > li + li { border-top: 1px solid var(--line); padding-top: 10px; }
+.digest-main { font-size: 14px; line-height: 1.45; }
+/* Текст записи приписан к её предмету той же строкой, но тише: предмет —
+   то, по чему строку узнают, а текст уточняет. */
+.digest-main .key { font-size: 13px; }
 
 /* ── Полоса фильтров ─────────────────────────────────────── */
 /* Отдельная панель, а не линия под полями: над таблицей линия читается

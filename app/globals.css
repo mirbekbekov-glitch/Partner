@@ -36,8 +36,13 @@
   /* Свет за курсором: на светлом фоне он осветляет заметно, на тёмном
      почти неразличим — там яркое пятно читается как клякса. */
   --glow: rgba(255,255,255,.85);
-  /* Красный ярче фирменного — для тёмного фона и наведения. */
+  /* Красный ярче фирменного — для текста на тёмных полосах (заголовок
+     героя, надзаголовок призыва, ссылки в подвале). */
   --accent-2: #E0453F;
+  /* Наведение на кнопке с фирменной заливкой. ТЕМНЕЕ фирменного, а не
+     светлее: кнопка подписана белым, и на прежнем светлом #E0453F он давал
+     4.12 : 1. Здесь 7.15 : 1, и кнопка при этом заметно меняется. */
+  --accent-hover: #A62724;
   /* Цифры моноширинным: цена, площадь и этаж выстраиваются в колонку, и
      карточки перестают «плясать». */
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -50,6 +55,16 @@
   --warn-bg: #fff6e5;
   --hidden-fg: #6b6b76;
   --hidden-bg: #f0f0f3;
+  /* Кольцо фокуса. Почти чёрное: 18 : 1 на фоне страницы и 16 : 1 на
+     утопленном блоке. На тёмных полосах (подвал, призыв к заявке) его
+     перекрывает белое — см. правило .foot :focus-visible ниже. */
+  --focus: #0E1116;
+  /* Системным частям полей (значок календаря, список выпадающего меню,
+     полосы прокрутки, подсветка автозаполнения) цвета задаёт не CSS, а
+     браузер, и берёт он их отсюда. Без этой строки человек, выбравший
+     светлую тему при тёмной системе, получает чёрный календарь на белой
+     карточке — и наоборот. */
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -68,8 +83,13 @@
     --sh-md: 0 4px 12px -2px rgba(0,0,0,.45);
     --sh-lg: 0 12px 32px -4px rgba(0,0,0,.55);
     /* Фирменный на тёмном фоне даёт лишь 3.09 : 1 — мало. Тот же тон,
-       светлее: 4.57 : 1. */
-    --accent: #DA524E;
+       светлее. Светлее, чем кажется нужным: считать надо не по фону
+       страницы, а по САМОЙ СВЕТЛОЙ поверхности, на которой этот цвет
+       оказывается текстом, — по карточке --panel. Прежний #DA524E давал
+       на ней 3.63 : 1, хотя на фоне страницы честные 4.57, и под это
+       попадало самое читаемое в CRM — адреса объектов в таблице.
+       Нынешний: 4.8 : 1 на карточке, 6.05 на фоне страницы. */
+    --accent: #E8716C;
     --ink: #0A0C10;
     --ink-2: #12161C;
     --on-ink: #FFFFFF;
@@ -80,7 +100,12 @@
     --chip-fg: #ADADA8;
     --glow: rgba(255,255,255,.055);
     --accent-2: #F06A64;
-    /* И текст на кнопке здесь тёмный: белый на светло-красном — 2.6 : 1. */
+    /* На тёмном наведение, наоборот, светлее заливки: 8.76 : 1 с тёмной
+       подписью, и отличие от --accent видно. */
+    --accent-hover: #F79C97;
+    /* И текст на кнопке здесь тёмный: белый на светло-красном — 2.6 : 1.
+       Этим цветом пишут ВСЕ кнопки с фирменной заливкой: правила, которые
+       раньше вписывали #fff сами, обходили этот токен и давали 3.96 : 1. */
     --accent-fg: #14161a;
     --error-fg: #F3A6A2;
     --error-bg: #3A1A18;
@@ -88,6 +113,9 @@
     --warn-bg: #30260f;
     --hidden-fg: #9a9aa6;
     --hidden-bg: #24262c;
+    /* На тёмном кольцо белое: 14 : 1 даже на самой светлой поверхности. */
+    --focus: #FFFFFF;
+    color-scheme: dark;
   }
 }
 
@@ -105,7 +133,9 @@
   --sh-sm: 0 1px 3px 0 rgba(0,0,0,.4);
   --sh-md: 0 4px 12px -2px rgba(0,0,0,.45);
   --sh-lg: 0 12px 32px -4px rgba(0,0,0,.55);
-  --accent: #DA524E;
+  /* Светлее фирменного, и считано по карточке --panel, а не по фону
+     страницы: там этот цвет становится текстом. 4.8 : 1. */
+  --accent: #E8716C;
   --ink: #0A0C10;
   --ink-2: #12161C;
   --on-ink: #FFFFFF;
@@ -116,6 +146,7 @@
   --chip-fg: #ADADA8;
   --glow: rgba(255,255,255,.055);
   --accent-2: #F06A64;
+  --accent-hover: #F79C97;
   --accent-fg: #14161a;
   --error-fg: #F3A6A2;
   --error-bg: #3A1A18;
@@ -123,9 +154,26 @@
   --warn-bg: #30260f;
   --hidden-fg: #9a9aa6;
   --hidden-bg: #24262c;
+  --focus: #FFFFFF;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
+
+/* Фокус с клавиатуры.
+   Системное кольцо здесь не годится: браузер рисует почти чёрную рамку в
+   1 px, и на тёмной теме её попросту не видно. Своё — в два пикселя, с
+   отступом, цветом из темы. :focus-visible, а не :focus: мышь кольца не
+   получает, клавиатура получает всегда. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+/* Тёмные полосы остаются тёмными в обеих темах, и в светлой почти чёрное
+   кольцо на них пропадает. Здесь оно белое. */
+.foot :focus-visible,
+.pitch :focus-visible,
+.callout :focus-visible { --focus: #FFFFFF; }
 
 body {
   margin: 0;
@@ -217,11 +265,16 @@ button:disabled { opacity: 0.55; cursor: default; }
 
 
 
-input[type='email'],
-input[type='tel'],
-input[type='number'],
-input[type='search'],
-input[type='text'] {
+/* Поля ввода.
+   Перечисление по типам здесь уже подводило: в списке стояли text, email,
+   tel, number и search, а url, date и file в него не попали и остались
+   системными — 21 px против 39, Arial и monospace против Manrope, своя
+   рамка. В одной форме кабинета рядом стояли поля двух разных эпох.
+   Поэтому теперь наоборот: оформлено ВСЁ, кроме тех типов, которые полем
+   ввода не являются. Новый тип попадает под стиль сам, без правки. */
+input:not([type='checkbox'], [type='radio'], [type='file'], [type='submit'],
+          [type='button'], [type='reset'], [type='image'], [type='range'],
+          [type='color'], [type='hidden']) {
   font: inherit;
   padding: 7px 10px;
   border-radius: 8px;
@@ -229,6 +282,24 @@ input[type='text'] {
   background: var(--bg);
   color: var(--fg);
 }
+
+/* Флажки и переключатели коробкой не оформляются — у них своя форма.
+   Но размер и цвет задать надо: системные 13 px малы для пальца, а
+   системный синий в этой палитре чужой. Поля margin не трогаем: кое-где
+   подпись стоит прямо за флажком, без flex-зазора, и без отступа
+   прилипла бы. */
+input[type='checkbox'], input[type='radio'] {
+  width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer;
+}
+
+/* Поле даты выше прочих на два пикселя: браузер добавляет свой отступ
+   вокруг встроенного значка календаря. Два пикселя видно, когда поле
+   стоит в ряду с другими. */
+input[type='date'] { padding-block: 6px; }
+
+/* Выбор файла системный целиком — заменить его кнопку нельзя, не спрятав
+   само поле. Но шрифт наследуется, и подпись перестаёт быть чужой. */
+input[type='file'] { font: inherit; color: var(--fg); max-width: 100%; }
 
 /* Второстепенные действия: не должны выглядеть как главная кнопка страницы */
 button.ghost {
@@ -248,7 +319,19 @@ button.ghost {
 
 /* Формы в столбик: профиль */
 .stack { display: flex; flex-direction: column; gap: 16px; }
+/* Заголовок раздела внутри формы ближе к своему тексту, чем к чужому:
+   со своими 32 px сверху и 12 снизу он вместе с зазором стопки давал
+   48 и 28 — и повисал между разделами, не принадлежа ни одному. */
+.stack h2 { margin: 16px 0 0; }
 .field { display: flex; flex-direction: column; gap: 4px; }
+/* Обязательное поле помечено звёздочкой — как в публичной форме заявки.
+   Метку ставит не разметка, а сам атрибут required: подпись и проверка
+   браузера не могут разойтись, и про новое поле не забудут. Списки сюда
+   не включены намеренно: required у списка с готовым значением ничего не
+   требует от человека, и звёздочка на нём — шум. */
+.field:has(input:required, textarea:required) > label::after {
+  content: ' *'; color: var(--accent); font-weight: 700;
+}
 .field input { max-width: 340px; }
 .field .key { margin: 0; }
 .field p { margin: 0; }
@@ -274,6 +357,11 @@ button.ghost {
 }
 
 a.tile:hover { border-color: var(--accent); }
+/* Плитка без ссылки — а такая одна, «подборов», отдельной страницы у неё
+   нет — лежит на утопленном фоне, а не на карточке. Иначе от четырёх
+   соседних, которые открываются по щелчку, её не отличить никак: признак
+   был только в наведении, то есть его не было у того, кто не навёл. */
+div.tile { background: var(--sunk); }
 .tile-n { font-size: 1.6rem; font-weight: 600; line-height: 1.1; }
 .tile-t { font-size: 0.9rem; }
 
@@ -288,8 +376,18 @@ a.tile:hover { border-color: var(--accent); }
   border-bottom: 1px solid var(--line);
 }
 
-.filters input { min-width: 120px; }
-.filters input[type='search'] { min-width: 180px; }
+.filters { align-items: end; }
+/* Поле фильтра: подпись сверху, как в поисковой строке каталога. Строка
+   стала на 18 px выше — это цена того, чтобы по выбранному фильтру было
+   видно, какое поле он сужает. */
+.fld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.fld > span { font-size: 12px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted); }
+.filters .fld input { min-width: 120px; }
+.filters .fld input[type='search'] { min-width: 180px; }
+/* Кнопка и «сбросить» подписей не имеют и выравниваются по нижнему краю
+   полей — для этого и align-items: end выше. */
+.filters .reset { padding-bottom: 10px; }
 
 .pager { display: flex; gap: 16px; align-items: center; margin-top: 20px; }
 
@@ -326,11 +424,27 @@ a.tile:hover { border-color: var(--accent); }
 }
 
 /* Поля формы в две колонки, на узком экране — в одну */
+/* Сетка форм кабинета.
+   Раньше здесь стоял auto-fit minmax(180px, 1fr), и число колонок
+   считалось от ширины: в карточке на 726 px выходило три. Ряд из двух
+   полей делился пополам, ряд из четырёх ломался на три плюс одно, и
+   «Этажей в доме» оставалось одно на строке. Правый край у каждого ряда
+   был свой, и формы выглядели собранными из кусков.
+   Теперь колонок всегда четыре, а поле занимает их столько, сколько ему
+   нужно: по умолчанию половину ряда, s1 — четверть, s4 — весь ряд.
+   Ряды разные, рёбра общие. */
 .grid2 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px 16px;
 }
+.grid2 > * { grid-column: span 2; }
+.grid2 > .s1 { grid-column: span 1; }
+.grid2 > .s4 { grid-column: span 4; }
+/* В сетке ширину полю задаёт колонка, а не потолок в 340 px: иначе
+   поле на весь ряд оставляло бы справа пустоту. Потолок остаётся для
+   полей вне сетки — в профиле он и нужен. */
+.grid2 .field input, .grid2 .field select { max-width: none; width: 100%; }
 
 textarea {
   font: inherit;
@@ -371,7 +485,7 @@ textarea {
   border-radius: var(--r-full); padding: 7px 15px; font-size: 13px; font-weight: 600;
   text-decoration: none; }
 .chip:hover { color: var(--fg); }
-.chip[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
 .rq-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
 .rq-head b { font-size: 16px; }
@@ -389,6 +503,9 @@ textarea {
  * ширина, поэтому ограничение снимается, а ширину держат обёртки полос.
  */
 main:has(.nav) { max-width: none; padding: 0; }
+/* Та же причина, что и у шапки: странице входа нужен весь экран, чтобы
+   встать по центру, а не колонка в 900 px с отступами. */
+main:has(.auth) { max-width: none; padding: 0; }
 
 .wrap { max-width: 1180px; margin: 0 auto;
   padding-left: max(18px, env(safe-area-inset-left, 0px));
@@ -405,8 +522,13 @@ main:has(.nav) { max-width: none; padding: 0; }
 /* --- Шапка: тёмная, липкая --------------------------------------------- */
 .nav { position: sticky; top: 0; z-index: 30; background: var(--panel);
   border-bottom: 1px solid var(--line); }
-.nav-in { display: flex; align-items: center; gap: 20px; padding-block: 13px; }
-.brand { display: flex; align-items: center; margin-right: 4px; }
+/* Отступ строки уменьшен с 13 до 9: кнопки в ней выросли с 34 до 40 px
+   ради пальца, и без этого липкая шапка стала бы выше на семь пикселей
+   на каждом экране. Так она осталась прежней высоты. */
+.nav-in { display: flex; align-items: center; gap: 20px; padding-block: 9px; }
+/* Отступ сверху и снизу — ради пальца: сам знак 20–25 px высотой, и без
+   него ссылка на главную была вдвое ниже соседних кнопок. */
+.brand { display: flex; align-items: center; margin-right: 4px; padding-block: 10px; }
 .brand img { height: 25px; width: auto; display: block; }
 /* Знак для тёмного фона прячется в светлой теме и наоборот. Условия
    повторяют те, по которым переключаются сами цвета: системная тёмная,
@@ -419,13 +541,15 @@ main:has(.nav) { max-width: none; padding: 0; }
 :root[data-theme='dark'] .brand .on-light { display: none; }
 :root[data-theme='dark'] .brand .on-dark { display: block; }
 .nav .spacer { margin-left: auto; }
+/* Отступ сверху и снизу — ради пальца, а не ради вида: без него ссылка
+   была 20 px высотой при соседях в 40. Ширину он не меняет. */
 .nav-link { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600;
-  white-space: nowrap; transition: color .18s; }
+  white-space: nowrap; padding-block: 10px; transition: color .18s; }
 .nav-link:hover { color: var(--accent); }
-.enter { background: var(--accent); color: #fff; border: 0; border-radius: var(--r-full);
-  padding: 9px 18px; font-weight: 700; font-size: 14px; text-decoration: none; white-space: nowrap;
+.enter { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: var(--r-full);
+  padding: 11px 18px; font-weight: 700; font-size: 14px; text-decoration: none; white-space: nowrap;
   transition: background .18s, transform .18s; }
-.enter:hover { background: var(--accent-2); transform: translateY(-1px); }
+.enter:hover { background: var(--accent-hover); transform: translateY(-1px); }
 .enter .narrow { display: none; }
 
 /* --- Герой -------------------------------------------------------------- */
@@ -477,7 +601,11 @@ main:has(.nav) { max-width: none; padding: 0; }
 .eyebrow { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 700;
   letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
 .eyebrow::after { content: ""; height: 1px; width: 64px; background: var(--line); }
-.hero h1 { font-size: clamp(34px, 5.2vw, 58px); line-height: 1.04; font-weight: 800;
+/* Потолок кегля 56, а не 58. Два пикселя — цена вежливого обращения:
+   «Найдите своё пространство» на 58 не умещалось в строку, и заголовок
+   на широком экране разъезжался с трёх строк на четыре, теряя ритм.
+   На 56 первая строка сходится, и composition остаётся прежней. */
+.hero h1 { font-size: clamp(34px, 5.2vw, 56px); line-height: 1.04; font-weight: 800;
   letter-spacing: -.035em; margin: 0; text-wrap: balance; }
 .hero h1 em { font-style: normal; color: var(--accent-2); }
 .hero .lede { color: var(--muted); font-size: 17px; line-height: 1.5; max-width: 56ch; margin: 0; }
@@ -538,18 +666,17 @@ main:has(.nav) { max-width: none; padding: 0; }
 .console .row { display: grid; gap: 10px; padding: 14px;
   grid-template-columns: 1.5fr 1fr .8fr 1fr auto; }
 .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.cell label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+.cell label { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
 .cell input, .cell select { border: 1px solid var(--line); background: var(--bg); color: var(--fg);
   border-radius: var(--r-md); padding: 11px 12px; font-size: 15px; font-weight: 500;
   width: 100%; min-width: 0; font-family: inherit;
   transition: border-color .18s, box-shadow .18s; }
-.cell input:focus, .cell select:focus { outline: none; border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(18,22,28,.12); }
-.go { align-self: end; background: var(--accent); color: #fff; border: 0;
+.cell input:focus, .cell select:focus { border-color: var(--accent); }
+.go { align-self: end; background: var(--accent); color: var(--accent-fg); border: 0;
   border-radius: var(--r-md); padding: 12px 24px; font-weight: 700; font-size: 15px;
   cursor: pointer; white-space: nowrap; transition: background .18s, transform .18s; }
-.go:hover { background: var(--accent-2); transform: translateY(-1px); }
+.go:hover { background: var(--accent-hover); transform: translateY(-1px); }
 .go:active { transform: translateY(0); }
 
 /* --- Форма заявки ------------------------------------------------------- */
@@ -558,21 +685,21 @@ main:has(.nav) { max-width: none; padding: 0; }
 .reqgrid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 .reqform textarea { border: 1px solid var(--line); background: var(--bg); color: var(--fg);
   border-radius: var(--r-md); padding: 11px 12px; font: inherit; resize: vertical; }
-.reqform textarea:focus, .reqform input:focus, .reqform select:focus { outline: none;
-  border-color: var(--accent); box-shadow: 0 0 0 3px rgba(18,22,28,.12); }
+.reqform textarea:focus, .reqform input:focus, .reqform select:focus {
+  border-color: var(--accent); }
 .pair { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 
 /* Купить или снять — две кнопки, а не выпадающий список: это первое и
    самое крупное решение на странице, и оно должно быть видно целиком. */
 .seg { border: 0; margin: 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
-.seg legend { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+.seg legend { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); margin-bottom: 8px; }
 .seg label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
   border: 1px solid var(--line); border-radius: var(--r-full); padding: 10px 18px;
   font-weight: 700; font-size: 15px; transition: border-color .18s, background .18s; }
 .seg label:hover { border-color: var(--steel); }
 .seg label:has(input:checked) { border-color: var(--accent); background: var(--accent);
-  color: #fff; }
+  color: var(--accent-fg); }
 .seg input { accent-color: var(--accent); }
 
 /* Согласие на показ телефона — крупной строкой с объяснением, а не мелким
@@ -600,7 +727,7 @@ main:has(.nav) { max-width: none; padding: 0; }
   animation: rise .4s cubic-bezier(.2,.7,.3,1) backwards;
   animation-delay: calc(var(--i, 0) * 35ms); }
 .zone:hover { color: var(--fg); border-color: var(--accent); transform: translateY(-2px); }
-.zone[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.zone[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .zone-off { border-style: dashed; }
 
 /* --- Полоса результатов ------------------------------------------------- */
@@ -612,7 +739,7 @@ main:has(.nav) { max-width: none; padding: 0; }
   border-radius: var(--r-full); padding: 8px 15px; font-size: 13px; font-weight: 600;
   text-decoration: none; white-space: nowrap; transition: color .18s, border-color .18s, background .18s; }
 .sort:hover { color: var(--fg); border-color: var(--steel); }
-.sort[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sort[aria-current='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
 /* --- Сетка карточек ----------------------------------------------------- */
 .grid { display: grid; gap: 18px; grid-template-columns: repeat(3, 1fr); padding-bottom: 56px; }
@@ -658,7 +785,8 @@ main:has(.nav) { max-width: none; padding: 0; }
 .flag .pulse { background: #4FC2A6; }
 /* Тип сделки — фирменным красным: это не статус, а раздел каталога, и
    путать его с «подтверждено» нельзя. */
-.flag.deal { background: var(--accent); letter-spacing: .06em; text-transform: uppercase; }
+.flag.deal { background: var(--accent); color: var(--accent-fg);
+  letter-spacing: .06em; text-transform: uppercase; }
 .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--ok-fg); flex: none; }
 
 .info { padding: 16px; display: flex; flex-direction: column; gap: 9px; min-width: 0; }
@@ -713,11 +841,21 @@ main:has(.nav) { max-width: none; padding: 0; }
 .price-big { font-size: clamp(30px, 4vw, 42px); font-weight: 800; letter-spacing: -.03em;
   margin: 14px 0 0; }
 .price-big small { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
-.specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 1px;
+/* Характеристики.
+   Не сетка, а ряд с переносом — и в этом вся разница. Сетка считала
+   колонки от ширины: на широком экране их выходило пять, а фактов у
+   квартиры шесть, и последний ряд оставлял четыре пустые ячейки — серую
+   плашку во всю ширину, которая читается как поломка. Починить это
+   сеткой нельзя: сколько будет колонок и сколько фактов (у участка нет
+   ни комнат, ни этажа), заранее не знает никто.
+   У ряда с переносом последние плитки просто растягиваются на
+   оставшееся место, сколько бы их ни было. */
+.specs { display: flex; flex-wrap: wrap; gap: 1px;
   background: var(--line); border: 1px solid var(--line); border-radius: var(--r-lg);
   overflow: hidden; margin: 22px 0 0; }
-.spec { background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
-.spec dt { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+.spec { flex: 1 1 128px; min-width: 0; background: var(--panel); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px; }
+.spec dt { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--muted); }
 .spec dd { margin: 0; font-size: 17px; font-weight: 700; }
 .desc { margin: 24px 0 0; font-size: 16px; line-height: 1.65; white-space: pre-wrap; }
@@ -775,10 +913,46 @@ main:has(.nav) { max-width: none; padding: 0; }
 .honeypot { position: absolute; left: -9999px; width: 1px; height: 1px;
   overflow: hidden; opacity: 0; pointer-events: none; }
 
+/* --- Вход в кабинет ------------------------------------------------------
+   Единственная страница, которую агент видит до кабинета, и до сих пор
+   она выглядела служебной заглушкой: без знака, без карточки, прижата к
+   левому верхнему углу пустого экрана. Шапку каталога сюда ставить не за
+   чем — на странице входа нечего искать и не на что переключаться, —
+   поэтому здесь свой, короткий набор: знак, карточка, путь назад. */
+.auth { min-height: 100dvh; display: grid; place-items: center; padding: 40px 18px; }
+.auth-box { width: 100%; max-width: 400px; display: flex; flex-direction: column;
+  align-items: center; gap: 20px; }
+.auth-brand img { height: 28px; }
+.auth-card { width: 100%; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-lg); box-shadow: var(--sh-md); padding: 28px 26px; }
+.auth-card h1 { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 6px; }
+.auth-sub { margin: 0 0 22px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.auth-form { display: flex; flex-direction: column; }
+.auth-form label { font-size: 12px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+.auth-form input[type='email'] { width: 100%; padding: 11px 12px; font-size: 15px;
+  font-weight: 500; border-radius: var(--r-md); transition: border-color .18s; }
+.auth-form input[type='email']:focus { border-color: var(--accent); }
+.auth-form button { margin-top: 14px; padding: 12px 20px; border-radius: var(--r-md);
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  transition: background .18s, transform .18s; }
+.auth-form button:hover:not(:disabled) { background: var(--accent-hover); }
+.auth-form .error { margin-top: 14px; }
+/* Отправлено: тот же размер карточки, но без поля — иначе человек
+   принимается вводить почту второй раз. Подзаголовок про одобрение
+   администратором тоже уходит: он объясняет, что будет ПОСЛЕ входа, а
+   сейчас на экране один ответ — письмо отправлено. */
+.auth-card:has(.auth-sent) .auth-sub { display: none; }
+.auth-sent p { margin: 0; font-size: 15px; line-height: 1.55; }
+.auth-sent .auth-hint { margin-top: 10px; color: var(--muted); font-size: 13px; }
+.auth-back { margin: 0; font-size: 14px; }
+.auth-back a { color: var(--muted); text-decoration: none; font-weight: 600; }
+.auth-back a:hover { color: var(--accent); }
+
 /* --- Выбор языка -------------------------------------------------------- */
 .lang { position: relative; }
 .lang-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--sunk);
-  color: var(--fg); border: 0; border-radius: var(--r-full); padding: 7px 12px;
+  color: var(--fg); border: 0; border-radius: var(--r-full); padding: 11px 12px;
   font-size: 12px; font-weight: 700; line-height: 1; font-family: var(--mono); cursor: pointer;
   transition: background .18s, color .18s; }
 .lang-btn:hover, .lang-btn[aria-expanded='true'] { background: var(--ink); color: #fff; }
@@ -823,13 +997,45 @@ main:has(.nav) { max-width: none; padding: 0; }
   .grid { grid-template-columns: 1fr; }
   .gal { grid-template-columns: 1fr; }
   .gal .side { grid-template-columns: 1fr 1fr; }
-  .nav-in { flex-wrap: wrap; row-gap: 10px; gap: 10px; }
+  /* Шапка на телефоне должна остаться в ОДНУ строку. Перенос здесь уже
+     был: знак, «Заявки», тема и язык вставали первой строкой, а «Вход»
+     падал на вторую — и не под них, а в противоположный угол, потому что
+     растянутый .spacer оставался на первой. Выглядело ошибкой вёрстки.
+     flex-wrap оставлен: если на совсем узком экране строка всё же не
+     сойдётся, пусть переносится, а не вылезает за край. */
+  .nav-in { flex-wrap: wrap; row-gap: 10px; gap: 8px; }
   .nav-link { font-size: 13px; }
   .nav .spacer { display: none; }
   .lang { margin-left: auto; }
-  .enter { padding: 8px 15px; font-size: 13px; }
+  .brand img { height: 20px; }
+  .enter { padding: 11px 12px; font-size: 13px; }
   .enter .wide { display: none; }
   .enter .narrow { display: inline; }
+}
+
+/* Узкие телефоны: пяти элементам в строке тесно, и что-то должно
+   уступить. Уступает подпись языка — глобус остаётся, и остаётся
+   aria-label «Язык: Русский», так что и кнопка, и её смысл на месте.
+   Убрать вместо этого «Заявки» значило бы убрать единственный раздел
+   шапки, а знак ужать ещё — сделать его нечитаемым.
+
+   Порог в 380 px взят по замеру, а не на глаз: с подписью строка
+   сходится от 356 px по-русски и от 375 по-кыргызски — кыргызские слова
+   длиннее, и считать надо по ним. Ниже порога подпись уходит. */
+@media (max-width: 380px) {
+  /* Зазор 6 вместо 8: кыргызская строка на 360 px сходилась впритык, в
+     доли пикселя, и от любого округления уезжала на вторую. */
+  .nav-in { gap: 6px; }
+  .lang-now { display: none; }
+  .lang-btn { padding: 11px; }
+  /* 20, а не 19: со своими отступами знак добирает ровно до 40 px по
+     высоте — как соседние кнопки. */
+  .brand img { height: 20px; }
+  /* Прижимает «Вход» к правому краю — и в одну строку, и если она всё же
+     перенесётся: тогда кнопка встанет справа второй строкой, как будто
+     так и задумано, а не в левый угол. */
+  .lang { margin-left: 0; }
+  .enter { margin-left: auto; }
 }
 /* Движение — украшение, и оно выключается, если человек просил без него. */
 @media (prefers-reduced-motion: reduce) {
@@ -864,7 +1070,7 @@ main:has(.nav) { max-width: none; padding: 0; }
   box-shadow: var(--sh-md); }
 .zone-cell[aria-current='true'] { background: var(--accent); border-color: var(--accent); }
 .zone-cell[aria-current='true'] b,
-.zone-cell[aria-current='true'] small { color: #fff; }
+.zone-cell[aria-current='true'] small { color: var(--accent-fg); }
 /* Район без объектов не кликается и приглушён: нажатие, после которого
    ничего нет, — обман. */
 .zone-cell.off { background: transparent; border-color: transparent; color: var(--muted);
@@ -900,10 +1106,10 @@ main:has(.nav) { max-width: none; padding: 0; }
 .pitch .eyebrow { color: var(--accent-2); }
 .pitch .eyebrow::after { background: rgba(255,255,255,.18); }
 .pitch-go { display: inline-flex; align-items: center; gap: 10px; margin-top: 24px;
-  background: var(--accent); color: #fff; text-decoration: none; font-weight: 700;
+  background: var(--accent); color: var(--accent-fg); text-decoration: none; font-weight: 700;
   font-size: 16px; padding: 14px 26px; border-radius: var(--r-full);
   transition: background .18s, transform .18s, gap .18s; }
-.pitch-go:hover { background: var(--accent-2); transform: translateY(-2px); gap: 14px; }
+.pitch-go:hover { background: var(--accent-hover); transform: translateY(-2px); gap: 14px; }
 
 /* Три шага лесенкой: тот же мотив, что в знаке, и он же объясняет
    порядок — каждый следующий шаг сдвинут вправо. */
@@ -915,7 +1121,7 @@ main:has(.nav) { max-width: none; padding: 0; }
 .steps li:nth-child(2) { margin-left: 24px; }
 .steps li:nth-child(3) { margin-left: 48px; }
 .step-n { grid-row: 1 / 3; width: 34px; height: 34px; border-radius: 50%;
-  background: var(--accent); color: #fff; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-fg); display: grid; place-items: center;
   font-size: 15px; font-weight: 700; }
 .steps b { font-size: 15px; font-weight: 700; }
 .steps small { font-size: 13px; color: var(--on-ink-faint); line-height: 1.4; }
@@ -925,6 +1131,15 @@ main:has(.nav) { max-width: none; padding: 0; }
   .steps li:nth-child(2), .steps li:nth-child(3) { margin-left: 0; }
 }
 @media (max-width: 680px) {
+  /* Форма на телефоне: две колонки вместо четырёх. Половина ряда
+     становится целым рядом, четверть остаётся половиной — числа
+     («комнат», «этаж») по-прежнему стоят парами, а не растягиваются
+     каждое на всю ширину. */
+  .grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid2 > * { grid-column: span 2; }
+  .grid2 > .s1 { grid-column: span 1; }
+  .grid2 > .s4 { grid-column: span 2; }
+
   /* Схема на телефоне: три колонки вместо пяти, иначе подписи не влезают
      и район перестаёт узнаваться. Порядок остаётся с севера на юг. */
   .plan { grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(64px, auto); }
@@ -933,8 +1148,11 @@ main:has(.nav) { max-width: none; padding: 0; }
 }
 
 /* Переключатель темы: такой же тихий, как выбор языка, и рядом с ним. */
+/* 40 px, а не 34: палец на телефоне промахивается мимо 34, а строка
+   шапки и так 62 px высотой — место было. Ширина выросла на шесть
+   пикселей, и строка по-прежнему сходится от 360 px; замерено. */
 .theme-btn { display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; background: var(--sunk); color: var(--fg); border: 0;
+  width: 40px; height: 40px; background: var(--sunk); color: var(--fg); border: 0;
   border-radius: var(--r-full); cursor: pointer; transition: background .18s, color .18s; }
 .theme-btn:hover { background: var(--ink); color: #fff; }
 
@@ -968,9 +1186,6 @@ main:has(.nav) { max-width: none; padding: 0; }
     padding: 12px 20px; border-radius: var(--r-full);
     font-weight: 700; text-decoration: none; margin-top: 4px;
   }
-  /* Нечётная последняя плитка растягивается на ряд: иначе рядом с ней
-     остаётся пустая серая ячейка, и это выглядит поломкой. */
-  .specs .spec:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
 
 /* Галерея посадочной страницы. Первый снимок во всю ширину — он решает,

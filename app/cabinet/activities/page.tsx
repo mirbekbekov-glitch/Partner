@@ -2,9 +2,11 @@ import Link from 'next/link';
 import { myActivities, myReminders } from '@/lib/db/cabinet';
 import { approvedColleagues } from '@/lib/db/agents';
 import {
-  ActivityActions, ActivityMeta, activityWhen, KIND_RU,
+  ActivityActions, ActivityMeta,
   type ActivityRow, type Colleague,
 } from '../Activities';
+import { KIND_RU } from '@/lib/activity-kinds';
+import { activityWhen } from '@/lib/activity-format';
 
 export const metadata = { title: 'Задачи' };
 

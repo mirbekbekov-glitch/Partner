@@ -4,12 +4,8 @@ import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { lookupByPhone, type ContactResult, type LookupResult } from './actions';
 
-export const ROLE_RU: Record<string, string> = {
-  owner: 'собственник',
-  landlord: 'арендодатель',
-  buyer: 'покупатель',
-  tenant: 'арендатор',
-};
+export { ROLE_RU } from '@/lib/contact-roles';
+import { ROLE_RU } from '@/lib/contact-roles';
 
 export type ContactDraft = {
   id?: string;
@@ -156,7 +152,7 @@ export function ContactForm({
         <button type="submit" disabled={pending}>
           {pending ? 'Сохраняем…' : mode === 'create' ? 'Создать контакт' : 'Сохранить'}
         </button>
-        <Link className="key" href={draft?.id ? `/cabinet/contacts/${draft.id}` : '/cabinet/contacts'}>
+        <Link className="btn ghostlink" href={draft?.id ? `/cabinet/contacts/${draft.id}` : '/cabinet/contacts'}>
           отмена
         </Link>
       </div>

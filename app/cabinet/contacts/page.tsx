@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { contactDuplicates, contactList, type ContactListItem } from '@/lib/db/cabinet';
-import { ROLE_RU } from './ContactForm';
+import { ROLE_RU } from '@/lib/contact-roles';
 import { exportHref, parseFilters } from '@/lib/list-params';
 import { Pager } from '../Pager';
 import { SortTh } from '../SortTh';
@@ -71,13 +71,19 @@ export default async function ContactsList({
       </p>
 
       <form className="filters" method="get">
-        <input name="q" type="search" placeholder="имя" defaultValue={q ?? ''} />
-        <select name="role" defaultValue={role ?? ''}>
-          <option value="">роль: любая</option>
-          {Object.entries(ROLE_RU).map(([v, t]) => (
-            <option key={v} value={v}>{t}</option>
-          ))}
-        </select>
+        <label className="fld">
+          <span>Имя</span>
+          <input name="q" type="search" defaultValue={q ?? ''} />
+        </label>
+        <label className="fld">
+          <span>Роль</span>
+          <select name="role" defaultValue={role ?? ''}>
+            <option value="">любая</option>
+            {Object.entries(ROLE_RU).map(([v, t]) => (
+              <option key={v} value={v}>{t}</option>
+            ))}
+          </select>
+        </label>
         {/* Сортировка переживает фильтрацию: форма отправляется методом
             get, и всё, чего в ней нет, из адреса пропадает. */}
         {f.sort ? (
