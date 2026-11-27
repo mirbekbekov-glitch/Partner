@@ -1,12 +1,33 @@
 import Link from 'next/link';
-import { myActivities, myReminders } from '@/lib/db/cabinet';
+import {
+  myActivities, myActivityCounts, myReminders, type ActivityScope,
+} from '@/lib/db/cabinet';
 import { approvedColleagues } from '@/lib/db/agents';
 import {
   ActivityActions, ActivityMeta, activityWhen, KIND_RU,
   type ActivityRow, type Colleague,
 } from '../Activities';
+import { parseFilters } from '@/lib/list-params';
+import { Pager } from '../Pager';
 
 export const metadata = { title: 'Задачи' };
+
+const BASE = '/cabinet/activities';
+
+/**
+ * Разделы стали вкладками.
+ *
+ * Раньше все три показывались сразу, но список брал из базы двести записей
+ * и делился уже в браузере: на двести первой просроченная задача просто
+ * перестала бы показываться. Теперь условие ушло в запрос, вкладка
+ * листается страницами, а числа в подписях считает база — они не зависят
+ * от того, что уместилось на экране.
+ */
+const TABS: [ActivityScope, string][] = [
+  ['overdue', 'Просрочено'],
+  ['due', 'Со сроком'],
+  ['nodate', 'Без срока'],
+];
 
 const ENTITY_PATH: Record<string, string> = {
   object: 'objects',
@@ -21,8 +42,18 @@ const ENTITY_PATH: Record<string, string> = {
  * просроченную задачу можно увидеть только зайдя на тот объект, про который
  * уже забыл.
  */
-export default async function ActivitiesPage() {
+export default async function ActivitiesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const f = parseFilters(sp);
+  const tab = (TABS.find(([v]) => v === f.tab)?.[0] ?? 'overdue') as ActivityScope;
+
   let rows: ActivityRow[] = [];
+  let total = 0;
+  let counts = { overdue: 0, due: 0, nodate: 0 };
   let reminders: Array<{
     activity_id: string; kind: string; status: string;
     channel: string | null; last_error: string | null;
@@ -33,11 +64,17 @@ export default async function ActivitiesPage() {
   try {
     // Состояние напоминаний рядом со списком: молчание хуже всего — агент
     // должен видеть, отправлено ли напоминание и если нет, то почему.
-    [rows, reminders, colleagues] = await Promise.all([
-      myActivities(),
+    const [listed, rem, mates, tallies] = await Promise.all([
+      myActivities(tab, f.page),
       myReminders(),
       approvedColleagues(),
+      myActivityCounts(),
     ]);
+    rows = listed.rows;
+    total = listed.total;
+    reminders = rem;
+    colleagues = mates;
+    counts = tallies;
   } catch (e) {
     failed = e instanceof Error ? e.message : 'Не удалось загрузить задачи.';
   }
@@ -52,10 +89,6 @@ export default async function ActivitiesPage() {
   }
 
   const byActivity = new Map(reminders.map((r) => [r.activity_id, r]));
-  const overdue = rows.filter((r) => r.overdue);
-  const dueSoon = rows.filter((r) => !r.done && !r.overdue && r.due_at);
-  const noDate = rows.filter((r) => !r.done && !r.due_at);
-  const done = rows.filter((r) => r.done);
 
   return (
     <>
@@ -65,29 +98,34 @@ export default async function ActivitiesPage() {
         карточке — там видно, к чему она относится.
       </p>
 
-      <Section title={`Просрочено (${overdue.length})`} rows={overdue}
-               reminders={byActivity} colleagues={colleagues} warn />
-      <Section title={`Со сроком (${dueSoon.length})`} rows={dueSoon}
-               reminders={byActivity} colleagues={colleagues} />
-      <Section title={`Без срока (${noDate.length})`} rows={noDate}
-               reminders={byActivity} colleagues={colleagues} />
-
-      {/* Этот раздел сейчас не показывается никогда: myActivities отдаёт
-          только незакрытые (`and a.done = 0`), поэтому done всегда пуст.
-          Разметка оставлена как есть — решать, показывать ли выполненные
-          в личном списке, надо продуктово, а не заодно. Передачи у
-          закрытой записи всё равно нет: ActivityActions её не рисует. */}
-      {done.length > 0 ? (
-        <Section title={`Выполнено (${done.length})`} rows={done.slice(0, 30)}
-                 reminders={byActivity} colleagues={colleagues} />
-      ) : null}
+      <div className="tabs-row">
+        {TABS.map(([v, label]) => (
+          <Link
+            key={v}
+            href={v === 'overdue' ? BASE : `${BASE}?tab=${v}`}
+            className="chip"
+            aria-current={tab === v ? 'true' : undefined}
+          >
+            {label} {counts[v]}
+          </Link>
+        ))}
+      </div>
 
       {rows.length === 0 ? (
         <p className="empty">
-          Записей пока нет. Звонки, показы и задачи записываются на карточке объекта,
-          потребности или сделки.
+          {counts.overdue + counts.due + counts.nodate === 0
+            ? 'Записей пока нет. Звонки, показы и задачи записываются на карточке объекта, потребности или сделки.'
+            : 'В этой вкладке пусто.'}
         </p>
-      ) : null}
+      ) : (
+        <Section
+          rows={rows}
+          reminders={byActivity}
+          colleagues={colleagues}
+        />
+      )}
+
+      <Pager base={BASE} filters={{ ...f, tab }} total={total} />
     </>
   );
 }
@@ -101,33 +139,19 @@ const REMINDER_RU: Record<string, string> = {
   no_channel: 'напомнить нечем: Telegram не привязан',
 };
 
-/**
- * Один раздел списка дел — таблицей.
- *
- * Колонка «К чему» идёт первой намеренно: иначе список дел превращается в
- * набор фраз без контекста, и непонятно, по какому объекту звонить.
- */
 function Section({
-  title,
   rows,
   reminders,
   colleagues,
-  warn,
 }: {
-  title: string;
   rows: ActivityRow[];
   reminders: Map<string, { status: string; last_error: string | null }>;
   colleagues: Colleague[];
-  warn?: boolean;
 }) {
   if (rows.length === 0) return null;
 
   return (
-    <>
-      <h2>
-        {warn ? <span className="warn">{title}</span> : title}
-      </h2>
-      <div className="tbl-wrap">
+    <div className="tbl-wrap">
         <table className="tbl">
           <thead>
             <tr>
@@ -206,7 +230,6 @@ function Section({
             })}
           </tbody>
         </table>
-      </div>
-    </>
+    </div>
   );
 }

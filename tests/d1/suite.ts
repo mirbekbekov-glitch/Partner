@@ -1088,11 +1088,18 @@ export default {
     // Ради чего всё: задача должна появиться в списке дел ТОГО, на кого
     // поставлена, а не того, кто поставил. Иначе коллега о ней не узнает.
     await loginAs(db, vera);
+    // Дела разложены по вкладкам (просрочено, со сроком, без срока), и
+    // задача лежит в той, куда попал её срок. Проверяем по всем сразу:
+    // важно, что она у коллеги есть, а не в какой она вкладке.
+    const everyTask = async () => (await Promise.all(
+      (['overdue', 'due', 'nodate'] as const).map((s) => myActivities(s)),
+    )).flatMap((p) => p.rows);
+
     check('и она появилась в списке дел коллеги',
-      (await myActivities()).some((t) => t.id === forVera.id));
+      (await everyTask()).some((t) => t.id === forVera.id));
     await loginAs(db, anna);
     check('а в моём списке её нет',
-      !(await myActivities()).some((t) => t.id === forVera.id));
+      !(await everyTask()).some((t) => t.id === forVera.id));
 
     const assignAudit = await db
       .prepare(`select diff from audit_log where entity_type = 'activities'
@@ -1883,13 +1890,19 @@ export default {
     check('объекты чужого контакта не видны',
       (await contactObjects(annaContact.id)).length === 0);
 
-    // Сделки: видит только сторона.
+    // Сделки: видит только сторона. Список разложен по вкладкам (идущие и
+    // завершённые), и сделка лежит в той, куда попал её статус. Проверяем
+    // обе: важно, что сторона её видит, а не в какой она вкладке.
+    const everyDeal = async () => (await Promise.all(
+      (['open', 'done'] as const).map((s) => dealList(null, 'desc', s)),
+    )).flatMap((p) => p.rows);
+
     await loginAs(db, anna);
-    const annaDeals = await dealList();
+    const annaDeals = await everyDeal();
     check('сторона сделки свои сделки видит', annaDeals.length > 0);
 
     await loginAs(db, vera);
-    const veraDeals = await dealList();
+    const veraDeals = await everyDeal();
     check('посторонний чужих сделок не видит',
       veraDeals.length === 0, `видно ${veraDeals.length}`);
 
