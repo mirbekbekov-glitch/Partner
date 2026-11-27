@@ -45,15 +45,26 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               "if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}",
           }}
         />
-        {/* Подпись под значком на экране «Домой». Без неё iPhone берёт
-            заголовок страницы и обрезает его: «Кабинет—Liber…». Сам значок
-            лежит в app/apple-icon.png — iOS берёт именно apple-touch-icon,
-            а favicon (app/icon.png) для рабочего стола не использует.
+        {/* Ярлык на экране «Домой».
+ 
+            Значок лежит в app/apple-icon.png: iOS берёт именно
+            apple-touch-icon, а favicon (app/icon.png) для рабочего стола
+            не использует — без него она рисует первую букву заголовка.
 
-            Намеренно НЕ apple-mobile-web-app-capable: он открывает сайт
-            отдельным окном без адресной строки, и это другое решение —
-            его принимают, а не получают заодно с подписью. */}
+            Подпись задана отдельно: иначе iPhone берёт заголовок страницы
+            и обрезает его до «Кабинет—Liber…».
+
+            capable открывает сайт отдельным окном, без адресной строки и
+            кнопок браузера. Для кабинета это к месту: агент заходит в него
+            по десять раз на дню. Полоса состояния оставлена обычной
+            (default), а не прозрачной: прозрачная пускает содержимое под
+            часы и требует отступов под вырез, то есть отдельной работы по
+            вёрстке ради сомнительной пользы.
+
+            Android и новые iOS читают то же самое из app/manifest.ts. */}
         <meta name="apple-mobile-web-app-title" content="Liberterra" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
         {/* Manrope — шрифт дизайн-системы. Ссылкой, а не next/font: сборка
             идёт в сети, где Google Fonts недоступен, а браузер читателя
