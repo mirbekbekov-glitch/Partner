@@ -73,11 +73,18 @@ export async function listAgents(): Promise<Array<AgentRow & {
  */
 export async function approvedColleagues(): Promise<Array<{ id: string; full_name: string }>> {
   const agent = await requireAgent();
-  return all(
-    `select id, full_name from agents
-      where status = 'approved' and id <> ? order by full_name`,
+  const rows = await all<{ id: string; full_name: string }>(
+    `select id, full_name from agents where status = 'approved' and id <> ?`,
     agent.id,
   );
+
+  // Порядок задаётся в коде, а не в запросе. SQLite сравнивает строки
+  // побайтно, и для кириллицы это значит, что все заглавные идут перед
+  // всеми строчными: «Абрамов, Яковлев, абрамов» — проверено запросом к
+  // боевой базе. localeCompare знает русский алфавит. Список агентств
+  // мал и не постраничный, поэтому сортировка в коде ничего не стоит; в
+  // постраничных списках так нельзя — там порядок обязан быть в запросе.
+  return rows.sort((a, b) => a.full_name.localeCompare(b.full_name, 'ru'));
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +347,9 @@ export type OrganizationRow = {
 };
 
 export async function listOrganizations(): Promise<OrganizationRow[]> {
-  return all<OrganizationRow>('select * from organizations order by name');
+  // Порядок в коде — та же причина, что у approvedColleagues.
+  const rows = await all<OrganizationRow>('select * from organizations');
+  return rows.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 
 /**

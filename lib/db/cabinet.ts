@@ -61,6 +61,14 @@ export type Page<T> = { rows: T[]; total: number };
  * Колонки, закрытые инвариантом 4 (имя собственника, имя клиента), в
  * списки не входят намеренно: порядок строк выдал бы то, что скрыто в
  * самой ячейке.
+ *
+ * ТЕКСТОВЫЕ колонки сортируются по нормализованному виду, а не по самому
+ * тексту. Причина та же, что у поиска: SQLite сравнивает строки побайтно,
+ * и для кириллицы это значит, что ВСЕ заглавные идут перед всеми
+ * строчными. Проверено запросом к боевой базе: «Абрамов, Орозов, Яковлев,
+ * абрамов, яковлев» — то есть контакт, записанный строчными, уезжает в
+ * конец списка после «Яковлева». `collate nocase` не помогает: он тоже
+ * знает только латиницу.
  */
 function orderBy(
   columns: Record<string, string>,
@@ -162,7 +170,8 @@ export async function contactList(
        left join agents ag on ag.id = c.owner_agent_id
       where ${visible.sql} ${filter}
       ${orderBy({
-        name: 'c.name',
+        // По нормализованной колонке: см. пояснение к orderBy.
+        name: 'c.search_text',
         objects: 'objects_count',
         requirements: 'requirements_count',
         source: 'c.source',
@@ -378,7 +387,7 @@ export async function objectList(query: {
        left join organizations org on org.id = ra.organization_id
       where ${where.join(' and ')}
       ${orderBy({
-        address: 'o.address',
+        address: 'o.search_text',
         deal: 'o.deal_type',
         state: 'o.publication_state',
         price: 'o.price_minor',
@@ -998,7 +1007,7 @@ export async function dealList(
       where ${party.sql}
         and d.status ${scope === 'done' ? 'in' : 'not in'} ('closed', 'failed')
       ${orderBy({
-        address: 'o.address',
+        address: 'o.search_text',
         status: 'd.status',
         price: 'coalesce(d.final_price_minor, o.price_minor)',
         created: 'd.created_at',
@@ -1260,6 +1269,43 @@ export async function myActivityCounts(): Promise<Record<ActivityScope, number>>
     due: row?.due ?? 0,
     nodate: row?.nodate ?? 0,
   };
+}
+
+/**
+ * Последние записи агента — для главной кабинета.
+ *
+ * Это лента ТОГО, ЧТО УЖЕ СЛУЧИЛОСЬ: закрытые записи плюс заметки и
+ * сообщения, которые не закрывают вовсе. Незакрытые задачи и показы сюда
+ * не попадают намеренно — они стоят выше, в списке дел, и в ленте
+ * повторялись бы строка в строку.
+ *
+ * Порядок по тому, когда запись закрыли или завели, а не по сроку:
+ * «сегодня закрыл показ» важнее, чем «когда-то назначил звонок».
+ *
+ * Только свои: чужие активности видит карточка сущности, и мешать их в
+ * личную ленту значило бы показывать на главной чужую работу.
+ */
+export async function recentActivity(limit = 6): Promise<ActivityItem[]> {
+  const me = await asker();
+  const at = new Date().toISOString();
+
+  const rows = await all<Parameters<typeof toActivity>[0]>(
+    `select a.id, a.kind, a.entity_type, a.entity_id, a.body, a.due_at,
+            a.done, a.done_at, a.is_shared, a.created_at, a.agent_id,
+            ag.full_name as agent_name,
+            1 as mine,
+            (a.done = 0 and a.due_at is not null and a.due_at < ?2) as overdue,
+            ${ENTITY_TITLE} as entity_title
+       from activities a
+       left join agents ag on ag.id = a.agent_id
+      where a.agent_id = ?1
+        and (a.done = 1 or a.kind in ('note', 'message'))
+      order by coalesce(a.done_at, a.updated_at, a.created_at) desc
+      limit ?3`,
+    me.id, at, limit,
+  );
+
+  return rows.map(toActivity);
 }
 
 // ---------------------------------------------------------------------------

@@ -51,12 +51,15 @@ export default async function Leads({
       </p>
 
       <form className="filters" method="get">
-        <select name="status" defaultValue={status ?? ''}>
-          <option value="">любой статус</option>
-          {Object.entries(STATUS_RU).map(([k, ru]) => (
-            <option key={k} value={k}>{ru}</option>
-          ))}
-        </select>
+        <label className="fld">
+          <span>Статус</span>
+          <select name="status" defaultValue={status ?? ''}>
+            <option value="">любой</option>
+            {Object.entries(STATUS_RU).map(([k, ru]) => (
+              <option key={k} value={k}>{ru}</option>
+            ))}
+          </select>
+        </label>
         <button type="submit">Фильтр</button>
         {status ? (
           <Link href="/cabinet/leads" className="key reset">сбросить</Link>

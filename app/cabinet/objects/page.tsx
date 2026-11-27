@@ -70,31 +70,52 @@ export default async function ObjectsList({
       </div>
       <p className="sub">Всего {count ?? 0}. Собственник виден тем, кому он положен.</p>
 
+      {/* Подпись над каждым полем, а не подсказка внутри. Подсказка
+          пропадает с первым введённым символом, а у списка — с первым
+          выбором: «сделка: любая» сменяется на «продажа», и строка
+          фильтров превращается в набор слов без признака, по какому
+          полю каждое. Поэтому и в списках первый пункт теперь просто
+          «любая»: что именно любое, сказано подписью. */}
       <form className="filters" method="get">
-        <input name="q" type="search" placeholder="адрес" defaultValue={f.q ?? ''} />
-        <select name="deal" defaultValue={f.deal ?? ''}>
-          <option value="">сделка: любая</option>
-          <option value="sale">продажа</option>
-          <option value="rent">аренда</option>
-        </select>
-        <select name="state" defaultValue={f.state ?? ''}>
-          <option value="">состояние: любое</option>
-          <option value="draft">черновик</option>
-          <option value="published">опубликован</option>
-          <option value="withdrawn">снят</option>
-        </select>
-        <input name="zone" type="text" placeholder="зона" defaultValue={f.zone ?? ''} />
-        <select name="src" defaultValue={f.src ?? ''}>
-          <option value="">источник: любой</option>
-          <option value="me">мои объекты</option>
-          {me?.organization_id ? <option value="org">моего агентства</option> : null}
-          <option value="other">других агентств</option>
-          {(colleagues ?? [])
-            .filter((c) => c.id !== me?.id)
-            .map((c) => (
-              <option key={c.id} value={c.id}>{c.full_name}</option>
-            ))}
-        </select>
+        <label className="fld">
+          <span>Адрес</span>
+          <input name="q" type="search" defaultValue={f.q ?? ''} />
+        </label>
+        <label className="fld">
+          <span>Сделка</span>
+          <select name="deal" defaultValue={f.deal ?? ''}>
+            <option value="">любая</option>
+            <option value="sale">продажа</option>
+            <option value="rent">аренда</option>
+          </select>
+        </label>
+        <label className="fld">
+          <span>Состояние</span>
+          <select name="state" defaultValue={f.state ?? ''}>
+            <option value="">любое</option>
+            <option value="draft">черновик</option>
+            <option value="published">опубликован</option>
+            <option value="withdrawn">снят</option>
+          </select>
+        </label>
+        <label className="fld">
+          <span>Зона</span>
+          <input name="zone" type="text" defaultValue={f.zone ?? ''} />
+        </label>
+        <label className="fld">
+          <span>Источник</span>
+          <select name="src" defaultValue={f.src ?? ''}>
+            <option value="">любой</option>
+            <option value="me">мои объекты</option>
+            {me?.organization_id ? <option value="org">моего агентства</option> : null}
+            <option value="other">других агентств</option>
+            {(colleagues ?? [])
+              .filter((c) => c.id !== me?.id)
+              .map((c) => (
+                <option key={c.id} value={c.id}>{c.full_name}</option>
+              ))}
+          </select>
+        </label>
         {/* Сортировка переживает фильтрацию: форма отправляется методом
             get, и всё, чего в ней нет, из адреса пропадает. */}
         {f.sort ? (
@@ -156,11 +177,11 @@ export default async function ObjectsList({
                         объект нельзя опубликовать. */}
                     {!o.mandate_id ? (
                       <span className="tbl-note">
-                        <span className="warn">нет активного мандата</span>
+                        <span className="warn">без мандата</span>
                       </span>
                     ) : o.contract_confirmed === false ? (
                       <span className="tbl-note">
-                        <span className="warn">договор требует подтверждения</span>
+                        <span className="warn">договор не подтверждён</span>
                       </span>
                     ) : null}
                   </td>
@@ -172,7 +193,10 @@ export default async function ObjectsList({
                   <td data-l="Собственник">
                     {o.owner_name ?? <span className="hidden-contact">скрыт</span>}
                   </td>
-                  <td data-l="Ведёт">
+                  {/* nowrap: в 96 px «Айбек Мурзаев» переносился по слогам,
+                      а «частный агент» под ним — ещё раз, и строка таблицы
+                      раздувалась до четырёх строк текста из-за двух слов. */}
+                  <td className="nowrap" data-l="Ведёт">
                     {o.responsible_name ?? '—'}
                     <span className="tbl-sub">
                       {o.responsible_org_name ?? 'частный агент'}

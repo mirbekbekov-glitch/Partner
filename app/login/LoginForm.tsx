@@ -23,12 +23,12 @@ export function LoginForm({ next }: { next: string }) {
 
   if (state?.sent) {
     return (
-      <div className="card">
+      <div className="auth-sent">
         <p>
           Если такая почта заведена, ссылка для входа отправлена на{' '}
           <strong>{state.email}</strong>.
         </p>
-        <p className="key">
+        <p className="auth-hint">
           Ссылка одноразовая и действует 15 минут. Откройте её на этом же
           устройстве.
         </p>
@@ -37,26 +37,24 @@ export function LoginForm({ next }: { next: string }) {
   }
 
   return (
-    <form action={action}>
+    <form action={action} className="auth-form">
       <input type="hidden" name="next" value={next} />
-      <div className="row">
-        <label className="key" htmlFor="email">Рабочая почта</label>
-      </div>
-      <div className="inline" style={{ marginTop: 6 }}>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          placeholder="agent@example.kg"
-          defaultValue={state?.email ?? ''}
-          style={{ minWidth: 240 }}
-        />
-        <button type="submit" disabled={pending}>
-          {pending ? 'Отправляем…' : 'Получить ссылку'}
-        </button>
-      </div>
+      <label htmlFor="email">Рабочая почта</label>
+      <input
+        id="email"
+        name="email"
+        type="email"
+        required
+        autoComplete="email"
+        placeholder="agent@example.kg"
+        defaultValue={state?.email ?? ''}
+      />
+      {/* Кнопка во всю ширину и под полем, а не сбоку: рядом они
+          срастались в одну полосу, и на телефоне кнопка оказывалась уже
+          подписи на ней. */}
+      <button type="submit" disabled={pending}>
+        {pending ? 'Отправляем…' : 'Получить ссылку'}
+      </button>
       {state?.error ? <p className="error">{state.error}</p> : null}
     </form>
   );

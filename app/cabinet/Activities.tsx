@@ -11,13 +11,13 @@ import {
 
 export type Colleague = { id: string; full_name: string };
 
-export const KIND_RU: Record<string, string> = {
-  call: 'звонок',
-  showing: 'показ',
-  task: 'задача',
-  note: 'заметка',
-  message: 'сообщение',
-};
+/* Словарь видов — из обычного модуля, не отсюда: этот файл помечен
+   'use client', и серверная страница задач, читая KIND_RU прямо из него,
+   получала не словарь, а ссылку на клиентский модуль. На незакрытом
+   звонке KIND_RU['call'] отдавал Function.prototype.call, и страница
+   падала с 500. Здесь он только переэкспортируется для своих же нужд. */
+export { KIND_RU } from '@/lib/activity-kinds';
+import { KIND_RU } from '@/lib/activity-kinds';
 
 export type ActivityRow = {
   id: string;
@@ -36,8 +36,7 @@ export type ActivityRow = {
   entity_id?: string;
 };
 
-const when = (v: string | null) =>
-  v == null ? '' : new Date(v).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+import { activityWhen as when } from '@/lib/activity-format';
 
 /**
  * Кнопки «выполнено» и «удалить».
@@ -126,7 +125,7 @@ export function ActivityMeta({ a }: { a: ActivityRow }) {
   );
 }
 
-export const activityWhen = when;
+export { activityWhen } from '@/lib/activity-format';
 
 function Row({ a, colleagues }: { a: ActivityRow; colleagues?: Colleague[] }) {
   return (

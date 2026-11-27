@@ -9,8 +9,10 @@
     "typecheck": "tsc --noEmit",
     "test:forms": "./tests/check-forms.sh",
     "test:d1": "node tests/d1/run.mjs",
-    "test": "npm run typecheck && npm run test:d1 && npm run test:forms && npm run test:public",
-    "test:public": "./tests/check-public.sh"
+    "test": "npm run typecheck && npm run test:d1 && npm run test:forms && npm run test:public && npm run test:theme && npm run test:client",
+    "test:public": "./tests/check-public.sh",
+    "test:theme": "./tests/check-theme.sh",
+    "test:client": "./tests/check-client-values.sh"
   },
   "dependencies": {
     "@vinext/cloudflare": "^1.4.0",

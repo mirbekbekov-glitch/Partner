@@ -1,7 +1,25 @@
 import Link from 'next/link';
-import { cabinetCounters } from '@/lib/db/cabinet';
+import {
+  cabinetCounters, myActivities, myActivityCounts, leadFeed, recentActivity,
+} from '@/lib/db/cabinet';
+import { KIND_RU } from '@/lib/activity-kinds';
 
 export const metadata = { title: 'Кабинет' };
+
+/* Куда ведёт запись. Тот же набор, что на странице задач: контакт, подбор
+   и мандат ссылкой не открываются и там. */
+const ENTITY_PATH: Record<string, string> = {
+  object: 'objects',
+  requirement: 'requirements',
+  deal: 'deals',
+};
+
+const LEAD_STATUS_RU: Record<string, string> = {
+  new: 'новая', in_work: 'в работе', done: 'отработана', spam: 'спам',
+};
+
+const when = (v: string | null) =>
+  v == null ? '' : new Date(v).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 
 /**
  * Главная кабинета.
@@ -10,9 +28,26 @@ export const metadata = { title: 'Кабинет' };
  * без этой страницы он упирался бы в 404.
  */
 export default async function CabinetHome() {
-  // Все числа одним запросом, а не девятью: девять обращений к базе ради
-  // девяти чисел — это девять раз по кругу, и страница ощутимо ждёт.
-  const n = await cabinetCounters();
+  // Числа — одним запросом, а три списка — параллельно с ними и друг с
+  // другом: последовательно это было бы четыре раза по кругу до первой
+  // отрисовки.
+  const [n, overdueTasks, dueTasks, taskCounts, leads, recent] = await Promise.all([
+    cabinetCounters(),
+    // В выжимку идут сначала просроченные, потом ближайшие по сроку:
+    // список дел разложен по вкладкам, а на главной важна срочность, а не
+    // вкладка. Пять строк — больше в выжимку и не помещается.
+    myActivities('overdue', 1, 5),
+    myActivities('due', 1, 5),
+    myActivityCounts(),
+    // Со страницей: leadFeed теперь отдаёт срез со счётчиком, а не массив.
+    leadFeed('new', 1),
+    recentActivity(),
+  ]);
+
+  const tasks = [...overdueTasks.rows, ...dueTasks.rows].slice(0, 5);
+  // Всего незакрытых — из базы, а не длина выжимки: «и ещё N» должно
+  // считать все задачи, включая те, что без срока.
+  const tasksTotal = taskCounts.overdue + taskCounts.due + taskCounts.nodate;
 
   const objects = n?.objects ?? 0;
   const published = n?.published ?? 0;
@@ -95,6 +130,128 @@ export default async function CabinetHome() {
           </div>
         </div>
       ) : null}
+
+      {/* Ниже плиток страница была пуста, и агент начинал день с экрана,
+          с которого нечего делать. Здесь три списка, за которыми он сюда и
+          приходит: что он должен, что ему пришло и что он уже сделал.
+          Каждый — выжимка; полный список за ссылкой. */}
+      <div className="grid2 cab-digest">
+        <section className="card">
+          <div className="head">
+            <h2>Задачи</h2>
+            <Link className="key" href="/cabinet/activities">все задачи →</Link>
+          </div>
+          {tasksTotal === 0 ? (
+            <p className="key">
+              Незакрытых задач нет. Звонок, показ или задача записывается на
+              карточке объекта, потребности или сделки.
+            </p>
+          ) : (
+            <ul className="digest">
+              {tasks.map((a) => (
+                <li key={a.id}>
+                  <div className="row">
+                    <span className="tag">{KIND_RU[a.kind] ?? a.kind}</span>
+                    {a.overdue ? <span className="warn">просрочено</span> : null}
+                    {a.due_at ? <span className="key">срок {when(a.due_at)}</span> : null}
+                  </div>
+                  <div className="digest-main">
+                    {a.entity_title && ENTITY_PATH[a.entity_type] ? (
+                      <Link href={`/cabinet/${ENTITY_PATH[a.entity_type]}/${a.entity_id}`}>
+                        {a.entity_title}
+                      </Link>
+                    ) : (
+                      <span>{a.entity_title ?? 'запись'}</span>
+                    )}
+                    {a.body ? <span className="key"> — {a.body}</span> : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {tasksTotal > tasks.length ? (
+            <p className="key">и ещё {tasksTotal - tasks.length}</p>
+          ) : null}
+        </section>
+
+        <section className="card">
+          <div className="head">
+            <h2>Новые заявки</h2>
+            <Link className="key" href="/cabinet/leads">все заявки →</Link>
+          </div>
+          {leads.rows.length === 0 ? (
+            <p className="key">
+              Неразобранных заявок нет. Заявка приходит с карточки объекта на
+              сайте — отвечать на неё норматив обещает в течение часа.
+            </p>
+          ) : (
+            <ul className="digest">
+              {leads.rows.slice(0, 5).map((l) => (
+                <li key={l.id}>
+                  <div className="row">
+                    <span className="tag">{LEAD_STATUS_RU[l.status] ?? l.status}</span>
+                    <span className="key">{when(l.created_at)}</span>
+                  </div>
+                  <div className="digest-main">
+                    <strong>{l.name}</strong>{' '}
+                    {/* Телефон целиком и сразу: сюда дошли только те, кому он
+                        положен, — выдача заявок ограничена объектами агента. */}
+                    <a href={`tel:${l.phone.replace(/[^\d+]/g, '')}`}>{l.phone}</a>
+                    {l.address ? (
+                      <>
+                        <span className="key"> · </span>
+                        <Link href={`/cabinet/objects/${l.object_id}`}>{l.address}</Link>
+                      </>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {leads.total > 5 ? (
+            <p className="key">и ещё {leads.total - 5}</p>
+          ) : null}
+        </section>
+      </div>
+
+      <section className="card cab-digest">
+        {/* Ссылки «все задачи» здесь нет намеренно: она уже стоит в списке
+            дел выше и вела бы туда же. */}
+        <div className="head">
+          <h2>Последние действия</h2>
+        </div>
+        {recent.length === 0 ? (
+          <p className="key">
+            Закрытых записей пока нет. Здесь появится то, что вы отметили
+            выполненным, и заметки.
+          </p>
+        ) : (
+          <ul className="digest">
+            {recent.map((a) => (
+              <li key={a.id}>
+                <div className="row">
+                  <span className="tag">{KIND_RU[a.kind] ?? a.kind}</span>
+                  {a.done ? (
+                    <span className="key">выполнено {when(a.done_at)}</span>
+                  ) : (
+                    <span className="key">записано {when(a.created_at)}</span>
+                  )}
+                </div>
+                <div className="digest-main">
+                  {a.entity_title && ENTITY_PATH[a.entity_type] ? (
+                    <Link href={`/cabinet/${ENTITY_PATH[a.entity_type]}/${a.entity_id}`}>
+                      {a.entity_title}
+                    </Link>
+                  ) : (
+                    <span>{a.entity_title ?? 'запись'}</span>
+                  )}
+                  {a.body ? <span className="key"> — {a.body}</span> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </>
   );
 }
