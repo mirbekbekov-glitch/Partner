@@ -2617,6 +2617,23 @@ export default {
     check('инв.3: доли складываются ровно в итог',
       (shares.listing ?? 0) + (shares.closing ?? 0) === total);
 
+    // Доля партнёра названа мандатом, а не зашита в коде: для площадки,
+    // которая живёт сотрудничеством агентов, это главное условие сделки.
+    const third = commissionShares(total, 30);
+    check('доля партнёра берётся из мандата',
+      third.closing === 330_000 && third.listing === 770_000,
+      `${third.listing}/${third.closing}`);
+    check('и при своей доле итог сходится',
+      (third.listing ?? 0) + (third.closing ?? 0) === total);
+
+    const none = commissionShares(total, 0);
+    check('ноль значит ноль, а не умолчание',
+      none.closing === 0 && none.listing === total);
+
+    check('пусто и мусор означают половину',
+      commissionShares(total, null).closing === commissionShares(total).closing
+      && commissionShares(total, 140).closing === commissionShares(total).closing);
+
     const odd = commissionTotal('rent', 30_001);
     const oddShares = commissionShares(odd);
     check('инв.3: нечётная сумма делится без потери',

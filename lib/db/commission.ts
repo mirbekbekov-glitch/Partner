@@ -21,8 +21,21 @@ export type CommissionRule =
   | { kind: 'fixed'; value: number }         // фиксированная сумма, в основных единицах
   | null;
 
-/** Доля, которая достаётся closing-агенту. Половина. */
-const CLOSING_RATIO = 0.5;
+/**
+ * Доля closing-агента по умолчанию, в процентах.
+ *
+ * Половина — не произвол, а обычай рынка: тот, кто привёл покупателя,
+ * сделал половину работы. Это именно УМОЛЧАНИЕ: мандат вправе назвать
+ * другую долю, и тогда работает она.
+ */
+export const PARTNER_SHARE_DEFAULT = 50;
+
+/** Доля из мандата или умолчание. Мусор в колонке означает умолчание. */
+export function partnerShare(value: number | null | undefined): number {
+  if (value === null || value === undefined) return PARTNER_SHARE_DEFAULT;
+  const n = Math.trunc(value);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : PARTNER_SHARE_DEFAULT;
+}
 
 /** Итог комиссии в минорных единицах. */
 export function commissionTotal(
@@ -49,14 +62,19 @@ export function commissionTotal(
   }
 }
 
-/** Доли сторон. Складываются ровно в итог — это проверяется тестом. */
-export function commissionShares(totalMinor: number | null): {
+/**
+ * Доли сторон. Складываются ровно в итог — это проверяется тестом.
+ *
+ * Остаток от деления отдаётся listing-агенту: две доли обязаны давать
+ * ровно итог, иначе в отчёте не сойдётся на копейку.
+ */
+export function commissionShares(totalMinor: number | null, share?: number | null): {
   listing: number | null;
   closing: number | null;
 } {
   if (totalMinor === null) return { listing: null, closing: null };
 
-  const closing = Math.round(totalMinor * CLOSING_RATIO);
+  const closing = Math.round(totalMinor * partnerShare(share) / 100);
   return { listing: totalMinor - closing, closing };
 }
 
