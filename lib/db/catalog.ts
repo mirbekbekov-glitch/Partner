@@ -314,7 +314,22 @@ export async function catalogZoneCounts(
  * ведёт объект тот, у кого договор. Без мандата объект и не публикуется
  * (инвариант 1), так что пустой ответ здесь означает снятый объект.
  */
-export type CatalogAgent = {
+export type AgentContact = {
+  /**
+   * Телефон агента — ТЕПЕРЬ публичный.
+   *
+   * Раньше здесь его не было: звонок шёл в отдел продаж, чтобы объект не
+   * уводили мимо агентства. Владелец площадки решил иначе: покупатель
+   * говорит с тем, кто объект ведёт, а значит знает его. Прежний довод
+   * никуда не делся — он просто перевешен в пользу скорости ответа.
+   */
+  phone: string | null;
+  /** Мессенджеры — со слов агента: проверить их по номеру нельзя. */
+  whatsapp: number;
+  telegram_user: string | null;
+};
+
+export type CatalogAgent = AgentContact & {
   /**
    * Идентификатор нужен ссылке на страницу агента, и с её появлением он
    * перестал быть внутренним: он и так стоит в адресе `/agents/<id>`.
@@ -333,6 +348,7 @@ export type CatalogAgent = {
 export async function catalogAgent(objectId: string): Promise<CatalogAgent | null> {
   return one<CatalogAgent>(
     `select ag.id, ag.full_name, ag.avatar_key, ag.works_since,
+            ag.phone, ag.whatsapp, ag.telegram_user,
             case when ag.certificate_confirmed = 1 then ag.certificate_no end
               as certificate_no
        from objects o
@@ -351,9 +367,9 @@ export async function catalogAgent(objectId: string): Promise<CatalogAgent | nul
  * номер в реестре: принадлежность к фирме агент заявляет сам, и
  * непроверенное утверждение от имени агентства остаётся обманом.
  *
- * Телефона и почты здесь нет, как и на карточке объекта: звонок идёт в
- * отдел продаж. Это не экономия полей — иначе объект уводят мимо
- * агентства, и смысл витрины пропадает.
+ * Телефон здесь есть, а почты нет: по почте в недвижимости не отвечают,
+ * а вот звонок и сообщение в мессенджер — это и есть обращение. Почта
+ * остаётся внутренним полем, как и статус.
  */
 export type CatalogAgentCard = CatalogAgent & {
   id: string;
@@ -368,6 +384,7 @@ export type CatalogAgentCard = CatalogAgent & {
  */
 const AGENT_SELECT = `
   ag.id, ag.full_name, ag.avatar_key, ag.works_since,
+  ag.phone, ag.whatsapp, ag.telegram_user,
   case when ag.certificate_confirmed = 1 then ag.certificate_no end
     as certificate_no,
   case when ag.org_confirmed = 1 then org.name end as organization,

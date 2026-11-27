@@ -11,6 +11,7 @@ import { CatalogFooter } from '../../../CatalogFooter';
 import { AgentFace } from '../../../AgentFace';
 import { Facade } from '../../../Facade';
 import { Photo } from '../../../Photo';
+import { ContactRow } from '../../../ContactRow';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,8 +85,10 @@ export default async function AgentPage({
                 <span className="key">{d.agentRegistryNote}</span>
               </p>
             ) : null}
-            {/* Телефона агента здесь нет намеренно, как и на карточке
-                объекта: звонок идёт в отдел продаж. */}
+            {/* Связь с агентом — на том же месте, что и на карточке
+                объекта. Телефон агентства ниже остаётся запасным
+                путём: агент бывает в показе и не берёт трубку. */}
+            <ContactRow lang={lang} contact={agent} />
             <div className="callout" style={{ marginTop: 16 }}>
               <b>{d.callNow}</b>
               <span className="mini">{d.salesDept}</span>

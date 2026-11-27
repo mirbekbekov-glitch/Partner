@@ -12,6 +12,7 @@ import { Facade } from '../../../Facade';
 import { Photo } from '../../../Photo';
 import { AgentFace } from '../../../AgentFace';
 import { LeadForm } from '../../../LeadForm';
+import { ContactRow } from '../../../ContactRow';
 
 export const dynamic = 'force-dynamic';
 
@@ -217,6 +218,11 @@ export default async function PublicObject({
                     ) : null}
                   </div>
                 </Link>
+                {/* Связь с тем, кто ведёт объект: номер и мессенджеры.
+                    Раньше здесь не было ничего, а звонок шёл в отдел
+                    продаж — решение владельца площадки изменилось в
+                    пользу скорости ответа. */}
+                <ContactRow lang={lang} contact={agent} />
                 {agent.certificate_no ? (
                   <p className="registry">
                     {d.agentRegistry(agent.certificate_no)}

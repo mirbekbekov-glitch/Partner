@@ -81,10 +81,13 @@ export function ObjectForm({
   action,
   draft,
   mode,
+  agentPhone,
 }: {
   action: (fd: FormData) => Promise<FormResult>;
   draft?: ObjectDraft;
   mode: 'create' | 'edit';
+  /** Свой номер из профиля: подставляется и сохраняется обратно в профиль. */
+  agentPhone: string | null;
 }) {
   const [state, formAction, pending] = useActionState<FormResult, FormData>(
     async (_prev, fd) => action(fd),
@@ -172,6 +175,24 @@ export function ObjectForm({
             <option value="USD">USD</option>
             <option value="KGS">KGS</option>
           </select>
+        </div>
+      </div>
+
+      {/* Телефон спрашивается здесь, а не в профиле, куда агент заходит
+          раз в жизнь: объявление без связи бессмысленно — покупатель
+          прочитал карточку и не может ничего спросить. Сохраняется он в
+          профиль: номер у агента один, и копия в каждой карточке дала бы
+          десять разных номеров одного человека. */}
+      <div className="grid2">
+        <div className="field">
+          <label className="key" htmlFor="agent_phone">Ваш телефон <span className="req">*</span></label>
+          <input id="agent_phone" name="agent_phone" type="tel" required
+                 defaultValue={agentPhone ?? ''} placeholder="+996 700 00 00 00"
+                 autoComplete="tel" />
+          <p className="key">
+            Покупатель увидит его в объявлении и позвонит вам напрямую.
+            Кнопки WhatsApp и Telegram включаются в профиле.
+          </p>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { objectCard } from '@/lib/db/cabinet';
 import { canEditObject } from '@/lib/db/access';
+import { currentAgent } from '@/lib/db/session';
 import { ObjectForm } from '../../ObjectForm';
 import { updateObject } from '../../form-actions';
 
@@ -20,6 +21,8 @@ export default async function EditObjectPage({
   // про listing-агента активного мандата и про админа.
   if (!(await canEditObject(id))) redirect(`/cabinet/objects/${id}`);
 
+  const me = await currentAgent();
+
   return (
     <>
       <h1>Редактирование объекта</h1>
@@ -31,7 +34,8 @@ export default async function EditObjectPage({
             типов молчала, страница падала в браузере. Теперь objectCard
             отдаёт массив, и приведение больше не нужно — а если тип снова
             разойдётся, сборка скажет об этом вместо посетителя. */}
-        <ObjectForm action={updateObject} draft={object} mode="edit" />
+        <ObjectForm action={updateObject} draft={object} mode="edit"
+                    agentPhone={me?.phone ?? null} />
       </div>
     </>
   );

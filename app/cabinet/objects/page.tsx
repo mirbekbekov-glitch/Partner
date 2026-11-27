@@ -7,6 +7,8 @@ import { Pager } from '../Pager';
 import { SortTh } from '../SortTh';
 import { STATE_RU } from '@/lib/object-state';
 import { ZoneFilter } from '../ZoneFilter';
+import { firstPhoto } from '@/lib/catalog-params';
+import { thumbOf } from '@/lib/photo-url';
 
 export const metadata = { title: 'Объекты' };
 
@@ -137,6 +139,11 @@ export default async function ObjectsList({
           <table className="tbl">
             <thead>
               <tr>
+                {/* Снимок первым столбцом и без подписи: колонка узнаётся
+                    по содержимому, а слово «Фото» над картинками — шум.
+                    Агент опознаёт свой объект по кадру быстрее, чем по
+                    адресу: адресов на экране десять, и все похожи. */}
+                <th className="tbl-pic" />
                 <SortTh base={BASE} f={f} col="address" label="Адрес" />
                 <SortTh base={BASE} f={f} col="deal" label="Сделка" />
                 <SortTh base={BASE} f={f} col="state" label="Состояние" />
@@ -151,6 +158,22 @@ export default async function ObjectsList({
             <tbody>
               {rows.map((o) => (
                 <tr key={o.id}>
+                  <td className="tbl-pic">
+                    {/* Миниатюра, а не полный снимок: в списке из
+                        двенадцати объектов полные кадры — это мегабайты
+                        ради картинок размером с ноготь. */}
+                    {/* Снимок — ссылка, пустая рамка — нет: подчёркнутое
+                        «нет фото» читалось как кнопка, которой оно не
+                        является. */}
+                    {firstPhoto(o.photos) ? (
+                      <Link href={`/cabinet/objects/${o.id}`} className="tbl-thumb"
+                            aria-hidden="true" tabIndex={-1}>
+                        <img src={thumbOf(firstPhoto(o.photos) as string)} alt="" loading="lazy" />
+                      </Link>
+                    ) : (
+                      <span className="tbl-thumb"><span className="tbl-nopic">нет фото</span></span>
+                    )}
+                  </td>
                   <td>
                     <Link className="tbl-main" href={`/cabinet/objects/${o.id}`}>
                       {o.address}
@@ -188,6 +211,15 @@ export default async function ObjectsList({
                   <td className="num" data-l="Подборов">{o.matches_count}</td>
                   <td data-l="Собственник">
                     {o.owner_name ?? <span className="hidden-contact">скрыт</span>}
+                    {/* Телефон под именем, а не отдельным столбцом:
+                        столбцов и так девять, а имя без номера всё равно
+                        заставляет открывать карточку. Ссылкой — чтобы с
+                        телефона звонок шёл нажатием. */}
+                    {o.owner_phone ? (
+                      <a className="tbl-sub mono" href={`tel:${o.owner_phone.replace(/\s/g, '')}`}>
+                        {o.owner_phone}
+                      </a>
+                    ) : null}
                   </td>
                   {/* nowrap: в 96 px «Айбек Мурзаев» переносился по слогам,
                       а «частный агент» под ним — ещё раз, и строка таблицы

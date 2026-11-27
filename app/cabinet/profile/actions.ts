@@ -26,6 +26,8 @@ export async function saveProfile(formData: FormData): Promise<ProfileResult> {
     await updateProfile({
       full_name: String(formData.get('full_name') ?? ''),
       phone: String(formData.get('phone') ?? ''),
+      whatsapp: formData.get('whatsapp') === 'on',
+      telegram_user: String(formData.get('telegram_user') ?? ''),
       works_since: year === '' ? null : Number.parseInt(year, 10),
       certificate_no: String(formData.get('certificate_no') ?? ''),
     });
