@@ -1,22 +1,42 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { submitRequest, type RequestError } from './request-actions';
 import { t, type Lang } from '@/lib/i18n';
 
+/** Сторона заявки: человек ищет жильё или отдаёт своё. */
+export type RequestSide = 'find' | 'own';
+
 /**
- * Форма «что вы ищете».
+ * Форма заявки — одна на обе стороны рынка.
  *
  * Обязателен только телефон. Остальное — подсказки агенту: чем меньше
  * обязательных полей, тем больше заявок доходит, а недостающее агент
  * спросит в первом же разговоре.
  *
+ * Сторон две, потому что их две и в жизни: человек либо ищет жильё, либо
+ * отдаёт своё. До сих пор на сайте была только первая, и собственнику
+ * нажать было нечего — он звонил или уходил. Отдельной страницей их
+ * разводить незачем: поля почти те же, меняются три подписи и адрес,
+ * а две страницы пришлось бы держать в согласии руками.
+ *
+ * Переключатель — radio, а не две ссылки: выбор виден целиком, и человек,
+ * нажавший не туда, возвращается не кнопкой «назад», а тем же движением.
+ * Без JavaScript остаётся та сторона, с которой страница открылась.
+ *
  * Согласие на показ телефона — отдельная галочка, а не мелкий текст под
- * кнопкой. Без неё агент увидит только параметры поиска: решение
- * принимает человек, и он должен видеть, что именно решает.
+ * кнопкой. Без неё агент увидит только параметры: решение принимает
+ * человек, и он должен видеть, что именно решает.
  */
-export function RequestForm({ lang, districts }: { lang: Lang; districts: string[] }) {
+export function RequestForm({ lang, districts, side: initial = 'find' }: {
+  lang: Lang;
+  districts: string[];
+  /** С какой стороны страница открылась: ссылка в шапке ведёт на «own». */
+  side?: RequestSide;
+}) {
   const d = t(lang);
+  const [side, setSide] = useState<RequestSide>(initial);
+  const own = side === 'own';
   // useActionState, а не обработчик onSubmit: так форма уходит на сервер
   // POST-ом и без JavaScript. С ним — без перезагрузки страницы.
   const [result, action, pending] = useActionState(submitRequest, null);
@@ -25,7 +45,7 @@ export function RequestForm({ lang, districts }: { lang: Lang; districts: string
     return (
       <div className="sent-plate">
         <strong>{d.reqSent}</strong>
-        <p>{d.reqSentNote}</p>
+        <p>{own ? d.reqOwnSentNote : d.reqSentNote}</p>
       </div>
     );
   }
@@ -39,11 +59,39 @@ export function RequestForm({ lang, districts }: { lang: Lang; districts: string
         <input id="rq-website" name="website" type="text" tabIndex={-1} autoComplete="off" />
       </div>
 
-      <fieldset className="seg">
-        <legend>{d.reqDeal}</legend>
-        <label><input type="radio" name="deal" value="buy" defaultChecked />{d.reqBuy}</label>
-        <label><input type="radio" name="deal" value="rent" />{d.reqRent}</label>
+      {/* Сторона. Поле не уходит на сервер: сторону там определяет
+          offer_deal — одно поле вместо двух, которые пришлось бы держать
+          в согласии. */}
+      <fieldset className="seg seg-side">
+        <legend>{d.reqSideLegend}</legend>
+        <label>
+          <input type="radio" name="side" value="find" checked={!own}
+                 onChange={() => setSide('find')} />
+          {d.reqSideFind}
+        </label>
+        <label>
+          <input type="radio" name="side" value="own" checked={own}
+                 onChange={() => setSide('own')} />
+          {d.reqSideOwn}
+        </label>
       </fieldset>
+
+      {/* Направление сделки. У ищущего это «купить или снять», у
+          собственника — «продать или сдать», и уходят они в разные поля:
+          заявка на поиск и заявка с объектом — разная работа агента. */}
+      {own ? (
+        <fieldset className="seg" key="own">
+          <legend>{d.reqOwnDeal}</legend>
+          <label><input type="radio" name="offer_deal" value="sale" defaultChecked />{d.reqSell}</label>
+          <label><input type="radio" name="offer_deal" value="rent" />{d.reqLet}</label>
+        </fieldset>
+      ) : (
+        <fieldset className="seg" key="find">
+          <legend>{d.reqDeal}</legend>
+          <label><input type="radio" name="deal" value="buy" defaultChecked />{d.reqBuy}</label>
+          <label><input type="radio" name="deal" value="rent" />{d.reqRent}</label>
+        </fieldset>
+      )}
 
       <div className="reqgrid">
         <div className="cell">
@@ -74,11 +122,14 @@ export function RequestForm({ lang, districts }: { lang: Lang; districts: string
           </datalist>
         </div>
         <div className="cell">
-          <label htmlFor="rq-budget">{d.reqBudget}</label>
+          {/* Бюджет у ищущего — потолок, у собственника — цена, которую он
+              хочет. Поле одно: это сумма, вокруг которой пойдёт разговор. */}
+          <label htmlFor="rq-budget">{own ? d.reqPrice : d.reqBudget}</label>
           <div className="pair">
             <input id="rq-budget" name="budget" type="number" min={0} step={1000}
                    inputMode="numeric" placeholder={d.priceHint} />
-            <select name="budget_currency" defaultValue="USD" aria-label={d.reqBudget}>
+            <select name="budget_currency" defaultValue="USD"
+                    aria-label={own ? d.reqPrice : d.reqBudget}>
               <option value="USD">$</option>
               <option value="KGS">сом</option>
             </select>
@@ -86,10 +137,21 @@ export function RequestForm({ lang, districts }: { lang: Lang; districts: string
         </div>
       </div>
 
+      {/* Адрес есть только у того, кто объект отдаёт: ищут район, а не
+          дом. Поле необязательное — агент уточнит по телефону, а требовать
+          адрес до первого разговора значит терять половину звонков. */}
+      {own ? (
+        <div className="cell">
+          <label htmlFor="rq-address">{d.reqAddress}</label>
+          <input id="rq-address" name="address" type="text" maxLength={200}
+                 autoComplete="off" placeholder={d.reqAddressHint} />
+        </div>
+      ) : null}
+
       <div className="cell">
-        <label htmlFor="rq-wishes">{d.reqWishes}</label>
+        <label htmlFor="rq-wishes">{own ? d.reqOwnWishes : d.reqWishes}</label>
         <textarea id="rq-wishes" name="wishes" rows={3} maxLength={2000}
-                  placeholder={d.reqWishesHint} />
+                  placeholder={own ? d.reqOwnWishesHint : d.reqWishesHint} />
       </div>
 
       <div className="reqgrid">

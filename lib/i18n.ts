@@ -99,6 +99,20 @@ type Dict = {
   reqSend: string; reqSending: string; reqSent: string; reqSentNote: string;
   reqErrPhone: string; reqErrInput: string; reqErrMany: string; reqErrGeneric: string;
   reqWhy1: string; reqWhy2: string; reqWhy3: string;
+  // Заявка собственника: «сдам или продам». Та же форма, другая сторона.
+  reqSideLegend: string; reqSideFind: string; reqSideOwn: string;
+  reqOwnTitle: string; reqOwnLede: string;
+  reqOwnDeal: string; reqSell: string; reqLet: string;
+  reqAddress: string; reqAddressHint: string; reqPrice: string;
+  reqOwnWishes: string; reqOwnWishesHint: string;
+  reqOwnWhy1: string; reqOwnWhy2: string; reqOwnWhy3: string;
+  reqOwnSentNote: string;
+  // Первый экран: что человек может сделать и чем мы это подтверждаем
+  heroLede: string; heroAsk: string; heroOwn: string;
+  heroFactObjects: (n: number) => string;
+  heroFactAgents: (n: number) => string;
+  heroFactSlaValue: string; heroFactSla: string;
+  navSell: string;
   // Типы недвижимости
   kinds: Record<string, string>;
 };
@@ -211,6 +225,24 @@ const ru: Dict = {
   reqWhy1: 'Отвечаем в течение часа',
   reqWhy2: 'Покажем то, чего нет в открытом каталоге',
   reqWhy3: 'Телефон увидит один агент, а не весь рынок',
+  reqSideLegend: 'Что вам нужно',
+  reqSideFind: 'Ищу жильё', reqSideOwn: 'Сдаю или продаю',
+  reqOwnTitle: 'Сдать или продать',
+  reqOwnLede: 'Оставьте объект — агент перезвонит, уточнит детали и заведёт объявление сам. Фотографировать и заполнять карточку вам не придётся.',
+  reqOwnDeal: 'Что вы хотите сделать', reqSell: 'Продать', reqLet: 'Сдать',
+  reqAddress: 'Адрес', reqAddressHint: 'Чүй 120, кв. 5', reqPrice: 'Цена',
+  reqOwnWishes: 'Что стоит знать',
+  reqOwnWishesHint: 'Свежий ремонт, мебель остаётся, свободна с января',
+  reqOwnWhy1: 'Перезвоним в течение часа',
+  reqOwnWhy2: 'Объявление и фотографии сделает агент',
+  reqOwnWhy3: 'Телефон увидит один агент, а не весь рынок',
+  reqOwnSentNote: 'Агент перезвонит в течение часа, уточнит детали и договорится о съёмке.',
+  heroLede: 'В каталоге только подтверждённые объекты. Не нашли нужное или сами хотите сдать — оставьте заявку, дальше работает агент.',
+  heroAsk: 'Оставить заявку', heroOwn: 'Сдать или продать',
+  heroFactObjects: (n) => `${plural(n, 'объект', 'объекта', 'объектов')} в каталоге`,
+  heroFactAgents: (n) => `${plural(n, 'агент', 'агента', 'агентов')} в работе`,
+  heroFactSlaValue: '1 час', heroFactSla: 'норматив ответа',
+  navSell: 'Сдать или продать',
   pitchEyebrow: 'Не нашли подходящее?',
   pitchTitle: 'Опишите, что ищете — искать будут агенты',
   pitchLede: 'В каталоге только то, что уже подтверждено и свободно. Остальное агенты знают, но не публикуют: хозяин просил не выкладывать, объект ещё готовится, цена обсуждается. Заявка открывает вам этот слой.',
@@ -314,6 +346,24 @@ const ky: Dict = {
   reqWhy1: 'Бир сааттын ичинде жооп беребиз',
   reqWhy2: 'Ачык каталогдо жоктурун көрсөтөбүз',
   reqWhy3: 'Телефонуңузду бир агент гана көрөт',
+  reqSideLegend: 'Сизге эмне керек',
+  reqSideFind: 'Турак жай издейм', reqSideOwn: 'Ижарага берем же сатам',
+  reqOwnTitle: 'Ижарага берүү же сатуу',
+  reqOwnLede: 'Объектиңизди калтырыңыз — агент чалып, деталдарды тактап, жарнаманы өзү түзөт. Сүрөткө тартуунун жана толтуруунун кереги жок.',
+  reqOwnDeal: 'Эмне кылгыңыз келет', reqSell: 'Сатуу', reqLet: 'Ижарага берүү',
+  reqAddress: 'Дарек', reqAddressHint: 'Чүй 120, 5-бат.', reqPrice: 'Баасы',
+  reqOwnWishes: 'Эмнени билүү керек',
+  reqOwnWishesHint: 'Жаңы ремонт, эмерек калат, январдан бош',
+  reqOwnWhy1: 'Бир сааттын ичинде чалабыз',
+  reqOwnWhy2: 'Жарнаманы жана сүрөттөрдү агент жасайт',
+  reqOwnWhy3: 'Телефонуңузду бир агент гана көрөт',
+  reqOwnSentNote: 'Агент бир сааттын ичинде чалып, деталдарды тактайт жана сүрөткө тартууга макулдашат.',
+  heroLede: 'Каталогдо ырасталган объекттер гана. Керектүүсүн таппасаңыз же өзүңүз ижарага бергиңиз келсе — арыз калтырыңыз, андан ары агент иштейт.',
+  heroAsk: 'Арыз калтыруу', heroOwn: 'Ижарага берүү же сатуу',
+  heroFactObjects: () => 'объект каталогдо',
+  heroFactAgents: () => 'агент иштеп жатат',
+  heroFactSlaValue: '1 саат', heroFactSla: 'жооп берүү ченеми',
+  navSell: 'Ижарага берүү же сатуу',
   pitchEyebrow: 'Ылайыктуусун таппадыңызбы?',
   pitchTitle: 'Эмне издеп жатканыңызды жазыңыз — агенттер издеп беришет',
   pitchLede: 'Каталогдо ырасталган жана бош объекттер гана бар. Калганын агенттер билет, бирок жарыялабайт: ээси сураган, объект даярдалып жатат, баа талкууланууда. Арыз ошол катмарды ачат.',
@@ -417,6 +467,24 @@ const en: Dict = {
   reqWhy1: 'We answer within the hour',
   reqWhy2: 'We show what is not publicly listed yet',
   reqWhy3: 'One agent sees your number, not the whole market',
+  reqSideLegend: 'What brings you here',
+  reqSideFind: 'I am looking', reqSideOwn: 'I am letting or selling',
+  reqOwnTitle: 'Let or sell your property',
+  reqOwnLede: 'Leave the property — an agent calls you back, checks the details and writes the listing. No photos or forms on your side.',
+  reqOwnDeal: 'What do you want to do', reqSell: 'Sell', reqLet: 'Let',
+  reqAddress: 'Address', reqAddressHint: 'Chuy 120, apt. 5', reqPrice: 'Price',
+  reqOwnWishes: 'Worth knowing',
+  reqOwnWishesHint: 'Recently renovated, furniture stays, free from January',
+  reqOwnWhy1: 'We call back within an hour',
+  reqOwnWhy2: 'The agent writes the listing and takes the photos',
+  reqOwnWhy3: 'One agent sees your number, not the whole market',
+  reqOwnSentNote: 'An agent will call within an hour to check the details and arrange the photos.',
+  heroLede: 'The catalogue holds confirmed listings only. Not finding it, or letting a place of your own — leave a request and an agent takes it from there.',
+  heroAsk: 'Leave a request', heroOwn: 'Let or sell',
+  heroFactObjects: (n) => (n === 1 ? 'listing in the catalogue' : 'listings in the catalogue'),
+  heroFactAgents: (n) => (n === 1 ? 'agent working' : 'agents working'),
+  heroFactSlaValue: '1 hour', heroFactSla: 'response standard',
+  navSell: 'Let or sell',
   pitchEyebrow: 'Nothing fits?',
   pitchTitle: 'Describe what you need — agents do the searching',
   pitchLede: 'The catalogue holds only what is confirmed and available. Agents know the rest but do not publish it: the owner asked them not to, the place is still being prepared, the price is under discussion. A request opens that layer to you.',
@@ -520,6 +588,24 @@ const zh: Dict = {
   reqWhy1: '一小时内回复',
   reqWhy2: '提供尚未公开的房源',
   reqWhy3: '只有一位经纪人能看到您的号码',
+  reqSideLegend: '您需要什么',
+  reqSideFind: '我要找房', reqSideOwn: '我要出租或出售',
+  reqOwnTitle: '出租或出售',
+  reqOwnLede: '留下房源信息，经纪人会回电核实并代您发布，无需您拍照或填写表格。',
+  reqOwnDeal: '您想做什么', reqSell: '出售', reqLet: '出租',
+  reqAddress: '地址', reqAddressHint: '楚河大街120号 5室', reqPrice: '价格',
+  reqOwnWishes: '需要说明的情况',
+  reqOwnWishesHint: '新装修，家具留下，1月起可入住',
+  reqOwnWhy1: '一小时内回电',
+  reqOwnWhy2: '房源信息和照片由经纪人完成',
+  reqOwnWhy3: '只有一位经纪人能看到您的号码',
+  reqOwnSentNote: '经纪人将在一小时内回电，核实细节并约定拍照时间。',
+  heroLede: '目录中只有已核实的房源。没找到合适的，或者您想出租出售——留下需求，后续由经纪人来办。',
+  heroAsk: '提交需求', heroOwn: '出租或出售',
+  heroFactObjects: () => '套房源在目录中',
+  heroFactAgents: () => '位经纪人在岗',
+  heroFactSlaValue: '1 小时', heroFactSla: '回复时限',
+  navSell: '出租或出售',
   pitchEyebrow: '没有合适的？',
   pitchTitle: '写下您的需求 — 由经纪人去找',
   pitchLede: '目录里只有已确认且可售的房源。其余的经纪人知道，但不公开：业主要求不发布、房子仍在准备、价格尚在商议。提交需求即可进入这一层。',

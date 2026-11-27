@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import {
-  catalogCities, catalogCount, catalogCurrencies, catalogPage, catalogRate,
-  catalogZoneCounts,
+  catalogAgentCount, catalogCities, catalogCount, catalogCurrencies, catalogPage,
+  catalogRate, catalogZoneCounts,
 } from '@/lib/db/catalog';
 import { GEO, citiesOf, regionOf, zonesOf } from '@/lib/geo';
 import {
@@ -254,6 +254,14 @@ export default async function Catalog({
     priceMin: f.priceMin, priceMax: f.priceMax, money, rate,
   }).catch(() => 0);
 
+  // Числа для первого экрана: весь каталог и все агенты, без фильтров.
+  // Фильтрованное число живёт над выдачей и меняется от нажатий; на
+  // первом экране нужно состояние дела, а не след чужого поиска.
+  const [catalogTotal, agentsTotal] = failed ? [0, 0] : await Promise.all([
+    catalogCount({}).catch(() => 0),
+    catalogAgentCount().catch(() => 0),
+  ]);
+
   // Валюта для подписи поля «цена до». Одна на весь каталог — подписываем
   // ею; несколько — подписывать нечем, и выбирать за человека нельзя.
   const currencies = failed ? [] : await catalogCurrencies();
@@ -313,6 +321,49 @@ export default async function Catalog({
         <div className="hero-in wrap">
           <span className="eyebrow">Liberterra · {placeName(cities, d)}</span>
           <h1>{d.heroTitle} <em>{d.heroEm}</em></h1>
+          <p className="lede">{d.heroLede}</p>
+
+          {/* Два действия на первом экране, и оба — не поиск: искать можно
+              пультом, который стоит сразу ниже. Здесь то, чего пультом не
+              сделать: попросить найти то, чего в каталоге нет, и отдать
+              свой объект агенту.
+
+              Залита одна кнопка. Заявка на поиск нужна большинству тех,
+              кто дошёл до сайта, а объект приносит меньшинство — и когда
+              залиты обе, человек выбирает между ними вместо того, чтобы
+              делать своё. */}
+          <div className="hero-go">
+            <Link href={`/${lang}/request`} className="go-main">
+              {d.heroAsk}
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M3 9h12M10 4l5 5-5 5" stroke="currentColor" strokeWidth="2"
+                      strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </Link>
+            <Link href={`/${lang}/request?side=own`} className="go-side">{d.heroOwn}</Link>
+          </div>
+
+          {/* Числа показываются, только когда они есть. Пустой каталог,
+              объявивший «0 объектов», отговаривает лучше любого
+              конкурента — а молчание о числе не обманывает никого. */}
+          {catalogTotal > 0 ? (
+            <ul className="facts">
+              <li>
+                <b className="num">{catalogTotal}</b>
+                <span>{d.heroFactObjects(catalogTotal)}</span>
+              </li>
+              {agentsTotal > 0 ? (
+                <li>
+                  <b className="num">{agentsTotal}</b>
+                  <span>{d.heroFactAgents(agentsTotal)}</span>
+                </li>
+              ) : null}
+              <li>
+                <b>{d.heroFactSlaValue}</b>
+                <span>{d.heroFactSla}</span>
+              </li>
+            </ul>
+          ) : null}
         </div>
       </section>
 

@@ -29,6 +29,7 @@ import { canSeeContact } from '@/lib/db/access';
 import { createRequirement, updateRequirement } from '@/lib/db/requirements';
 import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/activities';
 import { listLeads, setLeadStatus, submitLead } from '@/lib/db/leads';
+import { requestCounts, requestFeed, submitRequest } from '@/lib/db/requests';
 import {
   catalogAgent, catalogAgentById, catalogAgents, catalogCities, catalogCount,
   catalogCurrencies, catalogObject, catalogPage, catalogRate,
@@ -2945,6 +2946,64 @@ export default {
     check('перенос не трогает то, что агент уже правил',
       afterEdit?.address === 'Чүй 120, кв. 5' && afterEdit?.publication_state === 'published',
       JSON.stringify(afterEdit));
+
+
+    // -----------------------------------------------------------------
+    // Заявка собственника: другая сторона рынка в той же форме
+    // -----------------------------------------------------------------
+    {
+      await loginAs(db, anna);
+
+      // Адрес, присланный со стороны поиска, в заявку попасть не должен:
+      // поля формы видны всем, и чужое поле не делает заявку чужой.
+      const findId = await submitRequest({
+        phone: '0555 10 20 30', deal: 'rent', district: 'Асанбай',
+        address: 'Эркиндик 1', consent: true,
+      });
+      const find = await db.prepare(
+        'select deal, offer_deal, address from requests where id = ?',
+      ).bind(findId).first<{ deal: string | null; offer_deal: string | null; address: string | null }>();
+      check('заявка на поиск остаётся поиском: ни стороны, ни адреса',
+        find?.deal === 'rent' && find?.offer_deal === null && find?.address === null,
+        JSON.stringify(find));
+
+      const ownId = await submitRequest({
+        phone: '0555 10 20 31', offer_deal: 'sale', deal: 'buy',
+        address: 'Эркиндик 64б, кв. 12', budget_minor: 8_000_000,
+        name: 'Нурлан', consent: true,
+      });
+      const own = await db.prepare(
+        'select deal, offer_deal, address, budget_minor from requests where id = ?',
+      ).bind(ownId).first<{ deal: string | null; offer_deal: string | null; address: string | null }>();
+      // Направление поиска снимается: «продаю» и «ищу купить» в одной
+      // строке читались бы по-разному в разных местах кабинета.
+      check('заявка собственника: сторона записана, направление поиска снято',
+        own?.offer_deal === 'sale' && own?.deal === null
+          && own?.address === 'Эркиндик 64б, кв. 12',
+        JSON.stringify(own));
+
+      const offers = await requestFeed('offers');
+      check('вкладка «от собственников» показывает только их',
+        offers.rows.some((r) => r.id === ownId)
+          && !offers.rows.some((r) => r.id === findId));
+
+      const open = await requestFeed('open');
+      check('заявка собственника не выпадает из общей ленты свободных',
+        open.rows.some((r) => r.id === ownId));
+
+      const counts = await requestCounts();
+      check('заявки собственников считаются отдельным числом',
+        counts.offers >= 1 && counts.free >= 2,
+        JSON.stringify(counts));
+
+      // Чужое значение стороны не роняет заявку: потерять её из-за кривого
+      // поля хуже, чем принять как обычный поиск.
+      const oddId = await submitRequest({ phone: '0555 10 20 32', offer_deal: 'подарю' });
+      const odd = await db.prepare('select offer_deal from requests where id = ?')
+        .bind(oddId).first<{ offer_deal: string | null }>();
+      check('неизвестная сторона не роняет заявку, а просто не пишется',
+        odd?.offer_deal === null, JSON.stringify(odd));
+    }
 
     } catch (e) {
       // Падение посреди набора — это тоже результат, и он должен быть виден
