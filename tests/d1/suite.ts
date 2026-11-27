@@ -22,7 +22,9 @@ import {
   confirmActual, createObject, getObject, publishObject,
   updateObject, withdrawObject,
 } from '@/lib/db/objects';
-import { createMandate, expireMandates, terminateMandate } from '@/lib/db/mandates';
+import {
+  createMandate, expireMandates, setMandateTerms, terminateMandate,
+} from '@/lib/db/mandates';
 import { canSeeContact } from '@/lib/db/access';
 import { createRequirement, updateRequirement } from '@/lib/db/requirements';
 import { createActivity, reassignActivity, setActivityDone } from '@/lib/db/activities';
@@ -156,6 +158,19 @@ export default {
 
     await throws('инв.1: второй активный мандат отклонён',
       () => createMandate({ object_id: obj.id, kind: 'exclusive' }), Conflict);
+
+    // Условия комиссии правятся на действующем договоре: их уточняют
+    // чаще, чем заключают договор заново, и расторгать ради этого
+    // мандат значило бы снимать объект с публикации.
+    const withTerms = await setMandateTerms(mandate.id, {
+      commission_rule: JSON.stringify({ kind: 'percent', value: 3 }),
+      partner_rate: 1.5,
+    });
+    check('условия комиссии правятся без расторжения договора',
+      withTerms.partner_rate === 1.5 && withTerms.status === 'active');
+
+    await throws('процент партнёра больше ста не принимается',
+      () => setMandateTerms(mandate.id, { partner_rate: 140 }), Invalid);
 
     // -----------------------------------------------------------------
     // Инвариант 5: даты
@@ -2339,8 +2354,8 @@ export default {
 
     // Как сайт себя называет. Пока город один — он; городов несколько —
     // страна. Текст считается по каталогу, а не правится руками: иначе
-    // «Агентство недвижимости, Бишкек» в подвале устареет ровно в тот
-    // день, когда кто-то заведёт объект в Оше, и никто не вспомнит.
+    // «Платформа для профессионалов, Бишкек» в подвале устареет ровно в
+    // тот день, когда кто-то заведёт объект в Оше, и никто не вспомнит.
     const ru = t('ru');
     check('при нескольких городах в подвале страна',
       placeName(await catalogCities(), ru) === 'Кыргызстан');
@@ -2768,22 +2783,36 @@ export default {
     check('инв.3: доли складываются ровно в итог',
       (shares.listing ?? 0) + (shares.closing ?? 0) === total);
 
-    // Доля партнёра названа мандатом, а не зашита в коде: для площадки,
-    // которая живёт сотрудничеством агентов, это главное условие сделки.
-    const third = commissionShares(total, 30);
-    check('доля партнёра берётся из мандата',
-      third.closing === 330_000 && third.listing === 770_000,
-      `${third.listing}/${third.closing}`);
-    check('и при своей доле итог сходится',
-      (third.listing ?? 0) + (third.closing ?? 0) === total);
+    // Комиссия партнёру названа мандатом процентом ОТ СДЕЛКИ, а не
+    // долей нашей комиссии: «отдаю 1 % с продажи» — это и есть то, как
+    // условие звучит на рынке.
+    const price = 55_000_000;
+    const onePercent = commissionShares(total, { priceMinor: price, rate: 1 });
+    check('партнёру — названный процент от цены',
+      onePercent.closing === 550_000, `вышло ${onePercent.closing}`);
+    check('остальное ведущему агенту, и итог сходится',
+      (onePercent.listing ?? 0) + (onePercent.closing ?? 0) === onePercent.total);
 
-    const none = commissionShares(total, 0);
+    const halfPercent = commissionShares(total, { priceMinor: price, rate: 0.5 });
+    check('дробный процент считается, а не округляется до целого',
+      halfPercent.closing === 275_000, `вышло ${halfPercent.closing}`);
+
+    const none = commissionShares(total, { priceMinor: price, rate: 0 });
     check('ноль значит ноль, а не умолчание',
       none.closing === 0 && none.listing === total);
 
-    check('пусто и мусор означают половину',
-      commissionShares(total, null).closing === commissionShares(total).closing
-      && commissionShares(total, 140).closing === commissionShares(total).closing);
+    // Обещано больше, чем берём сами: итогом становится обещанное, и у
+    // ведущего агента ноль. Отрицательная доля прятала бы ошибку в
+    // условиях за арифметикой.
+    const tooMuch = commissionShares(total, { priceMinor: price, rate: 3 });
+    check('обещанное сверх своей комиссии не даёт отрицательной доли',
+      tooMuch.closing === 1_650_000 && tooMuch.listing === 0
+      && tooMuch.total === 1_650_000,
+      `${tooMuch.listing}/${tooMuch.closing}/${tooMuch.total}`);
+
+    check('процент не назван — прежнее правило, пополам',
+      commissionShares(total, { priceMinor: price, rate: null }).closing
+        === commissionShares(total).closing);
 
     const odd = commissionTotal('rent', 30_001);
     const oddShares = commissionShares(odd);
