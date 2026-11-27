@@ -12,6 +12,7 @@ import { Activities, type ActivityRow } from '../../Activities';
 import { CreateMatchForm } from '../../CreateMatchForm';
 import { ContactCell } from '../../HiddenContact';
 import { ObjectActions } from '../ObjectActions';
+import { CommissionForm } from '../CommissionForm';
 import { StartDealButton } from '../../deals/StartDealButton';
 import { MatchStatus } from '../../MatchStatus';
 import { TransferForm, type Colleague } from '../../TransferForm';
@@ -143,6 +144,18 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
             <span className="warn">активного мандата нет — объект нельзя опубликовать</span>
           )}
         </div>
+        {/* Условия комиссии — свёрнутой формой под мандатом: их называют
+            один раз и иногда уточняют, а ради уточнения незачем
+            расторгать договор и заключать заново. */}
+        {mandate && canEdit === true ? (
+          <CommissionForm
+            objectId={object.id}
+            mandateId={mandate.id}
+            dealType={object.deal_type as 'rent' | 'sale'}
+            commissionPercent={mandate.commission_percent}
+            partnerRate={mandate.partner_rate}
+          />
+        ) : null}
       </div>
 
       {/* Правка стоит ПЕРВОЙ и кнопкой, а не строчной ссылкой под рядом

@@ -6,7 +6,7 @@ import {
   confirmActual, createObject as addObject, publishObject,
   updateObject as editObject, withdrawObject,
 } from '@/lib/db/objects';
-import { createMandate, terminateMandate } from '@/lib/db/mandates';
+import { createMandate, setMandateTerms, terminateMandate } from '@/lib/db/mandates';
 import { currentAgent } from '@/lib/db/session';
 import { updateProfile } from '@/lib/db/agents';
 import { toMinor } from '@/lib/db/money';
@@ -243,6 +243,15 @@ export async function objectAction(formData: FormData): Promise<FormResult> {
       contract_confirmed: formData.get('contract_confirmed') === 'on',
       document_url: str(formData.get('document_url')),
     }));
+  } else if (what === 'commission_terms') {
+    // Условия комиссии действующего договора: их меняют чаще, чем
+    // заключают договор заново, и ради этого незачем расторгать мандат.
+    const deal = str(formData.get('deal_type')) ?? 'sale';
+    const commission = commissionFields(formData, deal);
+    error = await attempt(() => setMandateTerms(
+      String(formData.get('mandate_id') ?? ''),
+      { commission_rule: commission.rule, partner_rate: commission.rate },
+    ));
   } else if (what === 'terminate_mandate') {
     error = await attempt(() => terminateMandate(
       String(formData.get('mandate_id') ?? ''),
