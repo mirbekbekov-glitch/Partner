@@ -124,6 +124,18 @@ export default async function ObjectCard({ params }: { params: Promise<{ id: str
                   <span>{new Date(mandate.valid_to).toLocaleDateString('ru-RU')}</span>
                 </>
               ) : null}
+              {/* Комиссия и доля партнёра — условие, ради которого
+                  коллега и открывает чужую карточку. Суммы индикативны:
+                  считаются от текущей цены, а не от цены сделки. */}
+              <span className="key">комиссия</span>
+              <span>{money(mandate.commission_total, object.currency)}</span>
+              <span className="key">партнёру</span>
+              <span>
+                {mandate.partner_percent}%
+                {mandate.partner_amount !== null
+                  ? ` · ${money(mandate.partner_amount, object.currency)}`
+                  : ''}
+              </span>
             </>
           ) : (
             <span className="warn">активного мандата нет — объект нельзя опубликовать</span>

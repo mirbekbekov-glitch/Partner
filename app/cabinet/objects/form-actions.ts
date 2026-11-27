@@ -109,6 +109,35 @@ async function saveOwnPhone(formData: FormData): Promise<string | null> {
   return null;
 }
 
+
+/**
+ * Комиссия из формы.
+ *
+ * Два числа, которые агент называет словами: сколько он берёт с объекта
+ * и сколько отдаёт тому, кто приведёт покупателя. Первое пусто —
+ * работает базовое правило (2 % при продаже, половина месяца при
+ * аренде). Второе пусто — половина, обычай рынка.
+ *
+ * Процент при аренде считается от МЕСЯЧНОЙ платы, и это другая величина
+ * справочника (months_share), а не процент цены: цена у аренды и есть
+ * месячная плата, но правило должно называться тем, что оно значит.
+ */
+function commissionFields(formData: FormData, deal: string): {
+  rule: string | null; share: number | null;
+} {
+  const percent = num(formData.get('commission_percent'));
+  const rule = percent === null ? null : JSON.stringify(
+    deal === 'rent'
+      ? { kind: 'months_share', value: percent / 100 }
+      : { kind: 'percent', value: percent },
+  );
+
+  const shareRaw = str(formData.get('partner_share'));
+  const share = shareRaw === null ? null : num(formData.get('partner_share'));
+
+  return { rule, share };
+}
+
 export async function createObject(formData: FormData): Promise<FormResult> {
   const price = money(formData.get('price'));
   if (price === null) return { error: 'Укажите цену.' };
@@ -116,6 +145,7 @@ export async function createObject(formData: FormData): Promise<FormResult> {
   const phoneError = await saveOwnPhone(formData);
   if (phoneError) return { error: phoneError };
 
+  const commission = commissionFields(formData, str(formData.get('deal_type')) ?? 'sale');
   const mandateKind = str(formData.get('mandate_kind'));
   let id: string;
 
@@ -142,6 +172,8 @@ export async function createObject(formData: FormData): Promise<FormResult> {
       mandate_kind: mandateKind as 'exclusive' | null,
       mandate_valid_to: str(formData.get('mandate_valid_to')),
       mandate_start_price_minor: money(formData.get('mandate_start_price')),
+      mandate_commission_rule: commission.rule,
+      mandate_partner_share: commission.share,
       contract_confirmed: formData.get('contract_confirmed') === 'on',
       document_url: str(formData.get('document_url')),
     });

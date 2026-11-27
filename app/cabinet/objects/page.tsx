@@ -207,6 +207,15 @@ export default async function ObjectsList({
                   <td className="num" data-l="Цена">{money(o.price, o.currency)}</td>
                   <td className="num" data-l="Комиссия">
                     {money(o.commission_total, o.currency)}
+                    {/* Доля партнёра — то, ради чего в этот список
+                        заглядывает агент из другого агентства: она
+                        решает, звонить ему по объекту или нет. */}
+                    <span className="tbl-sub">
+                      партнёру {o.partner_percent}%
+                      {o.partner_amount !== null
+                        ? ` · ${money(o.partner_amount, o.currency)}`
+                        : ''}
+                    </span>
                   </td>
                   <td className="num" data-l="Подборов">{o.matches_count}</td>
                   <td data-l="Собственник">

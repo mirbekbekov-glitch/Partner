@@ -390,6 +390,34 @@ export function ObjectForm({
               <input id="mandate_start_price" name="mandate_start_price" type="text"
                      inputMode="decimal" placeholder="как цена объекта" />
             </div>
+            {/* Два числа, которые агент называет словами: сколько берёт с
+                объекта и сколько отдаёт тому, кто приведёт покупателя.
+                Второе — то, ради чего площадка и нужна: пока условие
+                нельзя было назвать здесь, о нём договаривались в
+                переписке, и площадка о нём не знала. */}
+            <div className="field s1">
+              <label className="key" htmlFor="commission_percent">
+                Комиссия, %{dealType === 'rent' ? ' от месяца' : ' от цены'}
+              </label>
+              <input id="commission_percent" name="commission_percent" type="text"
+                     inputMode="decimal"
+                     placeholder={dealType === 'rent' ? '50' : '2'} />
+              <p className="key">
+                Пусто — {dealType === 'rent'
+                  ? 'половина месячной платы'
+                  : '2 % от цены'}.
+              </p>
+            </div>
+            <div className="field s1">
+              <label className="key" htmlFor="partner_share">Партнёру, %</label>
+              <input id="partner_share" name="partner_share" type="text"
+                     inputMode="numeric" placeholder="50" />
+              <p className="key">
+                Сколько от комиссии получит агент, который приведёт
+                покупателя. Пусто — половина. Ноль значит ноль: клиентов
+                ищу сам.
+              </p>
+            </div>
             <div className="field s4">
               <label className="key" htmlFor="document_url">Ссылка на документ</label>
               <input id="document_url" name="document_url" type="url" />
