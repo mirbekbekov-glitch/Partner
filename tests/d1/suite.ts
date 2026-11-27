@@ -71,6 +71,8 @@ import {
 } from '@/lib/db/contacts';
 import { commissionShares, commissionTotal } from '@/lib/db/commission';
 import { normalizePhone } from '@/lib/db/normalize';
+import { draftsFromCatalog, parseCsv } from '@/lib/catalog-csv';
+import { importCatalog, IMPORT_SOURCE } from '@/lib/db/catalog-import';
 import { Conflict, Forbidden, Invalid, NotFound } from '@/lib/db/errors';
 
 type Result = { name: string; ok: boolean; note?: string };
@@ -118,7 +120,7 @@ async function loginAs(db: D1Database, agentId: string) {
 export default {
   async fetch(
     _request: Request,
-    env: { DB: D1Database; PHOTOS: R2Bucket },
+    env: { DB: D1Database; PHOTOS: R2Bucket; CATALOG: D1Database },
   ): Promise<Response> {
     setEnv(env as unknown as Record<string, unknown>);
     results.length = 0;
@@ -2166,6 +2168,118 @@ export default {
     ).bind(crypto.randomUUID(), owner?.contact_id ?? '', '+996 700 11 22 33',
            normalizePhone('+996700112233'), iso()).run().then(() => true).catch(() => false);
     check('один номер — один контакт: дубль отклонён схемой', dup === false);
+
+
+    // --- Перенос каталога старого сайта -----------------------------------
+    //
+    // Главное здесь — ЧЕГО перенос не делает: не заводит объект из чужого
+    // поискового запроса, не публикует и не переписывает то, что агент уже
+    // правил. Выгрузка на 27 ноября 2026 года — 283 строки, из них 281
+    // «Запрос».
+
+    const csv = parseCsv(
+      'id,title,description\n'
+      + 'a,"Дом, с садом","строка\nвторая, с запятой и ""кавычками"""\n'
+      + 'b,Квартира,\n',
+    );
+    check('CSV: поле с запятой и переводом строки прочитано целиком',
+      csv.length === 2 && csv[0].title === 'Дом, с садом'
+      && csv[0].description === 'строка\nвторая, с запятой и "кавычками"',
+      JSON.stringify(csv[0]));
+
+    const mapped = draftsFromCatalog([
+      { id: 's1', deal: 'Аренда', status: 'опубликован', title: 'Дом', segment: 'Жильё',
+        price: '150000 сом', per: '', rooms: '5', area: '156', floor: '1/1 этаж',
+        district: 'Азия Молл', city: 'Бишкек', description: 'дом', actuality_at: '2026-11-12T12:36:58.772Z',
+        photo_url: 'https://example.invalid/1.jpg' },
+      { id: 's2', deal: 'Продажа', status: 'опубликован', title: 'Квартира', segment: 'Жильё',
+        price: '145000 $', per: '', rooms: '2', area: '64', floor: '8/9 этаж',
+        district: 'Бишкек', city: 'Бишкек', description: '', actuality_at: '' },
+      { id: 's3', deal: 'Запрос', status: 'опубликован', title: 'Ищу комнату',
+        price: '12000 сом', per: '/ мес', district: 'Джал', city: 'Бишкек' },
+      { id: 's4', deal: 'Аренда', status: 'снят', title: 'Квартира', price: '500 $',
+        per: '', district: 'Центр', city: 'Бишкек' },
+      { id: 's5', deal: 'Аренда', status: 'опубликован', title: 'Квартира', price: '700 $',
+        per: '/ м²/мес', district: 'Центр', city: 'Бишкек' },
+      { id: 's6', deal: 'Аренда', status: 'опубликован', title: 'Яхта', price: '700 $',
+        per: '', district: 'Центр', city: 'Бишкек' },
+    ] as never);
+
+    check('перенос: запрос объектом не становится',
+      !mapped.drafts.some((d) => d.id === 's3')
+      && mapped.skipped.some((s) => s.id === 's3' && s.why === 'не объявление, а запрос'));
+    check('перенос: снятое с публикации не переносится',
+      !mapped.drafts.some((d) => d.id === 's4'));
+    check('перенос: цена за метр не кладётся туда, где цена за объект',
+      !mapped.drafts.some((d) => d.id === 's5'));
+    check('перенос: неизвестный вид жилья не угадывается',
+      !mapped.drafts.some((d) => d.id === 's6'));
+
+    const s1 = mapped.drafts.find((d) => d.id === 's1');
+    const s2 = mapped.drafts.find((d) => d.id === 's2');
+    check('перенос: сом и доллар разложены в минорные единицы',
+      s1?.price_minor === 15000000 && s1?.currency === 'KGS'
+      && s2?.price_minor === 14500000 && s2?.currency === 'USD',
+      JSON.stringify([s1?.price_minor, s1?.currency, s2?.price_minor, s2?.currency]));
+    check('перенос: «8/9 этаж» — восьмой из девяти',
+      s2?.floor === 8 && s2?.floors_total === 9);
+    check('перенос: адрес собран из вида и района',
+      s1?.address === 'Дом, Азия Молл' && s1?.zone === 'Азия Молл', s1?.address);
+
+    // Теперь то же самое, но через настоящую базу снимка.
+    const snapshotCsv = [
+      'id,segment,deal,title,price,per,rooms,area,floor,district,city,status,description,actuality_at,photo_url',
+      'site-1,Жильё,Аренда,Дом,150000 сом,,5,156,1/1 этаж,Азия Молл,Бишкек,опубликован,дом у парка,2026-11-12T12:36:58.772Z,https://example.invalid/1.jpg',
+      'site-2,Жильё,Запрос,Ищу комнату,12000 сом,/ мес,1,,3,Джал,Бишкек,опубликован,ищу комнату,,',
+    ].join('\n');
+
+    await env.CATALOG.prepare(
+      `insert or replace into public_catalog_snapshot
+         (singleton, generated_at_ms, content_type, body, sha256, row_count)
+       values (1, ?, 'text/csv', ?, '', 2)`,
+    ).bind(Date.now(), snapshotCsv).run();
+
+    // Хозяин черновиков — старший одобренный администратор. Проверяем
+    // именно правило, а не заранее известный идентификатор: к этому месту
+    // набора администраторы уже заведены предыдущими проверками.
+    const chief = (await db.prepare(
+      `select id from agents where role = 'admin' and status = 'approved'
+        order by created_at limit 1`,
+    ).first<{ id: string }>())?.id;
+
+    const first = await importCatalog();
+    check('перенос: из двух строк заведена одна — объявление, не запрос',
+      first.imported === 1 && first.rows === 2 && first.skipped === 1,
+      JSON.stringify({ imported: first.imported, rows: first.rows, skipped: first.skipped }));
+
+    const landed = await db.prepare(
+      'select id, publication_state, source, created_by_agent_id, price_minor, currency, zone from objects where id = ?',
+    ).bind('site-1').first<{ publication_state: string; source: string; created_by_agent_id: string;
+      price_minor: number; currency: string; zone: string }>();
+    check('перенос: карточка приехала черновиком, с отметкой источника и хозяином',
+      landed?.publication_state === 'draft' && landed?.source === IMPORT_SOURCE
+      && landed?.created_by_agent_id === chief && landed?.price_minor === 15000000
+      && landed?.currency === 'KGS' && landed?.zone === 'Азия Молл',
+      JSON.stringify(landed));
+
+    const rerun = await importCatalog();
+    check('перенос идемпотентен: второй прогон дубликатов не плодит',
+      rerun.imported === 0 && rerun.already === 1,
+      JSON.stringify({ imported: rerun.imported, already: rerun.already }));
+
+    // Агент поправил адрес и опубликовал — ночной прогон не вправе это
+    // затереть. Проверяем не «не изменилось», а именно работу агента.
+    await db.prepare(
+      `update objects set address = ?, publication_state = 'published', updated_at = ?
+        where id = ?`,
+    ).bind('Чүй 120, кв. 5', iso(), 'site-1').run();
+    await importCatalog();
+    const afterEdit = await db.prepare(
+      'select address, publication_state from objects where id = ?',
+    ).bind('site-1').first<{ address: string; publication_state: string }>();
+    check('перенос не трогает то, что агент уже правил',
+      afterEdit?.address === 'Чүй 120, кв. 5' && afterEdit?.publication_state === 'published',
+      JSON.stringify(afterEdit));
 
     } catch (e) {
       // Падение посреди набора — это тоже результат, и он должен быть виден
