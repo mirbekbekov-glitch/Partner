@@ -42,6 +42,9 @@ import {
   deleteAvatar, deletePhoto, listPhotos, photoKey, photoUrl,
   photosMissingThumb, putAvatar, putPhoto, putThumb, readPhoto, sniff,
 } from '@/lib/db/photos';
+import {
+  deletePanorama, panoramasOf, putPanorama, renamePanorama,
+} from '@/lib/db/panoramas';
 import { fullKeyOf, isOwnPhoto, thumbKey, thumbOf } from '@/lib/photo-url';
 import { feedXml, inFeed } from '@/lib/feed';
 import { mhouseOffers, mhouseXml, missingFields } from '@/lib/mhouse-feed';
@@ -3242,6 +3245,42 @@ export default {
     // вычистить снимки соседнего объекта.
     await throws('ключ от другого объекта не принимается',
       () => deletePhoto(withPhotos.id, `objects/${shown.id}/подделка.jpg`), Invalid);
+
+    // -----------------------------------------------------------------
+    // Панорамы тура
+    // -----------------------------------------------------------------
+    // Панорама — не снимок, и это главное, что здесь проверяется: она
+    // лежит под своим префиксом, не попадает в список снимков и потому
+    // не может стать обложкой объявления.
+
+    const pano = await putPanorama(withPhotos.id, jpeg, '  Кухня  ', { w: 4096, h: 1024 });
+    check('панорама загружается', pano.url.startsWith('/photos/panoramas/'));
+    check('подпись комнаты обрезается по краям', pano.room === 'Кухня');
+    check('размеры сохраняются — по ним считаются углы обзора',
+      pano.w === 4096 && pano.h === 1024);
+    check('панорама не попала в снимки объекта',
+      (await listPhotos(withPhotos.id)).every((k) => !k.includes('panoramas/')));
+
+    check('панорама читается из объекта',
+      (await panoramasOf(withPhotos.id)).length === 1);
+
+    await renamePanorama(withPhotos.id, pano.key, 'Гостиная');
+    check('комнату можно переподписать',
+      (await panoramasOf(withPhotos.id))[0]?.room === 'Гостиная');
+
+    await loginAs(db, vera);
+    await throws('в чужой объект панораму не загрузить',
+      () => putPanorama(withPhotos.id, jpeg, 'Кухня', { w: 4096, h: 1024 }), Forbidden);
+    await throws('чужую панораму не удалить',
+      () => deletePanorama(withPhotos.id, pano.key), Forbidden);
+
+    await loginAs(db, anna);
+    await throws('ключ панорамы от другого объекта не принимается',
+      () => deletePanorama(withPhotos.id, `panoramas/${shown.id}/подделка.jpg`), Invalid);
+
+    await deletePanorama(withPhotos.id, pano.key);
+    check('панорама убирается и из записи',
+      (await panoramasOf(withPhotos.id)).length === 0);
 
     // -----------------------------------------------------------------
     // Миниатюры

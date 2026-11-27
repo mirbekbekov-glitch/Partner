@@ -66,6 +66,7 @@ type Dict = {
   areaLabel: string; floorLabel: string; floorOf: string; zoneLabel: string; cityLabel: string;
   zoneSearch: string; zoneNone: string; regionLabel: string; otherPlaces: string;
   callAgent: string; writeWhatsapp: string; writeTelegram: string;
+  tourTitle: string; tourFlag: string;
   confirmedPrice: string; notFound: string; notFoundLede: string; seeWhatIsThere: string;
   // Блок агента на странице объекта. Открыты ровно три поля: имя, стаж и
   // подтверждённый номер в реестре. Телефон агента здесь намеренно
@@ -177,6 +178,7 @@ const ru: Dict = {
   zoneSearch: 'Поиск…', zoneNone: 'Такого района нет в списке',
   regionLabel: 'Регион', otherPlaces: 'Другие места',
   callAgent: 'Позвонить', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
+  tourTitle: 'Виртуальный тур', tourFlag: 'тур',
   confirmedPrice: 'Агент подтвердил цену и доступность',
   agentLeads: 'Объект ведёт',
   // «год», «года», «лет»: иначе строка читается как машинный перевод.
@@ -340,6 +342,7 @@ const ky: Dict = {
   zoneSearch: 'Издөө…', zoneNone: 'Мындай район тизмеде жок',
   regionLabel: 'Аймак', otherPlaces: 'Башка жерлер',
   callAgent: 'Чалуу', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
+  tourTitle: 'Виртуалдык тур', tourFlag: 'тур',
   confirmedPrice: 'Агент бааны жана жеткиликтүүлүктү ырастады',
   agentLeads: 'Объектти алып баруучу',
   agentYears: (n) => `кыймылсыз мүлктө ${n} жыл`,
@@ -492,6 +495,7 @@ const en: Dict = {
   zoneSearch: 'Search…', zoneNone: 'No such district in the list',
   regionLabel: 'Region', otherPlaces: 'Other places',
   callAgent: 'Call', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
+  tourTitle: 'Virtual tour', tourFlag: 'tour',
   confirmedPrice: 'Agent confirmed the price and availability',
   agentLeads: 'Listing agent',
   agentYears: (n) => `${n} ${n === 1 ? 'year' : 'years'} in real estate`,
@@ -644,6 +648,7 @@ const zh: Dict = {
   zoneSearch: '搜索…', zoneNone: '列表中没有该区域',
   regionLabel: '地区', otherPlaces: '其他地方',
   callAgent: '拨打电话', writeWhatsapp: 'WhatsApp', writeTelegram: 'Telegram',
+  tourTitle: '全景看房', tourFlag: '全景',
   confirmedPrice: '经纪人已确认价格与可售状态',
   agentLeads: '负责经纪人',
   agentYears: (n) => `从事房地产 ${n} 年`,

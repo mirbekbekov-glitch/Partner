@@ -1516,6 +1516,37 @@ a.agent-row { text-decoration: none; color: inherit; border-radius: var(--r-md);
   transition: background .18s; }
 a.agent-row:hover { background: var(--sunk); }
 
+/* === Виртуальный тур ===================================================== */
+/* Бейдж тура на карточке каталога: тише метки сделки — он сообщает
+   о дополнении, а не о главном. */
+.flag.tourflag { background: var(--ink); color: var(--on-ink); }
+
+.tour { margin: 28px 0 8px; }
+.tour-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 12px; }
+.tour-head h2 { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; margin: 0; }
+.tour-rooms { display: flex; flex-wrap: wrap; gap: 6px; }
+.tour-room { font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer;
+  padding: 7px 13px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg); }
+.tour-room:hover { border-color: var(--accent); }
+.tour-room[aria-current='true'] { background: var(--accent); border-color: var(--accent);
+  color: var(--accent-fg); }
+/* Высота в пикселях с потолком по доле экрана: панораму разглядывают,
+   а не просматривают мельком, и окно в двести точек бессмысленно. Но и
+   на весь экран нельзя — со страницы объявления тогда исчезает цена.
+   Два класса в селекторе не для красоты: просмотрщик приносит свой
+   .pnlm-container с height: 100%, грузится он позже наших стилей и с
+   одной и той же силой побеждает — окно схлопывается в два пикселя. */
+.tour .tour-box { height: min(62vh, 520px); border-radius: var(--r-lg);
+  overflow: hidden; background: var(--sunk); border: 1px solid var(--line); }
+/* Запасной вид: WebGL выключен или просмотрщик не загрузился. Крутить
+   нельзя, но комнату видно, и это лучше пустого места. */
+.tour-flat { width: 100%; border-radius: var(--r-lg); border: 1px solid var(--line); }
+@media (max-width: 680px) {
+  .tour .tour-box { height: 56vh; }
+}
+
 /* Пустая выдача: карточка с выходом, а не строка в пустоте. */
 .none-card { grid-column: 1 / -1; background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--r-lg); padding: 32px 28px; text-align: center;

@@ -17,6 +17,7 @@ import { Photo } from '../../../Photo';
 import { AgentFace } from '../../../AgentFace';
 import { LeadForm } from '../../../LeadForm';
 import { ContactRow } from '../../../ContactRow';
+import { Tour360 } from '../../../Tour360';
 
 export const dynamic = 'force-dynamic';
 
@@ -200,6 +201,18 @@ export default async function PublicObject({
                 </p>
               ) : null}
             </div>
+
+            {/* Тур стоит ПОСЛЕ снимков и до характеристик: снимки
+                решают, смотреть ли дальше, а тур — то, ради чего
+                остаются на странице. Нет панорам — нет и блока. */}
+            {o.panoramas.length > 0 ? (
+              <Tour360
+                title={d.tourTitle}
+                rooms={o.panoramas.map((p) => ({
+                  url: p.url, room: p.room, w: p.w, h: p.h,
+                }))}
+              />
+            ) : null}
 
             <dl className="specs">
               {specs.map(([k, v]) => (
